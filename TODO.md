@@ -37,10 +37,10 @@ para os casos de uso futuros.
 
 #### PR 2 — Wire peer, codec e Netem
 
-Implementar `QNWirePeer` em `addons/quantic_net/src/adapters/`, herdando
+Implementar `QNWirePeer` em `addons/quantic_net/src/infrastructure/`, herdando
 de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
 
-- [x] TDD: Criar `tests/unit/adapters/test_qn_wire_peer_netem.gd`.
+- [x] TDD: Criar `tests/unit/infrastructure/test_qn_wire_peer_netem.gd`.
 - [x] TDD: Especificar e testar perfil de perda por canal virtual:
   canal 0 (controle/reliable) sem drop por padrão; canal 1
   (estado/unreliable) com drop configurável.
@@ -50,7 +50,7 @@ de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
   temporal controlada.
 - [x] TDD: Especificar e testar duplicação opcional de datagramas.
 - [x] TDD: Implementar `QNWirePeer` até a suíte de Netem ficar verde.
-- [x] TDD: Criar `tests/unit/adapters/test_qn_wire_peer_codec.gd`.
+- [x] TDD: Criar `tests/unit/infrastructure/test_qn_wire_peer_codec.gd`.
 - [x] TDD: Implementar header de wire versionado:
   `magic | version | virtual_channel | flags | payload`.
 - [x] TDD: Implementar mapeamento de canais virtuais para ENet:
@@ -65,14 +65,14 @@ de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
 - [x] Verificar compilação no Godot 4.7.1, incluindo
   `ENetConnection.MODE_HOST` e tipagem explícita onde o parser exigir.
 - [ ] Commit sugerido:
-  `feat(adapters): add QNWirePeer codec, channel mapping and netem`
+  `feat(infrastructure): add QNWirePeer codec, channel mapping and netem`
 
 #### PR 3 — Hook da Multiplayer API [ ]
 
-Implementar `QNNetHook` em `addons/quantic_net/src/adapters/`, herdando
+Implementar `QNNetHook` em `addons/quantic_net/src/infrastructure/`, herdando
 de `MultiplayerAPIExtension` e encapsulando `SceneMultiplayer`.
 
-- [ ] TDD: Criar `tests/unit/adapters/test_qn_net_hook.gd`.
+- [ ] TDD: Criar `tests/unit/infrastructure/test_qn_net_hook.gd`.
 - [ ] TDD: Especificar reemissão dos sinais de conexão, autenticação,
   entrada e saída de peers.
 - [ ] TDD: Especificar interceptação de RPCs de saída por `Callable`,
@@ -87,7 +87,7 @@ de `MultiplayerAPIExtension` e encapsulando `SceneMultiplayer`.
 - [ ] Testar que sinais do `SceneMultiplayer` são reemitidos sem
   depender de identificadores de sinais herdados no `_init()`.
 - [ ] Commit sugerido:
-  `feat(adapters): add QNNetHook multiplayer interception`
+  `feat(infrastructure): add QNNetHook multiplayer interception`
 
 ### Fase 4: Casos de Uso de Sessão (TDD) [ ]
 

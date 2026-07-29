@@ -1,5 +1,5 @@
 ## @file test_qn_wire_peer_wrappers.gd
-## @path res://tests/unit/adapters/test_qn_wire_peer_wrappers.gd
+## @path res://tests/unit/infrastructure/test_qn_wire_peer_wrappers.gd
 ##
 ## @description
 ## Testes unitários para os wrappers do QNWirePeer obrigatórios pela
@@ -15,7 +15,7 @@
 
 extends GutTest
 
-const QNWirePeer = preload("res://addons/quantic_net/src/adapters/qn_wire_peer.gd")
+const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd")
 
 func test_wrappers_de_estado_armazenam_valores() -> void:
 	# Arrange

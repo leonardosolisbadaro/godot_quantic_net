@@ -1,10 +1,10 @@
 ## @file qn_wire_peer.gd
-## @path res://addons/quantic_net/src/adapters/qn_wire_peer.gd
+## @path res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd
 ##
 ## @description
 ## Peer de rede proprietário sobre ENetConnection: codec versionado
 ## (magic+ZSTD condicional+XOR), mapa de canais virtuais e Netem.
-## Camada: Adapters
+## Camada: Infrastructure
 ##
 ## @created 2026-07-29
 ## @updated 2026-07-29

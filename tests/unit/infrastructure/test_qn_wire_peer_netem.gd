@@ -1,5 +1,5 @@
 ## @file test_qn_wire_peer_netem.gd
-## @path res://tests/unit/adapters/test_qn_wire_peer_netem.gd
+## @path res://tests/unit/infrastructure/test_qn_wire_peer_netem.gd
 ##
 ## @description
 ## Testes unitários para o emulador de rede (Netem) embutido no QNWirePeer.
@@ -16,7 +16,7 @@
 
 extends GutTest
 
-const QNWirePeer = preload("res://addons/quantic_net/src/adapters/qn_wire_peer.gd")
+const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd")
 
 func _new_peer() -> QNWirePeer:
 	var peer = QNWirePeer.new()

@@ -1,5 +1,5 @@
 ## @file test_qn_wire_peer_codec.gd
-## @path res://tests/unit/adapters/test_qn_wire_peer_codec.gd
+## @path res://tests/unit/infrastructure/test_qn_wire_peer_codec.gd
 ##
 ## @description
 ## Testes do codec versionado do QNWirePeer: header, ZSTD condicional,
@@ -15,7 +15,7 @@
 
 extends GutTest
 
-const QNWirePeer = preload("res://addons/quantic_net/src/adapters/qn_wire_peer.gd")
+const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd")
 
 func _new_peer() -> MultiplayerPeerExtension:
 	return QNWirePeer.new(ENetConnection.new())
