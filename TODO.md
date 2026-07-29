@@ -22,7 +22,7 @@ O coração da simulação e validação, agnóstico à infraestrutura de rede.
 - [x] Injetar o Autoload principal (`quantic_net_autoload.gd`) como fachada (Single-Point of Entry) baseada em sinais para orquestrar e delegar chamadas da Engine.
 - [x] Estruturar a árvore de diretórios enraizada nos padrões de Clean Architecture (`domain/`, `use_cases/`, `adapters/`, `infrastructure/`).
 - [x] TDD: Implementar `QNSerializer` (quantização binária de 19 Bytes para estado/snapback).
-- [ ] TDD: Implementar `QNClockSync` (cálculo de RTT e sincronização de tempo do servidor).
+- [x] TDD: Implementar `QNClockSync` (cálculo de RTT e sincronização de tempo do servidor).
 - [ ] TDD: Implementar `QNLossTracker` (monitoramento de perda de pacotes via tracking de sequência).
 - [ ] TDD: Implementar `QNInterpBuffer` (armazenamento circular e amostragem no passado remoto).
 - [ ] TDD: Implementar `QNServerValidator` (clamping, validação anti-teleporte e rejeição baseada no tempo).

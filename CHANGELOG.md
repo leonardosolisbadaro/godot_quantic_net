@@ -11,6 +11,7 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Adicionado
 
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNClockSync`, isolada da engine. Foram aplicadas correções matemáticas cruciais no modelo NTP (estimativas de janela móvel e EMA) provando a eficácia do TDD em capturar regressões lógicas.
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNSerializer`, com testes passando, garantindo quantização binária de pacotes de estado para 19 Bytes.
 - "Casca" estrutural e arquivos descritores (autoload e plugin.cfg) do `QuanticNet` injetada em `addons/`, adotando fielmente as hierarquias isoladas da Clean Architecture (`domain/`, `use_cases/`, `adapters/` e `infrastructure/`).
 - Workflow de produtividade integrado ao VS Code (atalhos F5, F10 e F12 e `tasks.json`), orquestrando o ciclo de validação do TDD e proteção do processo Headless (LSP).
