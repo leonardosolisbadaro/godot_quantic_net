@@ -75,3 +75,12 @@ func test_cap_descarta_mais_antigos() -> void:
 		
 	# Assert (Verificação): O tamanho precisa travar no MAX_PENDING, dropando os velhos em favor dos novos
 	assert_eq(buf.size(), QNInputBuffer.MAX_PENDING, "Nao deve exceder o limite de alocação de memória")
+
+func test_get_sent_ts_retorna_tempo_de_envio() -> void:
+	# Arrange (Preparação)
+	var buf := QNInputBuffer.new()
+	buf.record(10, Vector2.ZERO, 0.0, 0.05, 12345)
+	
+	# Act (Ação) & Assert (Verificação)
+	assert_eq(buf.get_sent_ts(10), 12345, "Deve retornar o sent_ts associado a sequence")
+	assert_eq(buf.get_sent_ts(99), 0, "Deve retornar 0 para sequence nao encontrada")

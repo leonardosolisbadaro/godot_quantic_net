@@ -16,6 +16,8 @@
 
 class_name QNServerValidator
 
+signal peer_rejected(id: int, reason: String, strikes: int)
+
 const MAX_SPEED := 6.0
 const HARD_CAP := 20.0
 const WORLD_BOUNDS := 60.0
@@ -70,10 +72,12 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 		
 	return _reject(id, st, "speed=%.1f m/s" % speed)
 
-func _reject(_id: int, st: PeerState, _reason: String) -> Dictionary:
+func _reject(id: int, st: PeerState, reason: String) -> Dictionary:
 	if st:
 		st.strikes += 1
+		peer_rejected.emit(id, reason, st.strikes)
 		return {"action": "reject", "pos": st.pos, "rot": st.rot, "strikes": st.strikes}
+	peer_rejected.emit(id, reason, 0)
 	return {"action": "reject", "pos": Vector3.ZERO, "rot": Vector3.ZERO, "strikes": 0}
 
 func should_kick(id: int) -> bool:

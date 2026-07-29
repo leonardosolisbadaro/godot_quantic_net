@@ -21,10 +21,16 @@ const MAX_PENDING := 256
 
 var pending: Array[Dictionary] = []
 
-func record(seq: int, move: Vector2, rot_delta: float, dt: float) -> void:
-	pending.append({"seq": seq, "move": move, "rot_delta": rot_delta, "dt": dt})
+func record(seq: int, move: Vector2, rot_delta: float, dt: float, sent_ts: int = 0) -> void:
+	pending.append({"seq": seq, "move": move, "rot_delta": rot_delta, "dt": dt, "sent_ts": sent_ts})
 	if pending.size() > MAX_PENDING:
 		pending.pop_front()
+
+func get_sent_ts(seq: int) -> int:
+	for e: Dictionary in pending:
+		if e["seq"] == seq:
+			return e.get("sent_ts", 0)
+	return 0
 
 func drain_after(confirmed_seq: int) -> Array[Dictionary]:
 	var replay: Array[Dictionary] = []

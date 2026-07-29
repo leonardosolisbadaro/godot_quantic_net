@@ -114,3 +114,15 @@ func test_accept_reduz_strikes() -> void:
 	
 	# Assert (Verificação): O movimento correto "perdoa" parcialmente os strikes
 	assert_false(v.should_kick(player_id), "Um movimento legítimo deve abater o strike negativo")
+
+func test_rejeicao_emite_sinal_com_razao_e_strikes() -> void:
+	# Arrange
+	var v := QNServerValidator.new()
+	watch_signals(v)
+	v.validate(7, Vector3.ZERO, Vector3.ZERO, 0)
+	
+	# Act
+	v.validate(7, Vector3(50, 0, 0), Vector3.ZERO, 50)
+	
+	# Assert
+	assert_signal_emitted_with_parameters(v, "peer_rejected", [7, "speed=1000.0 m/s", 1])
