@@ -13,7 +13,7 @@ Configuração do ecossistema, IDE e amarras do Code-First, TDD e Clean Architec
 - [x] Editar `GEMINI.md` definindo as regras arquiteturais, uso de GDScript docstrings e metodologia AAA.
 - [x] Instalar e configurar ambiente de testes (bitwes/Gut).
 
-### Fase 2: Core Domain (TDD Rigoroso) [/]
+### Fase 2: Core Domain (TDD Rigoroso) [x]
 
 O coração da simulação e validação, agnóstico à infraestrutura de rede.
 
@@ -28,20 +28,204 @@ O coração da simulação e validação, agnóstico à infraestrutura de rede.
 - [x] TDD: Implementar `QNServerValidator` (clamping, validação anti-teleporte e rejeição baseada no tempo).
 - [x] TDD: Implementar `QNInputBuffer` (armazenamento e replay local de inputs - base do client prediction).
 
-### Fase 3: Casos de Uso & Adaptadores (TDD)
+### Fase 3: Adaptadores de Transporte (TDD) [-]
 
-Orquestrando o fluxo das entidades para o motor do jogo.
+Adaptadores específicos da Godot Engine. Esta fase não implementa
+orquestração de sessão, regras de gameplay nem a fachada pública:
+transforma somente pacotes e eventos nativos em primitivas de transporte
+para os casos de uso futuros.
 
-- [ ] Implementar fluxo de `Prediction` local.
-- [ ] Implementar fluxo de reconciliação a partir de Snapbacks autoritativos.
-- [ ] Criar adaptadores de autenticação (validação via token/secret).
-- [ ] Estruturar Controladores que traduzam RPCs brutos para os Use Cases.
+#### PR 2 — Wire peer, codec e Netem [-]
 
-### Fase 4: Infraestrutura & Engine (Integração)
+Implementar `QNWirePeer` em `addons/quantic_net/src/adapters/`, herdando
+de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
 
-Comunicação e APIs Godot nativas.
+- [ ] TDD: Criar `tests/unit/adapters/test_qn_wire_peer_netem.gd`.
+- [ ] TDD: Especificar e testar perfil de perda por canal virtual:
+  canal 0 (controle/reliable) sem drop por padrão; canal 1
+  (estado/unreliable) com drop configurável.
+- [ ] TDD: Especificar e testar retenção por latência base, liberação
+  após o prazo e jitter gaussiano.
+- [ ] TDD: Especificar e testar que jitter pode produzir reordenação
+  temporal controlada.
+- [ ] TDD: Especificar e testar duplicação opcional de datagramas.
+- [ ] TDD: Implementar `QNWirePeer` até a suíte de Netem ficar verde.
+- [ ] TDD: Implementar header de wire versionado:
+  `magic | version | virtual_channel | flags | payload`.
+- [ ] TDD: Implementar mapeamento de canais virtuais para ENet:
+  controle → ENet 0, estado → ENet 3, reliable ordenado → ENet 1.
+- [ ] TDD: Implementar codec do payload: compressão ZSTD condicional,
+  obfuscação XOR e decode inverso.
+- [ ] TDD: Testar round-trip do codec, pacote malformado, versão/magic
+  inválidos e payload comprimido/não comprimido.
+- [ ] TDD: Cobrir wrappers obrigatórios de `MultiplayerPeerExtension`:
+  status, id único, peer remoto, channel, transfer mode, target peer,
+  close e disconnect.
+- [ ] Verificar compilação no Godot 4.7.1, incluindo
+  `ENetConnection.MODE_HOST` e tipagem explícita onde o parser exigir.
+- [ ] Commit sugerido:
+  `feat(adapters): add QNWirePeer codec, channel mapping and netem`
 
-- [ ] Implementar integração de transporte seguro (`ENetConnection` com DTLS via certificados `user://`).
-- [ ] Acoplar sistema MultiPlayer usando `SceneMultiplayer` e extensions (`MultiplayerAPIExtension` e `MultiplayerPeerExtension`).
-- [ ] Integrar sistema Netem (simulador de rede adversa/perda de pacotes e jitter) direto no envio.
-- [ ] Fechar ciclo completo conectando o autoload `QuanticNet` aos adaptadores implementados.
+#### PR 3 — Hook da Multiplayer API [ ]
+
+Implementar `QNNetHook` em `addons/quantic_net/src/adapters/`, herdando
+de `MultiplayerAPIExtension` e encapsulando `SceneMultiplayer`.
+
+- [ ] TDD: Criar `tests/unit/adapters/test_qn_net_hook.gd`.
+- [ ] TDD: Especificar reemissão dos sinais de conexão, autenticação,
+  entrada e saída de peers.
+- [ ] TDD: Especificar interceptação de RPCs de saída por `Callable`,
+  permitindo observação, alteração ou cancelamento.
+- [ ] TDD: Especificar interceptação de pacotes customizados de entrada
+  e saída, preservando peer de origem e canal virtual.
+- [ ] TDD: Especificar delegação de object configuration add/remove
+  para o `SceneMultiplayer` interno.
+- [ ] TDD: Implementar `QNNetHook` até todos os testes ficarem verdes.
+- [ ] TDD: Cobrir o envio de pacote customizado com target peer,
+  transfer channel e transfer mode corretos.
+- [ ] Testar que sinais do `SceneMultiplayer` são reemitidos sem
+  depender de identificadores de sinais herdados no `_init()`.
+- [ ] Commit sugerido:
+  `feat(adapters): add QNNetHook multiplayer interception`
+
+### Fase 4: Casos de Uso de Sessão (TDD) [ ]
+
+Orquestração independente de cena e gameplay. Os casos de uso conhecem
+o domínio e contratos de transporte; não instanciam cubos, não leem input
+da Godot e não controlam UI.
+
+#### PR 4 — Sessão autoritativa do servidor [ ]
+
+Implementar `QNHostSession` em `addons/quantic_net/src/use_cases/`.
+
+- [ ] TDD: Criar `tests/unit/use_cases/test_qn_host_session.gd` com
+  transporte fake/memory transport.
+- [ ] TDD: Especificar fluxo de autenticação por token/secret e
+  rejeição de credencial inválida.
+- [ ] TDD: Especificar recebimento de `TYPE_STATE`, decode via
+  `QNSerializer` e validação por `QNServerValidator`.
+- [ ] TDD: Especificar as três saídas autoritativas:
+  `accept` → relay do estado; `clamp` → relay + snapback reliable;
+  `reject` → snapback reliable sem relay.
+- [ ] TDD: Especificar kick após `MAX_STRIKES` e limpeza por peer leave.
+- [ ] TDD: Expor eventos de domínio, incluindo a propagação de
+  `peer_rejected(id, reason, strikes)`, sem `print()` interno.
+- [ ] Implementar o caso de uso até a suíte verde.
+- [ ] Commit sugerido:
+  `feat(use-cases): add authoritative host session`
+
+#### PR 5 — Sessão preditiva do cliente [ ]
+
+Implementar `QNClientSession` em `addons/quantic_net/src/use_cases/`.
+
+- [ ] TDD: Criar `tests/unit/use_cases/test_qn_client_session.gd` com
+  relógio e transporte fake determinísticos.
+- [ ] TDD: Especificar rate limit de envio de estado a 20 Hz.
+- [ ] TDD: Especificar criação de `seq`, serialização e armazenamento
+  do `sent_ts` no `QNInputBuffer`.
+- [ ] TDD: Especificar eco autoritativo: lookup de `sent_ts` por seq,
+  chamada `QNClockSync.on_pong(client_sent, server_time, client_now)` e
+  confirmação/drain de inputs.
+- [ ] TDD: Especificar recebimento de peer remoto, atualização de
+  `QNLossTracker` e alimentação de `QNInterpBuffer`.
+- [ ] TDD: Especificar `TYPE_SNAPBACK`: estado autoritativo, seq
+  confirmado, reason e lista de inputs para replay.
+- [ ] Implementar o caso de uso até a suíte verde.
+- [ ] Commit sugerido:
+  `feat(use-cases): add predictive client session`
+
+### Fase 5: Infraestrutura DTLS e Fachada (Integração) [ ]
+
+A camada de infraestrutura monta a Engine, certificados e adaptadores.
+O autoload permanece uma casca fina: não conhece mecânicas, nodes de
+jogo, input, mesh, câmera ou UI.
+
+#### PR 6 — Bootstrap DTLS [ ]
+
+Implementar `QNDTLSBootstrap` em
+`addons/quantic_net/src/infrastructure/`.
+
+- [ ] TDD/integração: Criar teste headless para servidor e cliente
+  locais com DTLS real.
+- [ ] Implementar host com
+  `dtls_server_setup(TLSOptions.server(key, cert))`.
+- [ ] Implementar join com
+  `dtls_client_setup(hostname, TLSOptions.client(cert))`.
+- [ ] Implementar fallback de desenvolvimento em `user://`:
+  gerar/reutilizar `qnet_cert.crt` e `qnet_cert.key`.
+- [ ] Definir contrato de produção:
+  certificado público em `res://certs/server.crt`; chave privada apenas
+  no preset/export do servidor; hostname configurável e pinning.
+- [ ] Propagar erros de bind, carregamento de cert e conexão via
+  `Error`/sinais, nunca apenas `push_error`.
+- [ ] Commit sugerido:
+  `feat(infrastructure): add DTLS host and client bootstrap`
+
+#### PR 7 — Autoload plug-and-play [ ]
+
+Completar `quantic_net_autoload.gd` como única API pública do addon.
+
+- [ ] TDD/integração: Criar `tests/integration/test_quantic_net_api.gd`.
+- [ ] Implementar `host()` e `join()` retornando `Error`.
+- [ ] Implementar `submit_state()`, `remote_state()`, `loss_of()`,
+  `kick()` e `toggle_netem()` delegando às sessões.
+- [ ] Manter/expor sinais públicos:
+  `peer_joined`, `peer_left`, `state_received`, `pong_received` e
+  `snapback_received`.
+- [ ] Definir contrato final de `snapback_received`: seq confirmado,
+  posição, rotação, reason e inputs pendentes para replay; a aplicação
+  decide como reaplicar sua própria mecânica.
+- [ ] Garantir que o addon não tenha referência a Node3D, cubos,
+  Input, meshes, câmera ou regras de gameplay.
+- [ ] Commit sugerido:
+  `feat(api): complete plug-and-play QuanticNet autoload`
+
+### Fase 6: Aceitação, Demo e Distribuição [ ]
+
+Evidência executável de que o addon instala uma vez, funciona em projeto
+3D vazio e pode ser consumido sem acoplamento à demo.
+
+#### PR 8 — Teste de integração de rede real [ ]
+
+- [ ] Migrar o teste do rascunho para
+  `tests/integration/test_server_two_clients.gd`.
+- [ ] Subir um servidor e dois clientes DTLS reais na mesma árvore
+  headless, sob Netem (latência, jitter e perda configurada).
+- [ ] Validar: dois peers autenticados, clock sincronizado, RTT em
+  faixa esperada, relay de estado remoto, perda medida e convergência
+  do estado no servidor.
+- [ ] Fazer o processo encerrar com exit code 0/1 para CI.
+- [ ] Commit sugerido:
+  `test(integration): cover DTLS server and two clients under netem`
+
+#### PR 9 — Demo agnóstica de gameplay [ ]
+
+- [ ] Criar demo 3D isolada em `demo/`, fora de `addons/`.
+- [ ] Demonstrar apenas integração consumidora:
+  prediction local, `submit_state`, `remote_state`, visualização de
+  peers e aplicação de snapback.
+- [ ] Incluir instruções code-first: projeto vazio, cópia da pasta
+  `addons/`, ativação do plugin e execução servidor/cliente.
+- [ ] Manter valores didáticos (porta, secret e assets) somente na
+  demo, nunca no núcleo do addon.
+- [ ] Commit sugerido:
+  `docs(demo): add minimal 3D plug-and-play example`
+
+#### PR 10 — CI, release e Asset Library [ ]
+
+- [ ] Criar workflow GitHub Actions para executar GUT e testes de
+  integração headless em todo push e pull request.
+- [ ] Adicionar badge de CI ao README.
+- [ ] Criar `CHANGELOG.md` no padrão Keep a Changelog e política
+  SemVer.
+- [ ] Adicionar `LICENSE`, ícone, screenshots/GIF da demo e README de
+  instalação/API voltado à Godot Asset Library.
+- [ ] Definir `.gitattributes`/artefato de release para distribuir
+  somente `addons/quantic_net/`; excluir `tests/`, `demo/`, `.github/`
+  e ferramentas internas do pacote ao usuário.
+- [ ] Documentar filtros de export para cliente e servidor:
+  cliente exclui chave privada, testes e demo; servidor inclui a chave
+  privada e pode excluir assets pesados.
+- [ ] Publicar release `v0.1.0` e submeter à Godot Asset Library.
+- [ ] Commit sugerido:
+  `ci(release): automate tests and package addon for distribution`
