@@ -87,7 +87,7 @@ Todo e qualquer arquivo de código (`.gd`) da aplicação e dos testes deve inic
 ## @since [Versão original]
 ## @lastModifiedIn [Versão atual/release]
 ##
-## @author Leonardo S. Badaró (with Gemini)
+## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 ```
 
 **Regras de Metadados:**

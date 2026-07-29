@@ -1,6 +1,6 @@
 {
   "files.exclude": {
-    "**/addons": true,
+    // "**/addons": true,
     "**/*.uid": true
   },
   "editor.formatOnSave": false,

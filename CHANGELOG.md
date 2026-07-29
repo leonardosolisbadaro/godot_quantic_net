@@ -11,6 +11,8 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Adicionado
 
+- "Casca" estrutural e arquivos descritores (autoload e plugin.cfg) do `QuanticNet` injetada em `addons/`, adotando fielmente as hierarquias isoladas da Clean Architecture (`domain/`, `use_cases/`, `adapters/` e `infrastructure/`).
+- Workflow de produtividade integrado ao VS Code (atalhos F5, F10 e F12 e `tasks.json`), orquestrando o ciclo de validação do TDD e proteção do processo Headless (LSP).
 - Restrição arquitetural no `GEMINI.md` exigindo o uso obrigatório e exclusivo do framework **bitwes/Gut** para a confecção da suíte de testes (TDD).
 
 ### Modificado

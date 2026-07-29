@@ -1,5 +1,7 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
-/addons/
+#/addons/
+/addons/gut/
 /GodotEngine_extracted/
+/quantic_net/
