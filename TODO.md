@@ -21,10 +21,12 @@ O coração da simulação e validação, agnóstico à infraestrutura de rede.
 - [x] Configurar inicialização do plugin (registro de singleton) utilizando as assinaturas exatas da Godot Engine 4.7 (`_enable_plugin` e `_disable_plugin`).
 - [x] Injetar o Autoload principal (`quantic_net_autoload.gd`) como fachada (Single-Point of Entry) baseada em sinais para orquestrar e delegar chamadas da Engine.
 - [x] Estruturar a árvore de diretórios enraizada nos padrões de Clean Architecture (`domain/`, `use_cases/`, `adapters/`, `infrastructure/`).
-- [ ] Criar entidade `PacketSerializer` focada na quantização de transformações (alvo de ~19 Bytes).
-- [ ] Criar entidade `StateValidator` para aceitar/descartar movimentos (anti-teleporte/clamping de bounds).
-- [ ] Criar entidade `ClockSync` para sincronização de tempo entre peers.
-- [ ] Criar entidade `InputBuffer` focada em armazenar e aplicar (rewind/replay) inputs do cliente.
+- [x] TDD: Implementar `QNSerializer` (quantização binária de 19 Bytes para estado/snapback).
+- [ ] TDD: Implementar `QNClockSync` (cálculo de RTT e sincronização de tempo do servidor).
+- [ ] TDD: Implementar `QNLossTracker` (monitoramento de perda de pacotes via tracking de sequência).
+- [ ] TDD: Implementar `QNInterpBuffer` (armazenamento circular e amostragem no passado remoto).
+- [ ] TDD: Implementar `QNServerValidator` (clamping, validação anti-teleporte e rejeição baseada no tempo).
+- [ ] TDD: Implementar `QNInputBuffer` (armazenamento e replay local de inputs - base do client prediction).
 
 ### Fase 3: Casos de Uso & Adaptadores (TDD)
 
