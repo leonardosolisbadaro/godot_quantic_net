@@ -28,14 +28,14 @@ O coração da simulação e validação, agnóstico à infraestrutura de rede.
 - [x] TDD: Implementar `QNServerValidator` (clamping, validação anti-teleporte e rejeição baseada no tempo).
 - [x] TDD: Implementar `QNInputBuffer` (armazenamento e replay local de inputs - base do client prediction).
 
-### Fase 3: Adaptadores de Transporte (TDD) [-]
+### Fase 3: Adaptadores de Transporte (TDD)
 
 Adaptadores específicos da Godot Engine. Esta fase não implementa
 orquestração de sessão, regras de gameplay nem a fachada pública:
 transforma somente pacotes e eventos nativos em primitivas de transporte
 para os casos de uso futuros.
 
-#### PR 2 — Wire peer, codec e Netem [-]
+#### PR 2 — Wire peer, codec e Netem
 
 Implementar `QNWirePeer` em `addons/quantic_net/src/adapters/`, herdando
 de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
@@ -50,21 +50,13 @@ de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
   temporal controlada.
 - [ ] TDD: Especificar e testar duplicação opcional de datagramas.
 - [ ] TDD: Implementar `QNWirePeer` até a suíte de Netem ficar verde.
-- [ ] TDD: Implementar header de wire versionado:
+- [x] TDD: Criar `tests/unit/adapters/test_qn_wire_peer_codec.gd`.
+- [x] TDD: Implementar header de wire versionado:
   `magic | version | virtual_channel | flags | payload`.
-- [ ] TDD: Implementar mapeamento de canais virtuais para ENet:
+- [x] TDD: Implementar mapeamento de canais virtuais para ENet:
   controle → ENet 0, estado → ENet 3, reliable ordenado → ENet 1.
-- [ ] TDD: Implementar codec do payload: compressão ZSTD condicional,
+- [x] TDD: Implementar codec do payload: compressão ZSTD/DEFLATE condicional,
   obfuscação XOR e decode inverso.
-- [ ] TDD: Testar round-trip do codec, pacote malformado, versão/magic
-  inválidos e payload comprimido/não comprimido.
-- [ ] TDD: Cobrir wrappers obrigatórios de `MultiplayerPeerExtension`:
-  status, id único, peer remoto, channel, transfer mode, target peer,
-  close e disconnect.
-- [ ] Verificar compilação no Godot 4.7.1, incluindo
-  `ENetConnection.MODE_HOST` e tipagem explícita onde o parser exigir.
-- [ ] Commit sugerido:
-  `feat(adapters): add QNWirePeer codec, channel mapping and netem`
 
 #### PR 3 — Hook da Multiplayer API [ ]
 
