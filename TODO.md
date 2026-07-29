@@ -24,7 +24,7 @@ O coração da simulação e validação, agnóstico à infraestrutura de rede.
 - [x] TDD: Implementar `QNSerializer` (quantização binária de 19 Bytes para estado/snapback).
 - [x] TDD: Implementar `QNClockSync` (cálculo de RTT e sincronização de tempo do servidor).
 - [x] TDD: Implementar `QNLossTracker` (monitoramento de perda de pacotes via tracking de sequência).
-- [ ] TDD: Implementar `QNInterpBuffer` (armazenamento circular e amostragem no passado remoto).
+- [x] TDD: Implementar `QNInterpBuffer` (armazenamento circular e amostragem no passado remoto).
 - [ ] TDD: Implementar `QNServerValidator` (clamping, validação anti-teleporte e rejeição baseada no tempo).
 - [ ] TDD: Implementar `QNInputBuffer` (armazenamento e replay local de inputs - base do client prediction).
 
