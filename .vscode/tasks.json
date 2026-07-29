@@ -1,0 +1,73 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Godot LSP: Run Headless",
+      "type": "shell",
+      "command": "C:\\Users\\LEONARDO\\Documents\\Godot_v4.7.1-stable_win64.exe\\Godot_v4.7.1-stable_win64.exe",
+      "args": ["-e", "--headless"],
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": ".*"
+        }
+      },
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated"
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    },
+    {
+      "label": "GUT: Run Tests",
+      "type": "shell",
+      "command": "C:\\Users\\LEONARDO\\Documents\\Godot_v4.7.1-stable_win64.exe\\Godot_v4.7.1-stable_win64_console.exe",
+      "args": [
+        "--path",
+        "${workspaceFolder}",
+        "--headless",
+        "-s",
+        "addons/gut/gut_cmdln.gd"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "Godot: Run Default Scene",
+      "type": "shell",
+      "command": "C:\\Users\\LEONARDO\\Documents\\Godot_v4.7.1-stable_win64.exe\\Godot_v4.7.1-stable_win64.exe",
+      "args": [
+        "--path",
+        "${workspaceFolder}"
+      ],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "Godot: Kill Processes",
+      "type": "shell",
+      "command": "Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'Godot*' -and $_.CommandLine -notmatch '--headless' } | Invoke-CimMethod -MethodName Terminate",
+      "presentation": {
+        "reveal": "silent"
+      }
+    }
+  ]
+}

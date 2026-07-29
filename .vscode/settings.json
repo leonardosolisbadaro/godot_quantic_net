@@ -1,0 +1,24 @@
+{
+  "files.exclude": {
+    "**/addons": true,
+    "**/*.uid": true
+  },
+  "editor.formatOnSave": false,
+  "godotTools.editorPath.godot4": "c:\\Users\\LEONARDO\\Documents\\Godot_v4.7.1-stable_win64.exe\\Godot_v4.7.1-stable_win64.exe",
+  "godot_tools.gdscript_lsp_server_port": 6005,
+  "[gdscript]": {
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4,
+    "editor.defaultFormatter": "geequlim.godot-tools"
+  },
+  "[json]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
