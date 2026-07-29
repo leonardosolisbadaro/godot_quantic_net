@@ -1,0 +1,80 @@
+## @file qn_server_validator.gd
+## @path res://addons/quantic_net/src/domain/qn_server_validator.gd
+##
+## @description
+## Validador autoritativo anti-teleporte e anti-speedhack: 3 zonas de tolerância (accept/clamp/reject),
+## restrições de limites de mundo (world bounds) e sistema de strikes com expulsão.
+## Camada: Domain (regra pura — não conhece ENet, MultiplayerPeer nem SceneTree).
+##
+## @created 2026-07-29
+## @updated 2026-07-29
+##
+## @since 0.1.0
+## @lastModifiedIn 0.1.0
+##
+## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+
+class_name QNServerValidator
+
+const MAX_SPEED := 6.0
+const HARD_CAP := 20.0
+const WORLD_BOUNDS := 60.0
+const MAX_STRIKES := 5
+
+class PeerState:
+	var pos: Vector3
+	var rot: Vector3
+	var last_ts: int
+	var strikes: int = 0
+
+var peers := {}
+
+func peer_left(id: int) -> void:
+	peers.erase(id)
+
+func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
+	if absf(pos.x) > WORLD_BOUNDS or absf(pos.z) > WORLD_BOUNDS or pos.y < -2.0 or pos.y > 50.0:
+		return _reject(id, peers.get(id), "fora do mundo")
+		
+	if not peers.has(id):
+		var st := PeerState.new()
+		st.pos = pos
+		st.rot = rot
+		st.last_ts = now
+		peers[id] = st
+		return {"action": "accept", "pos": pos, "rot": rot}
+		
+	var st: PeerState = peers[id]
+	var dt: float = float(now - st.last_ts) / 1000.0
+	if dt <= 0.0:
+		dt = 0.001
+		
+	var dist: float = pos.distance_to(st.pos)
+	var speed: float = dist / dt
+	
+	if speed <= MAX_SPEED:
+		st.pos = pos
+		st.rot = rot
+		st.last_ts = now
+		st.strikes = maxi(0, st.strikes - 1)
+		return {"action": "accept", "pos": pos, "rot": rot}
+		
+	if speed <= HARD_CAP:
+		var dir: Vector3 = pos - st.pos
+		var clamped: Vector3 = st.pos + dir.normalized() * minf(dist, MAX_SPEED * dt)
+		clamped.y = pos.y
+		st.pos = clamped
+		st.rot = rot
+		st.last_ts = now
+		return {"action": "clamp", "pos": clamped, "rot": rot}
+		
+	return _reject(id, st, "speed=%.1f m/s" % speed)
+
+func _reject(_id: int, st: PeerState, _reason: String) -> Dictionary:
+	if st:
+		st.strikes += 1
+		return {"action": "reject", "pos": st.pos, "rot": st.rot, "strikes": st.strikes}
+	return {"action": "reject", "pos": Vector3.ZERO, "rot": Vector3.ZERO, "strikes": 0}
+
+func should_kick(id: int) -> bool:
+	return peers.has(id) and peers[id].strikes >= MAX_STRIKES
