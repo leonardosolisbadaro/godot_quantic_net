@@ -57,6 +57,15 @@ de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
   controle → ENet 0, estado → ENet 3, reliable ordenado → ENet 1.
 - [x] TDD: Implementar codec do payload: compressão ZSTD/DEFLATE condicional,
   obfuscação XOR e decode inverso.
+- [x] TDD: Testar round-trip do codec, pacote malformado, versão/magic
+  inválidos e payload comprimido/não comprimido.
+- [x] TDD: Cobrir wrappers obrigatórios de `MultiplayerPeerExtension`:
+  status, id único, peer remoto, channel, transfer mode, target peer,
+  close e disconnect.
+- [x] Verificar compilação no Godot 4.7.1, incluindo
+  `ENetConnection.MODE_HOST` e tipagem explícita onde o parser exigir.
+- [ ] Commit sugerido:
+  `feat(adapters): add QNWirePeer codec, channel mapping and netem`
 
 #### PR 3 — Hook da Multiplayer API [ ]
 

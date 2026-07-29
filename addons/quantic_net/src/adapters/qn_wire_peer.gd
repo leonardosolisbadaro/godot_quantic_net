@@ -150,7 +150,44 @@ func _drain_netem(current_ts: int) -> Array[Dictionary]:
 	_netem_queue = remaining
 	return ready
 
-# Dummy virtual methods to prevent abstract class errors in Godot
+
+var _target_peer := 0
+var _transfer_channel := 0
+var _transfer_mode := MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
+var _refusing_connections := false
+
+func _set_target_peer(peer: int) -> void:
+	_target_peer = peer
+
+func _set_transfer_channel(channel: int) -> void:
+	_transfer_channel = channel
+
+func _set_transfer_mode(mode: int) -> void:
+	_transfer_mode = mode
+
+func _get_transfer_channel() -> int:
+	return _transfer_channel
+
+func _get_transfer_mode() -> int:
+	return _transfer_mode
+
+func _is_refusing_new_connections() -> bool:
+	return _refusing_connections
+
+func _set_refuse_new_connections(enable: bool) -> void:
+	_refusing_connections = enable
+
+func _put_packet_script(p_buffer: PackedByteArray) -> Error:
+	var current_ts = Time.get_ticks_msec()
+	# Primeiro encodamos
+	var encoded = _encode(_transfer_channel, p_buffer)
+	# Depois passamos no Netem
+	var queued = _queue_netem(_transfer_channel, encoded, current_ts)
+	
+	# Aqui, em teoria, se o release_ts <= current_ts, enviamos imediatamente pro ENet.
+	# Como é um wrapper, a lógica real de envio dependerá do ENetConnection que encapsularemos mais tarde.
+	return OK
+
 func _get_available_packet_count() -> int: return 0
 func _get_packet_script() -> PackedByteArray: return PackedByteArray()
 func _get_packet_peer() -> int: return 0
@@ -158,15 +195,9 @@ func _get_packet_channel() -> int: return 0
 func _get_packet_mode() -> int: return 0
 func _get_unique_id() -> int: return 0
 func _is_server() -> bool: return false
-func _get_connection_status() -> MultiplayerPeer.ConnectionStatus: return MultiplayerPeer.CONNECTION_DISCONNECTED
-func _set_target_peer(peer: int) -> void: pass
-func _set_transfer_channel(channel: int) -> void: pass
-func _set_transfer_mode(mode: MultiplayerPeer.TransferMode) -> void: pass
-func _get_transfer_channel() -> int: return 0
-func _get_transfer_mode() -> MultiplayerPeer.TransferMode: return MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
-func _get_max_packet_size() -> int: return 0
+func _get_connection_status() -> int: return MultiplayerPeer.CONNECTION_DISCONNECTED
 func _close() -> void: pass
 func _disconnect_peer(peer: int, force: bool) -> void: pass
 func _is_server_relay_supported() -> bool: return false
-func _is_refusing_new_connections() -> bool: return false
-func _set_refuse_new_connections(enable: bool) -> void: pass
+func _get_max_packet_size() -> int: return 0
+func _poll() -> void: pass
