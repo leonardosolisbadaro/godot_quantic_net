@@ -40,16 +40,16 @@ para os casos de uso futuros.
 Implementar `QNWirePeer` em `addons/quantic_net/src/adapters/`, herdando
 de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
 
-- [ ] TDD: Criar `tests/unit/adapters/test_qn_wire_peer_netem.gd`.
-- [ ] TDD: Especificar e testar perfil de perda por canal virtual:
+- [x] TDD: Criar `tests/unit/adapters/test_qn_wire_peer_netem.gd`.
+- [x] TDD: Especificar e testar perfil de perda por canal virtual:
   canal 0 (controle/reliable) sem drop por padrão; canal 1
   (estado/unreliable) com drop configurável.
-- [ ] TDD: Especificar e testar retenção por latência base, liberação
+- [x] TDD: Especificar e testar retenção por latência base, liberação
   após o prazo e jitter gaussiano.
-- [ ] TDD: Especificar e testar que jitter pode produzir reordenação
+- [x] TDD: Especificar e testar que jitter pode produzir reordenação
   temporal controlada.
-- [ ] TDD: Especificar e testar duplicação opcional de datagramas.
-- [ ] TDD: Implementar `QNWirePeer` até a suíte de Netem ficar verde.
+- [x] TDD: Especificar e testar duplicação opcional de datagramas.
+- [x] TDD: Implementar `QNWirePeer` até a suíte de Netem ficar verde.
 - [x] TDD: Criar `tests/unit/adapters/test_qn_wire_peer_codec.gd`.
 - [x] TDD: Implementar header de wire versionado:
   `magic | version | virtual_channel | flags | payload`.

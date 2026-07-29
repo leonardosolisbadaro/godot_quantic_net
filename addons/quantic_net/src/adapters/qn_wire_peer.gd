@@ -32,6 +32,14 @@ const CH_MAP := {CH_CONTROL: 0, CH_STATE: 3, CH_RELIABLE: 1}
 var enet: ENetConnection
 var obfuscate := false
 
+var netem_enabled := false
+var netem_loss_pct := 0.0
+var netem_latency_ms := 0
+var netem_jitter_ms := 0
+var netem_dup_pct := 0.0
+
+var _netem_queue: Array[Dictionary] = []
+
 func _init(p_enet: ENetConnection = null) -> void:
 	if p_enet:
 		enet = p_enet
@@ -90,6 +98,57 @@ func _decode(wire: PackedByteArray) -> PackedByteArray:
 			return PackedByteArray()
 			
 	return payload
+
+func _queue_netem(vchannel: int, payload: PackedByteArray, current_ts: int) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if not netem_enabled:
+		result.append({"channel": vchannel, "payload": payload, "release_ts": current_ts})
+		return result
+		
+	var should_drop = false
+	if vchannel != CH_CONTROL and netem_loss_pct > 0.0:
+		should_drop = (randf() < netem_loss_pct)
+		
+	if should_drop:
+		return result
+		
+	var copies = 1
+	if vchannel != CH_CONTROL and netem_dup_pct > 0.0:
+		if randf() < netem_dup_pct:
+			copies = 2
+			
+	for i in range(copies):
+		var delay = netem_latency_ms
+		if netem_jitter_ms > 0:
+			var jitter = int(randfn(0.0, float(netem_jitter_ms)))
+			delay += jitter
+			if delay < 0:
+				delay = 0
+				
+		var pkt = {
+			"channel": vchannel,
+			"payload": payload,
+			"release_ts": current_ts + delay
+		}
+		result.append(pkt)
+		_netem_queue.append(pkt)
+		
+	return result
+
+func _drain_netem(current_ts: int) -> Array[Dictionary]:
+	var ready: Array[Dictionary] = []
+	var remaining: Array[Dictionary] = []
+	
+	for pkt in _netem_queue:
+		if pkt.release_ts <= current_ts:
+			ready.append(pkt)
+		else:
+			remaining.append(pkt)
+			
+	ready.sort_custom(func(a, b): return a.release_ts < b.release_ts)
+	
+	_netem_queue = remaining
+	return ready
 
 # Dummy virtual methods to prevent abstract class errors in Godot
 func _get_available_packet_count() -> int: return 0

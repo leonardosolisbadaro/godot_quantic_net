@@ -12,7 +12,7 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Adicionado
 
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInputBuffer`, finalizando assim a arquitetura core do plugin. A lógica gerencia a drenagem circular de inputs do cliente utilizando compensação matemática para resistir ao wrap-around de sequências, tornando viável a Reconciliação (Client-Side Prediction).
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNServerValidator`, isolada da engine. Protege o servidor contra pacotes forjados, limitando velocidade (`HARD_CAP`), aplicando _clamps_ em excessos toleráveis e punindo teletransportes ou out-of-bounds via sistema progressivo de *strikes* até a expulsão.
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNServerValidator`, isolada da engine. Protege o servidor contra pacotes forjados, limitando velocidade (`HARD_CAP`), aplicando _clamps_ em excessos toleráveis e punindo teletransportes ou out-of-bounds via sistema progressivo de _strikes_ até a expulsão.
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInterpBuffer`, isolada da engine. Foram aplicadas correções matemáticas cruciais na lógica de extrapolação (agora indexada corretamente pela playhead `render_ts` em vez do relógio cliente `now`), prevenindo dessincronizações severas durante lag spikes.
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNLossTracker`, isolada da engine. Trata com precisão o cálculo de perda de rede através de falhas em sequências (gaps) com tolerância segura a wrap-around de 16-bits.
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNClockSync`, isolada da engine. Foram aplicadas correções matemáticas cruciais no modelo NTP (estimativas de janela móvel e EMA) provando a eficácia do TDD em capturar regressões lógicas.
@@ -37,4 +37,4 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [0.1.0] - 2026-07-28
 
-### ...
+### 
