@@ -27,3 +27,7 @@ window/stretch/aspect="expand"
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+
+[autoload]
+QuanticNet="*res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd"
+

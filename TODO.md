@@ -186,30 +186,30 @@ Completar `quantic_net_autoload.gd` como única API pública do addon.
 Evidência executável de que o addon instala uma vez, funciona em projeto
 3D vazio e pode ser consumido sem acoplamento à demo.
 
-#### PR 8 — Teste de integração de rede real [ ]
+#### PR 8 — Teste de integração de rede real [x]
 
-- [ ] Migrar o teste do rascunho para
+- [x] Migrar o teste do rascunho para
   `tests/integration/test_server_two_clients.gd`.
-- [ ] Subir um servidor e dois clientes DTLS reais na mesma árvore
+- [x] Subir um servidor e dois clientes DTLS reais na mesma árvore
   headless, sob Netem (latência, jitter e perda configurada).
-- [ ] Validar: dois peers autenticados, clock sincronizado, RTT em
+- [x] Validar: dois peers autenticados, clock sincronizado, RTT em
   faixa esperada, relay de estado remoto, perda medida e convergência
   do estado no servidor.
-- [ ] Fazer o processo encerrar com exit code 0/1 para CI.
-- [ ] Commit sugerido:
+- [x] Fazer o processo encerrar com exit code 0/1 para CI.
+- [x] Commit sugerido:
   `test(integration): cover DTLS server and two clients under netem`
 
-#### PR 9 — Demo agnóstica de gameplay [ ]
+#### PR 9 — Demo agnóstica de gameplay [x]
 
-- [ ] Criar demo 3D isolada em `demo/`, fora de `addons/`.
-- [ ] Demonstrar apenas integração consumidora:
+- [x] Criar demo 3D isolada em `demo/`, fora de `addons/`.
+- [x] Demonstrar apenas integração consumidora:
   prediction local, `submit_state`, `remote_state`, visualização de
   peers e aplicação de snapback.
-- [ ] Incluir instruções code-first: projeto vazio, cópia da pasta
+- [x] Incluir instruções code-first: projeto vazio, cópia da pasta
   `addons/`, ativação do plugin e execução servidor/cliente.
-- [ ] Manter valores didáticos (porta, secret e assets) somente na
+- [x] Manter valores didáticos (porta, secret e assets) somente na
   demo, nunca no núcleo do addon.
-- [ ] Commit sugerido:
+- [x] Commit sugerido:
   `docs(demo): add minimal 3D plug-and-play example`
 
 #### PR 10 — CI, release e Asset Library [ ]
