@@ -115,24 +115,24 @@ Implementar `QNHostSession` em `addons/quantic_net/src/use_cases/`.
 - [x] Commit sugerido:
   `feat(use-cases): add authoritative host session`
 
-#### PR 5 — Sessão preditiva do cliente [ ]
+#### PR 5 — Sessão preditiva do cliente [x]
 
 Implementar `QNClientSession` em `addons/quantic_net/src/use_cases/`.
 
-- [ ] TDD: Criar `tests/unit/use_cases/test_qn_client_session.gd` com
+- [x] TDD: Criar `tests/unit/use_cases/test_qn_client_session.gd` com
   relógio e transporte fake determinísticos.
-- [ ] TDD: Especificar rate limit de envio de estado a 20 Hz.
-- [ ] TDD: Especificar criação de `seq`, serialização e armazenamento
+- [x] TDD: Especificar rate limit de envio de estado a 20 Hz.
+- [x] TDD: Especificar criação de `seq`, serialização e armazenamento
   do `sent_ts` no `QNInputBuffer`.
-- [ ] TDD: Especificar eco autoritativo: lookup de `sent_ts` por seq,
+- [x] TDD: Especificar eco autoritativo: lookup de `sent_ts` por seq,
   chamada `QNClockSync.on_pong(client_sent, server_time, client_now)` e
   confirmação/drain de inputs.
-- [ ] TDD: Especificar recebimento de peer remoto, atualização de
+- [x] TDD: Especificar recebimento de peer remoto, atualização de
   `QNLossTracker` e alimentação de `QNInterpBuffer`.
-- [ ] TDD: Especificar `TYPE_SNAPBACK`: estado autoritativo, seq
+- [x] TDD: Especificar `TYPE_SNAPBACK`: estado autoritativo, seq
   confirmado, reason e lista de inputs para replay.
-- [ ] Implementar o caso de uso até a suíte verde.
-- [ ] Commit sugerido:
+- [x] Implementar o caso de uso até a suíte verde.
+- [x] Commit sugerido:
   `feat(use-cases): add predictive client session`
 
 ### Fase 5: Infraestrutura DTLS e Fachada (Integração) [ ]
