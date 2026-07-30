@@ -18,7 +18,7 @@ extends GutTest
 const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd")
 
 func _new_peer() -> MultiplayerPeerExtension:
-	return QNWirePeer.new(ENetConnection.new())
+	return autofree(QNWirePeer.new(ENetConnection.new()))
 
 func test_header_carrega_magic_versao_e_canal() -> void:
 	# Arrange

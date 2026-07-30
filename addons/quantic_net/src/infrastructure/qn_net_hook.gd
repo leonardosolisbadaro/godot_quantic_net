@@ -36,12 +36,19 @@ var on_outgoing_packet: Callable
 var on_config_add: Callable
 
 func _init() -> void:
-	base.connected_to_server.connect(func() -> void: emit_signal("connected_to_server"))
-	base.connection_failed.connect(func() -> void: emit_signal("connection_failed"))
-	base.server_disconnected.connect(func() -> void: emit_signal("server_disconnected"))
-	base.peer_connected.connect(func(id: int) -> void: emit_signal("peer_connected", id))
-	base.peer_disconnected.connect(func(id: int) -> void: emit_signal("peer_disconnected", id))
-	base.peer_authenticating.connect(func(id: int) -> void: emit_signal("peer_authenticating", id))
+	base.connected_to_server.connect(_on_connected_to_server)
+	base.connection_failed.connect(_on_connection_failed)
+	base.server_disconnected.connect(_on_server_disconnected)
+	base.peer_connected.connect(_on_peer_connected)
+	base.peer_disconnected.connect(_on_peer_disconnected)
+	base.peer_authenticating.connect(_on_peer_authenticating)
+
+func _on_connected_to_server() -> void: emit_signal("connected_to_server")
+func _on_connection_failed() -> void: emit_signal("connection_failed")
+func _on_server_disconnected() -> void: emit_signal("server_disconnected")
+func _on_peer_connected(id: int) -> void: emit_signal("peer_connected", id)
+func _on_peer_disconnected(id: int) -> void: emit_signal("peer_disconnected", id)
+func _on_peer_authenticating(id: int) -> void: emit_signal("peer_authenticating", id)
 
 # Dummies/Wrappers obrigatorios da MultiplayerAPIExtension
 func _poll() -> Error:

@@ -1,6 +1,6 @@
 # QuanticNet
 
-**Versão Atual:** `0.1.0`
+**Versão Atual:** `0.2.0`
 
 Plugin de network (`QuanticNet`) `plug and play`, focado no desenvolvimento de jogos `3D Open World MMO` usando a `Godot Engine 4.7`. Arquitetada absoluta (a partir do zero) focada em **Code-First**, **Test-Driven Development (TDD)** e **Clean Architecture**. Eliminando a dependência de editores visuais para lógicas de negócio.
 

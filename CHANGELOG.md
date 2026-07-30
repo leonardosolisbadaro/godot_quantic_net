@@ -7,25 +7,17 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## Unreleased
 
 ### Adicionado
 
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInputBuffer`, finalizando assim a arquitetura core do plugin. A lógica gerencia a drenagem circular de inputs do cliente utilizando compensação matemática para resistir ao wrap-around de sequências, tornando viável a Reconciliação (Client-Side Prediction).
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNServerValidator`, isolada da engine. Protege o servidor contra pacotes forjados, limitando velocidade (`HARD_CAP`), aplicando _clamps_ em excessos toleráveis e punindo teletransportes ou out-of-bounds via sistema progressivo de _strikes_ até a expulsão.
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInterpBuffer`, isolada da engine. Foram aplicadas correções matemáticas cruciais na lógica de extrapolação (agora indexada corretamente pela playhead `render_ts` em vez do relógio cliente `now`), prevenindo dessincronizações severas durante lag spikes.
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNLossTracker`, isolada da engine. Trata com precisão o cálculo de perda de rede através de falhas em sequências (gaps) com tolerância segura a wrap-around de 16-bits.
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNClockSync`, isolada da engine. Foram aplicadas correções matemáticas cruciais no modelo NTP (estimativas de janela móvel e EMA) provando a eficácia do TDD em capturar regressões lógicas.
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNSerializer`, com testes passando, garantindo quantização binária de pacotes de estado para 19 Bytes.
-- "Casca" estrutural e arquivos descritores (autoload e plugin.cfg) do `QuanticNet` injetada em `addons/`, adotando fielmente as hierarquias isoladas da Clean Architecture (`domain/`, `use_cases/`, `adapters/` e `infrastructure/`).
-- Workflow de produtividade integrado ao VS Code (atalhos F5, F10 e F12 e `tasks.json`), orquestrando o ciclo de validação do TDD e proteção do processo Headless (LSP).
-- Restrição arquitetural no `GEMINI.md` exigindo o uso obrigatório e exclusivo do framework **bitwes/Gut** para a confecção da suíte de testes (TDD).
-
-### Modificado
-
-- Atualização integral do arquivo `GEMINI.md` (Constituição Arquitetural), definindo rigorosamente as camadas concêntricas de Clean Architecture e fluxo de TDD para o plugin `QuanticNet` (foco em MMO 3D Open World).
+- ...
 
 ### Corrigido
+
+- ...
+
+### Modificado
 
 - ...
 
@@ -33,8 +25,32 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - ...
 
+## [0.2.0] - 2026-07-30
+
+### Adicionado
+
+- Implementação do `QNHostSession` (Casos de Uso), orquestrador do servidor autoritativo responsável por autenticação, decodificação de estados, validação (accept/clamp/reject), disparos de snapbacks e broadcast de ticks globais.
+- Implementação completa da infraestrutura de transporte `QNWirePeer` suportando Compressão ZSTD, Obfuscação XOR e simulação nativa de rede (Netem) com suporte a latência, jitter, perda e duplicação controlada.
+- Implementação do interceptador `QNNetHook` atuando sobre a MultiplayerAPI, oferecendo controle absoluto sobre RPCs de saída e injeção de pacotes customizados transparentemente (Filtros e Transformers).
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInputBuffer`, finalizando a arquitetura core do plugin. Gerencia a drenagem circular de inputs do cliente utilizando compensação matemática para resistir ao wrap-around de sequências.
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNServerValidator`, isolada da engine. Protege o servidor contra pacotes forjados, limitando velocidade (`HARD_CAP`), aplicando _clamps_ em excessos toleráveis e punindo teletransportes via _strikes_.
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInterpBuffer` (extrapolação correta baseada no `render_ts`).
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNLossTracker` (wrap-around de 16-bits resiliênte).
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNClockSync` (modelo NTP aprimorado).
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNSerializer`, garantindo quantização binária extrema.
+- "Casca" estrutural do `QuanticNet` em `addons/` orientada a Clean Architecture.
+- Restrição arquitetural no `GEMINI.md` exigindo uso obrigatório de **bitwes/Gut**.
+
+### Corrigido
+
+- Correção de Memory Leaks graves (`ObjectDB instances`) nas suítes de teste de infraestrutura através do emprego de instâncias `autofree` sobre extensões em C++ instanciadas pelo GUT.
+
+### Modificado
+
+- Atualização integral do arquivo `GEMINI.md` (Constituição Arquitetural), definindo rigorosamente as camadas concêntricas de Clean Architecture e fluxo de TDD para o plugin `QuanticNet` (foco em MMO 3D Open World).
+
 ---
 
 ## [0.1.0] - 2026-07-28
 
-### 
+###

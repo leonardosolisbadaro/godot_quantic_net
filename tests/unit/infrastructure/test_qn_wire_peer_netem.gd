@@ -19,7 +19,7 @@ extends GutTest
 const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd")
 
 func _new_peer() -> QNWirePeer:
-	var peer = QNWirePeer.new()
+	var peer = autofree(QNWirePeer.new())
 	peer.netem_enabled = true
 	return peer
 

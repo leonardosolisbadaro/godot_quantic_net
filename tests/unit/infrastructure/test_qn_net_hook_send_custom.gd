@@ -47,8 +47,8 @@ class FakePeer:
 	func _get_max_packet_size() -> int: return 1400
 
 func _hook_com_fake() -> Array:
-	var hook := QNNetHook.new()
-	var fake := FakePeer.new()
+	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var fake := autofree(FakePeer.new()) as FakePeer
 	hook.base.multiplayer_peer = fake
 	return [hook, fake]
 

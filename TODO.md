@@ -28,12 +28,12 @@ O coração da simulação e validação, agnóstico à infraestrutura de rede.
 - [x] TDD: Implementar `QNServerValidator` (clamping, validação anti-teleporte e rejeição baseada no tempo).
 - [x] TDD: Implementar `QNInputBuffer` (armazenamento e replay local de inputs - base do client prediction).
 
-### Fase 3: Adaptadores de Transporte (TDD)
+### Fase 3: Camada de Infraestrutura e Transporte
 
-Adaptadores específicos da Godot Engine. Esta fase não implementa
-orquestração de sessão, regras de gameplay nem a fachada pública:
-transforma somente pacotes e eventos nativos em primitivas de transporte
-para os casos de uso futuros.
+#### Limpeza de Testes (Higiene) [x]
+
+- [x] TDD: Adicionar teardown (`after_each`) nas suítes de `infrastructure` para liberar recursos alocados (ex: `_hook.free()`) e eliminar warnings de ObjectDB leak no GUT.
+- [x] Commit sugerido: `chore(tests): free Extension instances in GUT teardown`
 
 #### PR 2 — Wire peer, codec e Netem
 
@@ -64,7 +64,7 @@ de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
   close e disconnect.
 - [x] Verificar compilação no Godot 4.7.1, incluindo
   `ENetConnection.MODE_HOST` e tipagem explícita onde o parser exigir.
-- [ ] Commit sugerido:
+- [x] Commit sugerido:
   `feat(infrastructure): add QNWirePeer codec, channel mapping and netem`
 
 #### PR 3 — Hook da Multiplayer API [x]
@@ -86,7 +86,7 @@ de `MultiplayerAPIExtension` e encapsulando `SceneMultiplayer`.
   transfer channel e transfer mode corretos.
 - [x] Testar que sinais do `SceneMultiplayer` são reemitidos sem
   depender de identificadores de sinais herdados no `_init()`.
-- [ ] Commit sugerido:
+- [x] Commit sugerido:
   `feat(infrastructure): add QNNetHook multiplayer interception`
 
 ### Fase 4: Casos de Uso de Sessão (TDD) [ ]
@@ -95,24 +95,24 @@ Orquestração independente de cena e gameplay. Os casos de uso conhecem
 o domínio e contratos de transporte; não instanciam cubos, não leem input
 da Godot e não controlam UI.
 
-#### PR 4 — Sessão autoritativa do servidor [ ]
+#### PR 4 — Sessão autoritativa do servidor [x]
 
 Implementar `QNHostSession` em `addons/quantic_net/src/use_cases/`.
 
-- [ ] TDD: Criar `tests/unit/use_cases/test_qn_host_session.gd` com
+- [x] TDD: Criar `tests/unit/use_cases/test_qn_host_session.gd` com
   transporte fake/memory transport.
-- [ ] TDD: Especificar fluxo de autenticação por token/secret e
+- [x] TDD: Especificar fluxo de autenticação por token/secret e
   rejeição de credencial inválida.
-- [ ] TDD: Especificar recebimento de `TYPE_STATE`, decode via
+- [x] TDD: Especificar recebimento de `TYPE_STATE`, decode via
   `QNSerializer` e validação por `QNServerValidator`.
-- [ ] TDD: Especificar as três saídas autoritativas:
+- [x] TDD: Especificar as três saídas autoritativas:
   `accept` → relay do estado; `clamp` → relay + snapback reliable;
   `reject` → snapback reliable sem relay.
-- [ ] TDD: Especificar kick após `MAX_STRIKES` e limpeza por peer leave.
-- [ ] TDD: Expor eventos de domínio, incluindo a propagação de
+- [x] TDD: Especificar kick após `MAX_STRIKES` e limpeza por peer leave.
+- [x] TDD: Expor eventos de domínio, incluindo a propagação de
   `peer_rejected(id, reason, strikes)`, sem `print()` interno.
-- [ ] Implementar o caso de uso até a suíte verde.
-- [ ] Commit sugerido:
+- [x] Implementar o caso de uso até a suíte verde.
+- [x] Commit sugerido:
   `feat(use-cases): add authoritative host session`
 
 #### PR 5 — Sessão preditiva do cliente [ ]

@@ -19,7 +19,7 @@ const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_
 
 func test_wrappers_de_estado_armazenam_valores() -> void:
 	# Arrange
-	var peer = QNWirePeer.new()
+	var peer = autofree(QNWirePeer.new())
 	
 	# Act
 	peer._set_target_peer(42)
@@ -35,7 +35,7 @@ func test_wrappers_de_estado_armazenam_valores() -> void:
 
 func test_put_packet_redireciona_ao_netem() -> void:
 	# Arrange
-	var peer = QNWirePeer.new()
+	var peer = autofree(QNWirePeer.new())
 	peer.netem_enabled = true
 	peer.netem_latency_ms = 100
 	peer._set_transfer_channel(QNWirePeer.CH_STATE)
