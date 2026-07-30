@@ -179,7 +179,7 @@ func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
 func _on_host_broadcast_ready(states: Array) -> void:
 	var now = Time.get_ticks_msec()
 	for s in states:
-		var raw = QNSerializer.encode_state_seq(0, s.pos, s.rot, now, 0)
+		var raw = QNSerializer.encode_state_seq(s.seq, s.pos, s.rot, now, 0)
 		var pkt := PackedByteArray([QNSerializer.TYPE_STATE])
 		var id_bytes := PackedByteArray()
 		id_bytes.resize(4)
@@ -204,6 +204,16 @@ func loss_of(owner_id: int) -> float:
 	if not _is_server and _client_session:
 		return _client_session.loss_of(owner_id)
 	return 0.0
+
+func is_clock_synced() -> bool:
+	if not _is_server and _client_session:
+		return _client_session.is_clock_synced()
+	return false
+
+func get_registry() -> Dictionary:
+	if _is_server and _host_session:
+		return _host_session.get_registry()
+	return {}
 
 func kick(peer_id: int) -> void:
 	if _is_server and _hook:

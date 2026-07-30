@@ -43,6 +43,7 @@ var _in_queue: Array[Dictionary] = []
 var _peer_map: Dictionary = {}
 var _next_id: int = 2
 var _is_server_flag := false
+var _client_id := 2
 var _status: int = MultiplayerPeer.CONNECTION_DISCONNECTED
 
 func _init(p_enet: ENetConnection = null, p_is_server: bool = false) -> void:
@@ -134,7 +135,8 @@ func _queue_netem(vchannel: int, payload: PackedByteArray, current_ts: int) -> A
 		var pkt = {
 			"channel": vchannel,
 			"payload": payload,
-			"release_ts": current_ts + delay
+			"release_ts": current_ts + delay,
+			"target": _target_peer
 		}
 		result.append(pkt)
 		_netem_queue.append(pkt)
@@ -154,7 +156,7 @@ func _drain_netem(current_ts: int) -> Array[Dictionary]:
 	ready.sort_custom(func(a, b): return a.release_ts < b.release_ts)
 	
 	for pkt in ready:
-		_send_packet(pkt.payload, _target_peer, pkt.channel)
+		_send_packet(pkt.payload, pkt.target, pkt.channel)
 		
 	_netem_queue = remaining
 	return ready
@@ -229,7 +231,7 @@ func _get_packet_channel() -> int:
 		return _in_queue[0].channel
 	return _current_packet_channel
 func _get_packet_mode() -> int: return MultiplayerPeer.TRANSFER_MODE_RELIABLE
-func _get_unique_id() -> int: return 1 if _is_server_flag else 2
+func _get_unique_id() -> int: return 1 if _is_server_flag else _client_id
 func _is_server() -> bool: return _is_server_flag
 func _get_connection_status() -> int: return _status
 func _close() -> void: pass

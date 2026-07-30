@@ -41,6 +41,7 @@ func on_peer_authenticated(peer_id: int) -> void:
 		"id": peer_id,
 		"pos": Vector3.ZERO,
 		"rot": Vector3.ZERO,
+		"seq": 0,
 		"profile": "MMO"
 	}
 
@@ -62,9 +63,11 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 	if action == "accept":
 		_registry[peer_id].pos = result.pos
 		_registry[peer_id].rot = result.rot
+		_registry[peer_id].seq = seq
 	elif action == "clamp":
 		_registry[peer_id].pos = result.pos
 		_registry[peer_id].rot = result.rot
+		_registry[peer_id].seq = seq
 		var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, now, SNAPBACK_REASON_CLAMP)
 		snapback_requested.emit(peer_id, snap)
 	elif action == "reject":

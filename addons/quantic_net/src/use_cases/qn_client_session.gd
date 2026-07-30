@@ -83,7 +83,8 @@ func submit_state(pos: Vector3, rot: Vector3, custom_id: int, dt: float, now: in
 	if _my_id <= 1 or _send_accum < SEND_INTERVAL:
 		return false
 	_send_accum = 0.0
-	_send_seq += 1
+	_send_seq = (_send_seq + 1) & 0xFFFF
+	_input_buf.record(_send_seq, Vector2.ZERO, 0.0, dt, now)
 	var raw: PackedByteArray = _serializer.encode_state_seq(_send_seq, pos, rot, now, custom_id)
 	var pkt := PackedByteArray([_serializer.TYPE_STATE])
 	pkt.append_array(raw)

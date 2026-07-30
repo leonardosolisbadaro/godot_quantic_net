@@ -13,38 +13,11 @@
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
-extends GutTest
-
-const AutoloadScript = preload("res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd")
-
-const TEST_PORT := 47921
-const DEADLINE_MS := 3000
-const SECRET := "tok-integracao"
-
-var _autoloads := []
-
-func after_each() -> void:
-	for a in _autoloads:
-		if is_instance_valid(a):
-			remove_child(a)
-			a.free()
-	_autoloads.clear()
-	_cleanup_certs()
-
-func _spawn_autoload() -> Node:
-	var a: Node = AutoloadScript.new()
-	add_child(a)
-	_autoloads.append(a)
-	return a
-
-func _cleanup_certs() -> void:
-	for p in ["user://qnet_cert.crt", "user://qnet_cert.key"]:
-		if FileAccess.file_exists(p):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+extends "res://tests/integration/helpers/qn_integration_base.gd"
 
 func test_host_sobe_imediato_em_estado_connected() -> void:
 	var srv := _spawn_autoload()
-	var err: int = srv.host(TEST_PORT, SECRET, "127.0.0.1", 8)
+	var err: int = srv.host(_next_test_port(), SECRET, "127.0.0.1", 8)
 	assert_eq(err, OK, "host sobe com OK")
 	assert_eq(srv.get_state(), srv.ConnectionState.CONNECTED, "servidor nasce CONNECTED")
 	assert_true(srv.is_server())
@@ -52,11 +25,13 @@ func test_host_sobe_imediato_em_estado_connected() -> void:
 func test_join_sem_servidor_falha_com_estado_failed_ou_connecting() -> void:
 	_cleanup_certs()
 	var srv := _spawn_autoload()
-	srv.host(TEST_PORT + 7, SECRET, "127.0.0.1", 8)
-	var cli := _spawn_autoload()
+	var port = _next_test_port()
+	var err_host = srv.host(port, SECRET, "127.0.0.1", 8)
+	assert_eq(err_host, OK)
 	
-	var err: int = cli.join("127.0.0.1", TEST_PORT + 9, SECRET)
-	assert_eq(err, OK, "join nao-bloqueante retorna OK ao iniciar")
+	var cli := _spawn_autoload()
+	var err_join = cli.join("127.0.0.1", port + 9, SECRET)
+	assert_eq(err_join, OK, "join nao-bloqueante retorna OK ao iniciar")
 	var state = cli.get_state()
 	assert_true(state == cli.ConnectionState.CONNECTING or state == cli.ConnectionState.AUTHENTICATING, "sem servidor, permanece em tentativa (nao CONNECTED)")
 
