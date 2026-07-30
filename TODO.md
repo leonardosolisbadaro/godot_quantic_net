@@ -67,24 +67,24 @@ de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
 - [ ] Commit sugerido:
   `feat(infrastructure): add QNWirePeer codec, channel mapping and netem`
 
-#### PR 3 — Hook da Multiplayer API [ ]
+#### PR 3 — Hook da Multiplayer API [x]
 
 Implementar `QNNetHook` em `addons/quantic_net/src/infrastructure/`, herdando
 de `MultiplayerAPIExtension` e encapsulando `SceneMultiplayer`.
 
-- [ ] TDD: Criar `tests/unit/infrastructure/test_qn_net_hook.gd`.
-- [ ] TDD: Especificar reemissão dos sinais de conexão, autenticação,
+- [x] TDD: Criar `tests/unit/infrastructure/test_qn_net_hook.gd`.
+- [x] TDD: Especificar reemissão dos sinais de conexão, autenticação,
   entrada e saída de peers.
-- [ ] TDD: Especificar interceptação de RPCs de saída por `Callable`,
+- [x] TDD: Especificar interceptação de RPCs de saída por `Callable`,
   permitindo observação, alteração ou cancelamento.
-- [ ] TDD: Especificar interceptação de pacotes customizados de entrada
+- [x] TDD: Especificar interceptação de pacotes customizados de entrada
   e saída, preservando peer de origem e canal virtual.
-- [ ] TDD: Especificar delegação de object configuration add/remove
+- [x] TDD: Especificar delegação de object configuration add/remove
   para o `SceneMultiplayer` interno.
-- [ ] TDD: Implementar `QNNetHook` até todos os testes ficarem verdes.
-- [ ] TDD: Cobrir o envio de pacote customizado com target peer,
+- [x] TDD: Implementar `QNNetHook` até todos os testes ficarem verdes.
+- [x] TDD: Cobrir o envio de pacote customizado com target peer,
   transfer channel e transfer mode corretos.
-- [ ] Testar que sinais do `SceneMultiplayer` são reemitidos sem
+- [x] Testar que sinais do `SceneMultiplayer` são reemitidos sem
   depender de identificadores de sinais herdados no `_init()`.
 - [ ] Commit sugerido:
   `feat(infrastructure): add QNNetHook multiplayer interception`

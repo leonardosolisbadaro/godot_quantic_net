@@ -1,0 +1,63 @@
+## @file test_qn_net_hook_signals.gd
+## @path res://tests/unit/infrastructure/test_qn_net_hook_signals.gd
+##
+## @description
+## Testes de reemissao de sinais do QNNetHook: os eventos do
+## SceneMultiplayer encapsulado devem chegar ao consumidor do hook.
+## Metodologia AAA sobre bitwes/Gut; classe carregada via preload (sem class_name).
+##
+## @created 2026-07-29
+## @updated 2026-07-29
+##
+## @since 0.1.0
+## @lastModifiedIn 0.1.0
+##
+## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+
+extends GutTest
+
+const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
+
+func test_sinais_de_conexao_sao_reemitidos() -> void:
+	# Arrange: hook e coletores de sinais
+	var hook := QNNetHook.new()
+	var fired := []
+	hook.connected_to_server.connect(func() -> void: fired.append("connected"))
+	hook.connection_failed.connect(func() -> void: fired.append("failed"))
+	hook.server_disconnected.connect(func() -> void: fired.append("disconnected"))
+	# Act: emite os sinais correspondentes no SceneMultiplayer interno
+	hook.base.connected_to_server.emit()
+	hook.base.connection_failed.emit()
+	hook.base.server_disconnected.emit()
+	# Assert: consumidor do hook recebeu todos, na ordem
+	assert_eq(fired, ["connected", "failed", "disconnected"],
+		"sinais de conexao reemitidos na ordem")
+
+func test_sinais_de_peer_sao_reemitidos_com_id() -> void:
+	# Arrange
+	var hook := QNNetHook.new()
+	var joined := []
+	var left := []
+	hook.peer_connected.connect(func(id: int) -> void: joined.append(id))
+	hook.peer_disconnected.connect(func(id: int) -> void: left.append(id))
+	# Act
+	hook.base.peer_connected.emit(42)
+	hook.base.peer_disconnected.emit(42)
+	# Assert
+	assert_eq(joined, [42], "peer_connected propaga o id")
+	assert_eq(left, [42], "peer_disconnected propaga o id")
+
+func test_sinal_peer_authenticating_reemitido() -> void:
+	# Arrange
+	var hook := QNNetHook.new()
+	var auth := []
+	hook.peer_authenticating.connect(func(id: int) -> void: auth.append(id))
+	# Act
+	hook.base.peer_authenticating.emit(7)
+	# Assert
+	assert_eq(auth, [7], "handshake de auth chega ao consumidor")
+
+func test_hook_e_multiplayer_api_valida_sem_peer() -> void:
+	# Arrange + Act + Assert: sem peer configurado, estado consistente
+	var hook := QNNetHook.new()
+	assert_eq(hook.get_peers().size(), 0, "nenhum peer antes de conectar")
