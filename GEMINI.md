@@ -41,6 +41,9 @@ Para suportar o rigor de um ecossistema "plug and play" de um jogo **3D Open Wor
 
 O projeto é governado por **Code-First** e **Clean Architecture**. Eliminando a dependência de editores visuais para lógicas de negócio.
 
+### 4.1 Herança e Sinais Nativos em Extensions
+- Sinais herdados da base abstrata (ex: `MultiplayerAPI`) propagam nativamente via `emit_signal()` nas suas respectivas implementações de extensão (ex: `MultiplayerAPIExtension`). Não os redeclare para evitar colisões; redeclare apenas os sinais específicos da implementação concreta (ex.: `peer_authenticating` que existe apenas no `SceneMultiplayer`).
+
 ## 5. O MANDATO DE TESTES
 
 O projeto é governado por **TDD Rigoroso**. Nenhuma funcionalidade lógica pode existir se não houver um teste a justificá-la.

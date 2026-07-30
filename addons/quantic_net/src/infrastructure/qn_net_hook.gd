@@ -24,7 +24,7 @@ signal peer_authentication_failed(id: int)
 signal custom_packet(from_peer: int, data: PackedByteArray, channel: int)
 
 ## Implementacao real encapsulada (fachada de delegacao).
-var base := SceneMultiplayer.new()
+var base: MultiplayerAPI = SceneMultiplayer.new()
 
 ## Ganchos opcionais (Callables). Retornar false/null cancela a operacao:
 ## on_outgoing_rpc(peer, object, method, args) -> bool (false = descarta)

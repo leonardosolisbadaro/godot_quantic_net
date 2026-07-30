@@ -163,6 +163,7 @@ Implementar `QNDTLSBootstrap` em
   `feat(infrastructure): add DTLS host and client bootstrap`
 
 #### PR 7 — Autoload plug-and-play [x]
+
 Completar `quantic_net_autoload.gd` como única API pública do addon.
 
 - [x] TDD/integração: Criar `tests/integration/test_quantic_net_api.gd`.
