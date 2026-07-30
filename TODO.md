@@ -6,14 +6,14 @@ Plugin de network (`QuanticNet`) `plug and play`, focado no desenvolvimento de j
 
 ## FUNDAÇÃO: CONSTRUÇÃO DO BOILERPLATE
 
-### Fase 1: Arquitetura [x]
+### Fase 1: Arquitetura
 
 Configuração do ecossistema, IDE e amarras do Code-First, TDD e Clean Architecture.
 
 - [x] Editar `GEMINI.md` definindo as regras arquiteturais, uso de GDScript docstrings e metodologia AAA.
 - [x] Instalar e configurar ambiente de testes (bitwes/Gut).
 
-### Fase 2: Core Domain (TDD Rigoroso) [x]
+### Fase 2: Core Domain (TDD Rigoroso)
 
 O coração da simulação e validação, agnóstico à infraestrutura de rede.
 
@@ -89,7 +89,7 @@ de `MultiplayerAPIExtension` e encapsulando `SceneMultiplayer`.
 - [x] Commit sugerido:
   `feat(infrastructure): add QNNetHook multiplayer interception`
 
-### Fase 4: Casos de Uso de Sessão (TDD) [ ]
+### Fase 4: Casos de Uso de Sessão (TDD)
 
 Orquestração independente de cena e gameplay. Os casos de uso conhecem
 o domínio e contratos de transporte; não instanciam cubos, não leem input
@@ -135,31 +135,31 @@ Implementar `QNClientSession` em `addons/quantic_net/src/use_cases/`.
 - [x] Commit sugerido:
   `feat(use-cases): add predictive client session`
 
-### Fase 5: Infraestrutura DTLS e Fachada (Integração) [ ]
+### Fase 5: Infraestrutura DTLS e Fachada (Integração)
 
 A camada de infraestrutura monta a Engine, certificados e adaptadores.
 O autoload permanece uma casca fina: não conhece mecânicas, nodes de
 jogo, input, mesh, câmera ou UI.
 
-#### PR 6 — Bootstrap DTLS [ ]
+#### PR 6 — Bootstrap DTLS [x]
 
 Implementar `QNDTLSBootstrap` em
 `addons/quantic_net/src/infrastructure/`.
 
-- [ ] TDD/integração: Criar teste headless para servidor e cliente
+- [x] TDD/integração: Criar teste headless para servidor e cliente
   locais com DTLS real.
-- [ ] Implementar host com
+- [x] Implementar host com
   `dtls_server_setup(TLSOptions.server(key, cert))`.
-- [ ] Implementar join com
+- [x] Implementar join com
   `dtls_client_setup(hostname, TLSOptions.client(cert))`.
-- [ ] Implementar fallback de desenvolvimento em `user://`:
+- [x] Implementar fallback de desenvolvimento em `user://`:
   gerar/reutilizar `qnet_cert.crt` e `qnet_cert.key`.
-- [ ] Definir contrato de produção:
+- [x] Definir contrato de produção:
   certificado público em `res://certs/server.crt`; chave privada apenas
   no preset/export do servidor; hostname configurável e pinning.
-- [ ] Propagar erros de bind, carregamento de cert e conexão via
+- [x] Propagar erros de bind, carregamento de cert e conexão via
   `Error`/sinais, nunca apenas `push_error`.
-- [ ] Commit sugerido:
+- [x] Commit sugerido:
   `feat(infrastructure): add DTLS host and client bootstrap`
 
 #### PR 7 — Autoload plug-and-play [ ]
@@ -181,7 +181,7 @@ Completar `quantic_net_autoload.gd` como única API pública do addon.
 - [ ] Commit sugerido:
   `feat(api): complete plug-and-play QuanticNet autoload`
 
-### Fase 6: Aceitação, Demo e Distribuição [ ]
+### Fase 6: Aceitação, Demo e Distribuição
 
 Evidência executável de que o addon instala uma vez, funciona em projeto
 3D vazio e pode ser consumido sem acoplamento à demo.
