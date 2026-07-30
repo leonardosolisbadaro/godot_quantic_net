@@ -29,6 +29,9 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Adicionado
 
+- Implementação completa do Autoload `QuanticNet`, integrando nativamente o `QNNetHook`, `QNWirePeer`, suporte DTLS e as sessões de Host/Client na árvore do SceneTree, viabilizando o ecossistema "plug-and-play".
+- Implementação de segurança de transporte com `QNDTLSBootstrap`, integrando mbedTLS nativo da engine, geração de chaves RSA dinâmicas e "fingerprint pinning" transparente.
+- Implementação da sessão preditiva do cliente, `QNClientSession`, suportando Rate-limit (ex: 20 Hz), submissão assíncrona, sincronização remota interpolada e orquestração de Snapbacks/Replays contra o Host.
 - Implementação do `QNHostSession` (Casos de Uso), orquestrador do servidor autoritativo responsável por autenticação, decodificação de estados, validação (accept/clamp/reject), disparos de snapbacks e broadcast de ticks globais.
 - Implementação completa da infraestrutura de transporte `QNWirePeer` suportando Compressão ZSTD, Obfuscação XOR e simulação nativa de rede (Netem) com suporte a latência, jitter, perda e duplicação controlada.
 - Implementação do interceptador `QNNetHook` atuando sobre a MultiplayerAPI, oferecendo controle absoluto sobre RPCs de saída e injeção de pacotes customizados transparentemente (Filtros e Transformers).

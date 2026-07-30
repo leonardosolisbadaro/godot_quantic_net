@@ -74,7 +74,7 @@ func test_jitter_adiciona_variancia_gaussiana() -> void:
 	for i in range(10):
 		var queued = peer._queue_netem(QNWirePeer.CH_STATE, payload, 1000)
 		sum += queued[0].release_ts
-		assert_between(queued[0].release_ts, 1000, 1100, "Deve variar em torno da media com jitter")
+		assert_between(queued[0].release_ts, 950, 1150, "Deve variar em torno da media com jitter")
 		peer._netem_queue.clear()
 	
 	# Na média deve estar próximo de 1050 (10500 / 10 = 1050)

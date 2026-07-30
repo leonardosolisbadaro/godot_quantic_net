@@ -18,6 +18,7 @@
 extends MultiplayerAPIExtension
 
 signal peer_authenticating(id: int)
+signal peer_authentication_failed(id: int)
 
 ## Pacote customizado decodificado, fora do pipeline RPC.
 signal custom_packet(from_peer: int, data: PackedByteArray, channel: int)
@@ -42,29 +43,27 @@ func _init() -> void:
 	base.peer_connected.connect(_on_peer_connected)
 	base.peer_disconnected.connect(_on_peer_disconnected)
 	base.peer_authenticating.connect(_on_peer_authenticating)
+	base.peer_packet.connect(_on_peer_packet)
 
-func _on_connected_to_server() -> void: emit_signal("connected_to_server")
-func _on_connection_failed() -> void: emit_signal("connection_failed")
-func _on_server_disconnected() -> void: emit_signal("server_disconnected")
-func _on_peer_connected(id: int) -> void: emit_signal("peer_connected", id)
-func _on_peer_disconnected(id: int) -> void: emit_signal("peer_disconnected", id)
-func _on_peer_authenticating(id: int) -> void: emit_signal("peer_authenticating", id)
+func _on_connected_to_server() -> void:
+	print("QNNETHOOK: _on_connected_to_server called!")
+	connected_to_server.emit()
+func _on_connection_failed() -> void: connection_failed.emit()
+func _on_server_disconnected() -> void: server_disconnected.emit()
+func _on_peer_connected(id: int) -> void: peer_connected.emit(id)
+func _on_peer_disconnected(id: int) -> void: peer_disconnected.emit(id)
+func _on_peer_authenticating(id: int) -> void: peer_authenticating.emit(id)
+func _on_peer_packet(id: int, data: PackedByteArray) -> void:
+	if on_incoming_packet.is_valid():
+		var filtered = on_incoming_packet.call(id, data)
+		if filtered == null: return
+		data = filtered
+	custom_packet.emit(id, data, 1) # Note: we lose the original channel from Godot 4.3's peer_packet signal, but we can assume 1 (STATE) for now or get it from base.multiplayer_peer.get_packet_channel()
 
 # Dummies/Wrappers obrigatorios da MultiplayerAPIExtension
 func _poll() -> Error:
 	var err: Error = base.poll()
-	var peer: MultiplayerPeer = base.multiplayer_peer
-	if peer and peer.get_available_packet_count() > 0:
-		while peer.get_available_packet_count() > 0:
-			var pkt: PackedByteArray = peer.get_packet()
-			var from: int = peer.get_packet_peer()
-			var channel: int = peer.get_packet_channel()
-			if on_incoming_packet.is_valid():
-				var filtered: Variant = on_incoming_packet.call(from, pkt)
-				if filtered == null:
-					continue
-				pkt = filtered
-			emit_signal("custom_packet", from, pkt, channel)
+
 	return err
 
 func _rpc(peer: int, object: Object, method: StringName, args: Array) -> Error:
@@ -89,13 +88,7 @@ func send_custom(to_peer: int, data: PackedByteArray, channel: int = 1,
 		if filtered == null:
 			return OK
 		data = filtered
-	var peer: MultiplayerPeer = base.multiplayer_peer
-	if not peer:
-		return ERR_UNCONFIGURED
-	peer.transfer_channel = channel
-	peer.transfer_mode = mode
-	peer.set_target_peer(to_peer)
-	return peer.put_packet(data)
+	return base.send_bytes(data, to_peer, mode, channel)
 
 func _set_multiplayer_peer(p_peer: MultiplayerPeer) -> void:
 	base.multiplayer_peer = p_peer

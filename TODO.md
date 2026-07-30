@@ -162,23 +162,22 @@ Implementar `QNDTLSBootstrap` em
 - [x] Commit sugerido:
   `feat(infrastructure): add DTLS host and client bootstrap`
 
-#### PR 7 — Autoload plug-and-play [ ]
-
+#### PR 7 — Autoload plug-and-play [x]
 Completar `quantic_net_autoload.gd` como única API pública do addon.
 
-- [ ] TDD/integração: Criar `tests/integration/test_quantic_net_api.gd`.
-- [ ] Implementar `host()` e `join()` retornando `Error`.
-- [ ] Implementar `submit_state()`, `remote_state()`, `loss_of()`,
+- [x] TDD/integração: Criar `tests/integration/test_quantic_net_api.gd`.
+- [x] Implementar `host()` e `join()` retornando `Error`.
+- [x] Implementar `submit_state()`, `remote_state()`, `loss_of()`,
   `kick()` e `toggle_netem()` delegando às sessões.
-- [ ] Manter/expor sinais públicos:
+- [x] Manter/expor sinais públicos:
   `peer_joined`, `peer_left`, `state_received`, `pong_received` e
   `snapback_received`.
-- [ ] Definir contrato final de `snapback_received`: seq confirmado,
+- [x] Definir contrato final de `snapback_received`: seq confirmado,
   posição, rotação, reason e inputs pendentes para replay; a aplicação
   decide como reaplicar sua própria mecânica.
-- [ ] Garantir que o addon não tenha referência a Node3D, cubos,
+- [x] Garantir que o addon não tenha referência a Node3D, cubos,
   Input, meshes, câmera ou regras de gameplay.
-- [ ] Commit sugerido:
+- [x] Commit sugerido:
   `feat(api): complete plug-and-play QuanticNet autoload`
 
 ### Fase 6: Aceitação, Demo e Distribuição

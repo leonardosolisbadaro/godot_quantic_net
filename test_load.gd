@@ -1,8 +1,11 @@
 extends SceneTree
+
 func _init():
-	var peer = load("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
-	if peer:
-		print("SUCCESS")
+	var script = load("res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd")
+	if script == null:
+		print("FAILED TO LOAD SCRIPT!")
 	else:
-		print("FAILED")
+		print("SCRIPT: ", script)
+		var instance = script.new()
+		print("INSTANCE: ", instance)
 	quit()

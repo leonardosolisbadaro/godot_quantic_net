@@ -39,10 +39,17 @@ var netem_jitter_ms := 0
 var netem_dup_pct := 0.0
 
 var _netem_queue: Array[Dictionary] = []
+var _in_queue: Array[Dictionary] = []
+var _peer_map: Dictionary = {}
+var _next_id: int = 2
+var _is_server_flag := false
+var _status: int = MultiplayerPeer.CONNECTION_DISCONNECTED
 
-func _init(p_enet: ENetConnection = null) -> void:
+func _init(p_enet: ENetConnection = null, p_is_server: bool = false) -> void:
+	_is_server_flag = p_is_server
 	if p_enet:
 		enet = p_enet
+		_status = MultiplayerPeer.CONNECTION_CONNECTED if _is_server_flag else MultiplayerPeer.CONNECTION_CONNECTING
 
 func _encode(vchannel: int, payload: PackedByteArray) -> PackedByteArray:
 	var flags := 0
@@ -96,7 +103,6 @@ func _decode(wire: PackedByteArray) -> PackedByteArray:
 			payload = decomp
 		else:
 			return PackedByteArray()
-			
 	return payload
 
 func _queue_netem(vchannel: int, payload: PackedByteArray, current_ts: int) -> Array[Dictionary]:
@@ -147,6 +153,9 @@ func _drain_netem(current_ts: int) -> Array[Dictionary]:
 			
 	ready.sort_custom(func(a, b): return a.release_ts < b.release_ts)
 	
+	for pkt in ready:
+		_send_packet(pkt.payload, _target_peer, pkt.channel)
+		
 	_netem_queue = remaining
 	return ready
 
@@ -155,6 +164,8 @@ var _target_peer := 0
 var _transfer_channel := 0
 var _transfer_mode := MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
 var _refusing_connections := false
+var _current_packet_peer := 0
+var _current_packet_channel := 0
 
 func _set_target_peer(peer: int) -> void:
 	_target_peer = peer
@@ -179,25 +190,83 @@ func _set_refuse_new_connections(enable: bool) -> void:
 
 func _put_packet_script(p_buffer: PackedByteArray) -> Error:
 	var current_ts = Time.get_ticks_msec()
-	# Primeiro encodamos
 	var encoded = _encode(_transfer_channel, p_buffer)
-	# Depois passamos no Netem
+	print("WIRE_PEER SEND (", _transfer_channel, "): ", p_buffer.hex_encode())
 	var queued = _queue_netem(_transfer_channel, encoded, current_ts)
 	
-	# Aqui, em teoria, se o release_ts <= current_ts, enviamos imediatamente pro ENet.
-	# Como é um wrapper, a lógica real de envio dependerá do ENetConnection que encapsularemos mais tarde.
+	if not netem_enabled:
+		_send_packet(encoded, _target_peer, _transfer_channel)
+		
 	return OK
 
-func _get_available_packet_count() -> int: return 0
-func _get_packet_script() -> PackedByteArray: return PackedByteArray()
-func _get_packet_peer() -> int: return 0
-func _get_packet_channel() -> int: return 0
-func _get_packet_mode() -> int: return 0
-func _get_unique_id() -> int: return 0
-func _is_server() -> bool: return false
-func _get_connection_status() -> int: return MultiplayerPeer.CONNECTION_DISCONNECTED
+func _send_packet(payload: PackedByteArray, target: int, channel: int) -> void:
+	if enet == null: return
+	var flag = ENetPacketPeer.FLAG_RELIABLE if _transfer_mode == MultiplayerPeer.TRANSFER_MODE_RELIABLE else ENetPacketPeer.FLAG_UNSEQUENCED
+	if target == 0:
+		enet.broadcast(channel, payload, flag)
+	else:
+		for ep in _peer_map:
+			if _peer_map[ep] == target:
+				ep.send(channel, payload, flag)
+				break
+
+func _get_available_packet_count() -> int: return _in_queue.size()
+
+func _get_packet_script() -> PackedByteArray: 
+	if _in_queue.size() > 0:
+		var pkt = _in_queue.pop_front()
+		_current_packet_peer = pkt.peer
+		_current_packet_channel = pkt.channel
+		return pkt.data
+	return PackedByteArray()
+	
+func _get_packet_peer() -> int:
+	if _in_queue.size() > 0:
+		return _in_queue[0].peer
+	return _current_packet_peer
+func _get_packet_channel() -> int:
+	if _in_queue.size() > 0:
+		return _in_queue[0].channel
+	return _current_packet_channel
+func _get_packet_mode() -> int: return MultiplayerPeer.TRANSFER_MODE_RELIABLE
+func _get_unique_id() -> int: return 1 if _is_server_flag else 2
+func _is_server() -> bool: return _is_server_flag
+func _get_connection_status() -> int: return _status
 func _close() -> void: pass
 func _disconnect_peer(peer: int, force: bool) -> void: pass
 func _is_server_relay_supported() -> bool: return false
-func _get_max_packet_size() -> int: return 0
-func _poll() -> void: pass
+func _get_max_packet_size() -> int: return 1048576
+func _poll() -> void:
+	if enet == null: return
+	var event = enet.service(0)
+	while event.size() > 0 and event[0] != ENetConnection.EVENT_NONE:
+		var type = event[0]
+		if type == ENetConnection.EVENT_ERROR: break
+		var ep = event[1] as ENetPacketPeer
+		if type == ENetConnection.EVENT_CONNECT:
+			if _is_server_flag:
+				var id = _next_id
+				_next_id += 1
+				_peer_map[ep] = id
+				peer_connected.emit(id)
+			else:
+				_peer_map[ep] = 1
+				_status = MultiplayerPeer.CONNECTION_CONNECTED
+				peer_connected.emit(1)
+		elif type == ENetConnection.EVENT_DISCONNECT:
+			if _peer_map.has(ep):
+				peer_disconnected.emit(_peer_map[ep])
+				_peer_map.erase(ep)
+			if not _is_server_flag:
+				_status = MultiplayerPeer.CONNECTION_DISCONNECTED
+		elif type == ENetConnection.EVENT_RECEIVE:
+			if _peer_map.has(ep):
+				var data = ep.get_packet()
+				var decoded = _decode(data)
+				print("SERVER RECEIVED DATA: ", decoded.hex_encode())
+				if decoded.size() > 0:
+					_in_queue.append({"peer": _peer_map[ep], "data": decoded, "channel": event[2]})
+		event = enet.service(0)
+	
+	if netem_enabled:
+		_drain_netem(Time.get_ticks_msec())
