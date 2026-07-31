@@ -41,6 +41,7 @@ var _clock       # QNClockSync
 var _input_buf   # QNInputBuffer
 var _interp := {}   # owner -> QNInterpBuffer
 var _trackers := {} # owner -> QNLossTracker
+var _state_history := []
 
 ## Estado local espelhado (o jogo escreve via submit_state; o snapback reescreve).
 var local_pos := Vector3.ZERO
@@ -87,7 +88,11 @@ func submit_state(pos: Vector3, rot: Vector3, custom_id: int, dt: float, now: in
 	_send_accum = 0.0
 	_send_seq = (_send_seq + 1) & 0xFFFF
 	_input_buf.record(_send_seq, Vector2.ZERO, 0.0, dt, now)
-	var raw: PackedByteArray = _serializer.encode_state_seq(_send_seq, pos, rot, now, custom_id)
+	var state_dict = {"seq": _send_seq, "pos": pos, "rot": rot, "ts": now, "custom_id": custom_id}
+	_state_history.push_front(state_dict)
+	if _state_history.size() > 3:
+		_state_history.pop_back()
+	var raw: PackedByteArray = _serializer.encode_state_history(_state_history)
 	var pkt := PackedByteArray([_serializer.TYPE_STATE])
 	pkt.append_array(raw)
 	send_callable.call(1, pkt, CH_STATE, TRANSFER_UNRELIABLE)

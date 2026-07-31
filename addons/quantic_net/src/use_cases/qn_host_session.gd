@@ -55,30 +55,43 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 	if not _registry.has(peer_id) or not validator:
 		return
 		
-	var decoded = QNSerializer.decode_state_seq(data)
-	if decoded.is_empty():
+	var history = QNSerializer.decode_state_history(data)
+	if history.is_empty():
 		return
 		
-	var pos: Vector3 = decoded.get("pos", Vector3.ZERO)
-	var rot: Vector3 = decoded.get("rot", Vector3.ZERO)
-	var seq: int = decoded.get("seq", 0)
-	
-	var result: Dictionary = validator.validate(peer_id, pos, rot, now)
-	var action: String = result.get("action", "")
-	
-	if action == "accept":
-		_registry[peer_id].pos = result.pos
-		_registry[peer_id].rot = result.rot
-		_registry[peer_id].seq = seq
-	elif action == "clamp":
-		_registry[peer_id].pos = result.pos
-		_registry[peer_id].rot = result.rot
-		_registry[peer_id].seq = seq
-		var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, now, SNAPBACK_REASON_CLAMP)
-		snapback_requested.emit(peer_id, snap)
-	elif action == "reject":
-		var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, now, SNAPBACK_REASON_REJECT)
-		snapback_requested.emit(peer_id, snap)
+	for i in range(history.size() - 1, -1, -1):
+		var state = history[i]
+		var pos: Vector3 = state.get("pos", Vector3.ZERO)
+		var rot: Vector3 = state.get("rot", Vector3.ZERO)
+		var seq: int = state.get("seq", 0)
+		var ts: int = state.get("ts", now)
+		
+		var last_seq = _registry[peer_id].seq
+		var diff = seq - last_seq
+		if diff < -32768: diff += 65536
+		elif diff > 32768: diff -= 65536
+		
+		if last_seq != 0 and diff <= 0:
+			continue
+			
+		var result: Dictionary = validator.validate(peer_id, pos, rot, ts)
+		var action: String = result.get("action", "")
+		
+		if action == "accept":
+			_registry[peer_id].pos = result.pos
+			_registry[peer_id].rot = result.rot
+			_registry[peer_id].seq = seq
+		elif action == "clamp":
+			_registry[peer_id].pos = result.pos
+			_registry[peer_id].rot = result.rot
+			_registry[peer_id].seq = seq
+			var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, ts, SNAPBACK_REASON_CLAMP)
+			snapback_requested.emit(peer_id, snap)
+			break
+		elif action == "reject":
+			var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, ts, SNAPBACK_REASON_REJECT)
+			snapback_requested.emit(peer_id, snap)
+			break
 
 func tick_broadcast(now: int) -> void:
 	var states := []

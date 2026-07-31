@@ -211,21 +211,27 @@ Evidência executável de que o addon instala uma vez, funciona em projeto
 - [x] Commit sugerido:
   `docs(demo): add minimal 3D plug-and-play example`
 
-#### PR 10 — CI, release e Asset Library [ ]
+#### PR 10 — Time to breathe
 
-- [ ] Criar workflow GitHub Actions para executar GUT e testes de
-  integração headless em todo push e pull request.
-- [ ] Adicionar badge de CI ao README.
-- [ ] Criar `CHANGELOG.md` no padrão Keep a Changelog e política
-  SemVer.
-- [ ] Adicionar `LICENSE`, ícone, screenshots/GIF da demo e README de
-  instalação/API voltado à Godot Asset Library.
-- [ ] Definir `.gitattributes`/artefato de release para distribuir
-  somente `addons/quantic_net/` (que agora já inclui a `demo/`); excluir `tests/` e afins.
-  e ferramentas internas do pacote ao usuário.
-- [ ] Documentar filtros de export para cliente e servidor:
-  cliente exclui chave privada, testes e demo; servidor inclui a chave
-  privada e pode excluir assets pesados.
-- [ ] Publicar release `v0.1.0` e submeter à Godot Asset Library.
-- [ ] Commit sugerido:
-  `ci(release): automate tests and package addon for distribution`
+- [x] OK. Let's take a deep breath. Let's read Gaffer's book.
+- [x] And then... let's continue.
+
+### Fase 7: Evolução Competitiva (Gaffer On Games)
+
+Aprimoramentos arquiteturais baseados na literatura clássica de Glenn Fiedler para estabilizar a predição e otimizar banda para o cenário MMO/Competitivo.
+
+#### PR 11 — Fix Your Timestep (Migração Física) [x]
+
+- [x] Mover a lógica de envio de pacotes e predição local do cliente para o `_physics_process()` (tanto no `quantic_net_autoload.gd` quanto em `demo_main.gd`).
+- [x] Garantir que o `dt` enviado (ou inferido) no `submit_state` seja estritamente cravado pela Godot Engine (ex: 1/60s), eliminando a variabilidade do framerate.
+
+#### PR 12 — Resiliência a Perda (Inputs Redundantes) [x]
+
+- [x] Alterar o contrato de envio do cliente: em vez de enviar o estado absoluto do *frame N*, enviar o histórico dos últimos 3 ticks.
+- [x] Ajustar o `QNServerValidator` para processar a janela de histórico, garantindo que o movimento do jogador continue fluido no servidor mesmo sob 5-10% de packet loss.
+- [x] Estudar a viabilidade de *Delta Compression* para o `tick_broadcast` do servidor.
+
+#### PR 13 — Otimização Extrema (BitStream Serializer) [ ]
+
+- [ ] Refatorar (ou reescrever) o `QNSerializer` abandonando as limitações do `PackedByteArray` a nível de Byte (`encode_u16`).
+- [ ] Implementar um empacotador bit-a-bit (BitBuffer) para truncar booleanos (1 bit) e compactar Quaternions omitindo a maior raiz, visando espremer o pacote de 19 Bytes para ~10 Bytes.

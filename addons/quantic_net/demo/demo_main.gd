@@ -98,7 +98,7 @@ func _on_peer_left(id: int) -> void:
 		cubes[id].queue_free()
 		cubes.erase(id)
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
 		get_tree().quit()
 	if Input.is_action_just_pressed("ui_accept"):

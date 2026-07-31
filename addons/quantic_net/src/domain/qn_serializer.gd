@@ -69,3 +69,33 @@ static func decode_state_seq(b: PackedByteArray) -> Dictionary:
 
 static func encode_snapback(seq: int, pos: Vector3, rot: Vector3, ts_msec: int, reason: int) -> PackedByteArray:
 	return encode_state_seq(seq, pos, rot, ts_msec, reason)
+
+static func encode_state_history(history: Array) -> PackedByteArray:
+	var b := PackedByteArray()
+	var count = mini(history.size(), 255)
+	b.append(count)
+	for i in range(count):
+		var st = history[i]
+		var seq = st.get("seq", 0)
+		var pos = st.get("pos", Vector3.ZERO)
+		var rot = st.get("rot", Vector3.ZERO)
+		var ts = st.get("ts", 0)
+		var custom_id = st.get("custom_id", 0)
+		b.append_array(encode_state_seq(seq, pos, rot, ts, custom_id))
+	return b
+
+static func decode_state_history(b: PackedByteArray) -> Array:
+	if b.size() < 1:
+		return []
+	var count = b[0]
+	var history := []
+	var offset = 1
+	for i in range(count):
+		if offset + 19 > b.size():
+			break
+		var slice = b.slice(offset, offset + 19)
+		var d = decode_state_seq(slice)
+		if not d.is_empty():
+			history.append(d)
+		offset += 19
+	return history

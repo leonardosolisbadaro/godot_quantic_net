@@ -160,7 +160,7 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	get_tree().set_multiplayer(_hook, self.get_path())
 	return OK
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if _hook == null:
 		return
 	if _is_server and _state == ConnectionState.CONNECTED:
