@@ -15,6 +15,7 @@
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 
+const QNBitBuffer = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd")
 
 const TYPE_STATE := 1
 const TYPE_SNAPBACK := 2
@@ -22,58 +23,41 @@ const TYPE_PEER_LEFT := 3
 
 const POS_LO := -64.0
 const POS_HI := 64.0
-const TAU_F := TAU
-
-static func quantize_scalar(v: float, lo: float, hi: float) -> int:
-	return clampi(roundi((v - lo) / (hi - lo) * 65535.0), 0, 65535)
-
-static func dequantize_scalar(q: int, lo: float, hi: float) -> float:
-	return lo + float(q) / 65535.0 * (hi - lo)
-
-static func quantize_angle(a: float) -> int:
-	return roundi(fposmod(a, TAU_F) / TAU_F * 65535.0) & 0xFFFF
-
-static func dequantize_angle(q: int) -> float:
-	return float(q) / 65535.0 * TAU_F
 
 static func encode_state_seq(seq: int, pos: Vector3, rot: Vector3, ts_msec: int, custom_id: int) -> PackedByteArray:
-	var b := PackedByteArray()
-	b.resize(19)
-	b.encode_u16(0, seq & 0xFFFF)
-	b.encode_u16(2, quantize_scalar(pos.x, POS_LO, POS_HI))
-	b.encode_u16(4, quantize_scalar(pos.y, POS_LO, POS_HI))
-	b.encode_u16(6, quantize_scalar(pos.z, POS_LO, POS_HI))
-	b.encode_u16(8, quantize_angle(rot.x))
-	b.encode_u16(10, quantize_angle(rot.y))
-	b.encode_u16(12, quantize_angle(rot.z))
-	b.encode_u32(14, ts_msec & 0xFFFFFFFF)
-	b.encode_u8(18, custom_id & 0xFF)
-	return b
+	var buf = QNBitBuffer.new()
+	buf.write_bits(seq & 0xFFFF, 16)
+	buf.write_float(pos.x, POS_LO, POS_HI, 16)
+	buf.write_float(pos.y, POS_LO, POS_HI, 16)
+	buf.write_float(pos.z, POS_LO, POS_HI, 16)
+	buf.write_quaternion(Quaternion.from_euler(rot))
+	buf.write_bits(ts_msec & 0xFFFFFFFF, 32)
+	buf.write_bits(custom_id & 0xFF, 8)
+	return buf.get_buffer()
 
 static func decode_state_seq(b: PackedByteArray) -> Dictionary:
-	if b.size() < 19:
+	if b.size() < 17:
 		return {}
+	var buf = QNBitBuffer.new(b)
 	return {
-		"seq": b.decode_u16(0),
+		"seq": buf.read_bits(16),
 		"pos": Vector3(
-			dequantize_scalar(b.decode_u16(2), POS_LO, POS_HI),
-			dequantize_scalar(b.decode_u16(4), POS_LO, POS_HI),
-			dequantize_scalar(b.decode_u16(6), POS_LO, POS_HI)),
-		"rot": Vector3(
-			dequantize_angle(b.decode_u16(8)),
-			dequantize_angle(b.decode_u16(10)),
-			dequantize_angle(b.decode_u16(12))),
-		"ts": b.decode_u32(14),
-		"custom_id": b.decode_u8(18),
+			buf.read_float(POS_LO, POS_HI, 16),
+			buf.read_float(POS_LO, POS_HI, 16),
+			buf.read_float(POS_LO, POS_HI, 16)),
+		"rot": buf.read_quaternion().get_euler(),
+		"ts": buf.read_bits(32),
+		"custom_id": buf.read_bits(8),
 	}
 
 static func encode_snapback(seq: int, pos: Vector3, rot: Vector3, ts_msec: int, reason: int) -> PackedByteArray:
 	return encode_state_seq(seq, pos, rot, ts_msec, reason)
 
 static func encode_state_history(history: Array) -> PackedByteArray:
-	var b := PackedByteArray()
+	var buf = QNBitBuffer.new()
 	var count = mini(history.size(), 255)
-	b.append(count)
+	buf.write_bits(count, 8)
+	
 	for i in range(count):
 		var st = history[i]
 		var seq = st.get("seq", 0)
@@ -81,21 +65,38 @@ static func encode_state_history(history: Array) -> PackedByteArray:
 		var rot = st.get("rot", Vector3.ZERO)
 		var ts = st.get("ts", 0)
 		var custom_id = st.get("custom_id", 0)
-		b.append_array(encode_state_seq(seq, pos, rot, ts, custom_id))
-	return b
+		
+		buf.write_bits(seq & 0xFFFF, 16)
+		buf.write_float(pos.x, POS_LO, POS_HI, 16)
+		buf.write_float(pos.y, POS_LO, POS_HI, 16)
+		buf.write_float(pos.z, POS_LO, POS_HI, 16)
+		buf.write_quaternion(Quaternion.from_euler(rot))
+		buf.write_bits(ts & 0xFFFFFFFF, 32)
+		buf.write_bits(custom_id & 0xFF, 8)
+		
+	return buf.get_buffer()
 
 static func decode_state_history(b: PackedByteArray) -> Array:
 	if b.size() < 1:
 		return []
-	var count = b[0]
+	var buf = QNBitBuffer.new(b)
+	var count = buf.read_bits(8)
 	var history := []
-	var offset = 1
+	
 	for i in range(count):
-		if offset + 19 > b.size():
+		if (buf.get_position() + 136) / 8 > b.size():
 			break
-		var slice = b.slice(offset, offset + 19)
-		var d = decode_state_seq(slice)
-		if not d.is_empty():
-			history.append(d)
-		offset += 19
+			
+		var d = {}
+		d["seq"] = buf.read_bits(16)
+		d["pos"] = Vector3(
+			buf.read_float(POS_LO, POS_HI, 16),
+			buf.read_float(POS_LO, POS_HI, 16),
+			buf.read_float(POS_LO, POS_HI, 16)
+		)
+		d["rot"] = buf.read_quaternion().get_euler()
+		d["ts"] = buf.read_bits(32)
+		d["custom_id"] = buf.read_bits(8)
+		history.append(d)
+		
 	return history

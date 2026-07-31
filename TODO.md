@@ -231,7 +231,7 @@ Aprimoramentos arquiteturais baseados na literatura clássica de Glenn Fiedler p
 - [x] Ajustar o `QNServerValidator` para processar a janela de histórico, garantindo que o movimento do jogador continue fluido no servidor mesmo sob 5-10% de packet loss.
 - [x] Estudar a viabilidade de *Delta Compression* para o `tick_broadcast` do servidor.
 
-#### PR 13 — Otimização Extrema (BitStream Serializer) [ ]
+#### PR 13 — Otimização Extrema (BitStream Serializer) [x]
 
-- [ ] Refatorar (ou reescrever) o `QNSerializer` abandonando as limitações do `PackedByteArray` a nível de Byte (`encode_u16`).
-- [ ] Implementar um empacotador bit-a-bit (BitBuffer) para truncar booleanos (1 bit) e compactar Quaternions omitindo a maior raiz, visando espremer o pacote de 19 Bytes para ~10 Bytes.
+- [x] Refatorar (ou reescrever) o `QNSerializer` abandonando as limitações do `PackedByteArray` a nível de Byte (`encode_u16`).
+- [x] Implementar um empacotador bit-a-bit (BitBuffer) para truncar booleanos (1 bit) e compactar Quaternions omitindo a maior raiz, visando espremer o pacote de 19 Bytes para ~10 Bytes.
