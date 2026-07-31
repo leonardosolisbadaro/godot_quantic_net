@@ -207,6 +207,7 @@ Evidência executável de que o addon instala uma vez, funciona em projeto
   Deve ser estritamente plug-and-play sem acoplamento à UI, AoI ou regras de domínio complexas.
 - [x] Teste de fumaça Gut em `tests/integration/` para instanciar a demo e prevenir crashes na API pública.
 - [x] Bugfix: Corrigido bug onde clientes remotos sofriam jitter e ficavam presos em `(0,0,0)` devido à instância nula de `QNServerValidator` em `QNHostSession`.
+- [x] Bugfix: Resolução da máquina de estados de autenticação (`complete_auth`) e propagação do ID real do cliente para o `QNWirePeer`, viabilizando múltiplos clientes corretamente.
 - [x] Commit sugerido:
   `docs(demo): add minimal 3D plug-and-play example`
 

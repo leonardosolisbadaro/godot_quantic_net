@@ -173,7 +173,8 @@ func _process(delta: float) -> void:
 				_set_state(ConnectionState.AUTHENTICATING)
 				var err = _hook.base.send_auth(SERVER_PEER_ID, _secret.to_utf8_buffer())
 				print("CLIENT SEND AUTH RESULT: ", err)
-				_hook.base.complete_auth(SERVER_PEER_ID)
+				# _hook.base.complete_auth(SERVER_PEER_ID)
+				# Wait for the server to reply with the assigned ID in _on_client_auth_callback
 
 func _on_auth_callback(id: int, data: PackedByteArray) -> void:
 	if _is_server:

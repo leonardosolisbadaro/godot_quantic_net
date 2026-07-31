@@ -33,6 +33,9 @@ const SECRET := "demo-secret"
 const SPEED := 2.0
 
 var cubes := {} # peer_id -> MeshInstance3D
+var auto_move := true
+var auto_time := 0.0
+
 
 func _ready() -> void:
 	# Conecta sinais ANTES de host/join.
@@ -98,6 +101,10 @@ func _on_peer_left(id: int) -> void:
 func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
 		get_tree().quit()
+	if Input.is_action_just_pressed("ui_accept"):
+		auto_move = not auto_move
+		print("[DEMO] Auto-move: ", auto_move)
+		
 	# Servidor nao faz prediction local; so aplica estados validados.
 	if QuanticNet.is_server():
 		return
@@ -105,9 +112,19 @@ func _process(delta: float) -> void:
 	# Prediction local do cubo proprio (id do autoload).
 	if my_id > 1 and cubes.has(my_id):
 		var cube: MeshInstance3D = cubes[my_id]
-		var move := Vector2(
-			Input.get_axis("ui_left", "ui_right"),
-			Input.get_axis("ui_up", "ui_down"))
+		var move := Vector2.ZERO
+		
+		if auto_move:
+			auto_time += delta
+			# Simula input direcional em um círculo imperfeito (wobble)
+			move.x = cos(auto_time) + cos(auto_time * 2.3) * 0.3
+			move.y = sin(auto_time) + sin(auto_time * 1.7) * 0.3
+			move = move.normalized()
+		else:
+			move = Vector2(
+				Input.get_axis("ui_left", "ui_right"),
+				Input.get_axis("ui_up", "ui_down"))
+				
 		cube.position.x += move.x * SPEED * delta
 		cube.position.z += move.y * SPEED * delta
 		# Envia estado para o servidor.

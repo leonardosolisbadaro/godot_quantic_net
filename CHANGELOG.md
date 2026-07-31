@@ -25,6 +25,24 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - ...
 
+## [0.3.0] - 2026-07-31
+
+### Adicionado
+
+- Implementação de handshake de identidade via `send_auth`, permitindo que o servidor informe dinamicamente ao `QNWirePeer` do cliente qual é o seu ID único, resolvendo conflitos de identidade em instâncias múltiplas.
+- Implementação do pacote `TYPE_PEER_LEFT` no protocolo, garantindo que a desconexão de um peer seja propagada autoritativamente para todos os clientes, limpando o registro e a memória.
+- Mecanismo de mitigação de jitter de framerate no `QNServerValidator` (`effective_dt`), evitando falsos-positivos de speedhack em clientes que rodem em framerates instáveis.
+
+### Corrigido
+
+- Resolução crítica na máquina de estados de autenticação da Godot 4 onde clientes não recebiam a confirmação de conexão devido a um payload vazio (`PackedByteArray()`).
+- Resolução de colisões de identificação local onde todos os clientes assumiam o ID hardcoded `2` e sobrepunham instâncias preditivas incorretamente.
+- Resolução de persistência fantasma onde instâncias de jogadores (cubos) permaneciam na cena após a desconexão do peer devido à ausência de broadcast de saída.
+
+### Modificado
+
+- Roteamento dinâmico do `auth_callback` no `quantic_net_autoload.gd` para separar o fluxo de autorização do servidor e a recepção de identidade no cliente.
+
 ## [0.2.0] - 2026-07-30
 
 ### Adicionado
