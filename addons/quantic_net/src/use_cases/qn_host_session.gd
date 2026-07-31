@@ -18,12 +18,18 @@ extends RefCounted
 signal snapback_requested(peer_id: int, pkt: PackedByteArray)
 signal peer_rejected(peer_id: int, reason: String, strikes: int)
 signal broadcast_ready(states: Array)
+signal packet_ready(peer_id: int, data: PackedByteArray)
 
 const SNAPBACK_REASON_CLAMP = 1
 const SNAPBACK_REASON_REJECT = 2
 
 var _registry := {}
 const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
+const QNDeltaSerializer = preload("res://addons/quantic_net/src/domain/qn_delta_serializer.gd")
+const QNBitBuffer = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd")
+
+var _server_seq: int = 0
+var _world_history := []
 
 var validator: RefCounted:
 	set(v):
@@ -42,6 +48,7 @@ func on_peer_authenticated(peer_id: int) -> void:
 		"pos": Vector3.ZERO,
 		"rot": Vector3.ZERO,
 		"seq": 0,
+		"ack": 0,
 		"profile": "MMO"
 	}
 
@@ -52,13 +59,16 @@ func on_peer_disconnected(peer_id: int) -> void:
 		validator.peer_left(peer_id)
 
 func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
-	if not _registry.has(peer_id) or not validator:
+	if not _registry.has(peer_id) or not validator or data.size() < 2:
 		return
+	
+	var client_ack = data.decode_u16(0)
+	_registry[peer_id].ack = client_ack
 		
-	var history = QNSerializer.decode_state_history(data)
+	var history = QNSerializer.decode_state_history(data.slice(2))
 	if history.is_empty():
 		return
-		
+	
 	for i in range(history.size() - 1, -1, -1):
 		var state = history[i]
 		var pos: Vector3 = state.get("pos", Vector3.ZERO)
@@ -94,11 +104,36 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 			break
 
 func tick_broadcast(now: int) -> void:
-	var states := []
+	_server_seq = (_server_seq + 1) & 0xFFFF
+	var current_states := {}
 	for id in _registry:
 		var st = _registry[id]
-		states.append({"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot})
-	broadcast_ready.emit(states)
+		current_states[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0}
+		
+	_world_history.push_front({"seq": _server_seq, "states": current_states})
+	if _world_history.size() > 60:
+		_world_history.pop_back()
+		
+	for id in _registry:
+		var ack = _registry[id].get("ack", 0)
+		var base_states = {}
+		for hist in _world_history:
+			if hist.seq == ack:
+				base_states = hist.states
+				break
+				
+		var buf = QNBitBuffer.new()
+		buf.write_bits(_server_seq, 16)
+		buf.write_bits(ack, 16)
+		buf.write_bits(current_states.size(), 8)
+		
+		for entity_id in current_states:
+			buf.write_bits(entity_id, 32)
+			var base = base_states.get(entity_id, {})
+			QNDeltaSerializer.encode_state(buf, base, current_states[entity_id])
+			
+		packet_ready.emit(id, buf.get_buffer())
+
 
 func get_registry() -> Dictionary:
 	return _registry

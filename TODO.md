@@ -235,3 +235,14 @@ Aprimoramentos arquiteturais baseados na literatura clássica de Glenn Fiedler p
 
 - [x] Refatorar (ou reescrever) o `QNSerializer` abandonando as limitações do `PackedByteArray` a nível de Byte (`encode_u16`).
 - [x] Implementar um empacotador bit-a-bit (BitBuffer) para truncar booleanos (1 bit) e compactar Quaternions omitindo a maior raiz, visando espremer o pacote de 19 Bytes para ~10 Bytes.
+
+### Fase 8: Fundações MMO (Delta, ACKs e Jitter)
+
+Nesta fase focaremos na transição arquitetural para suportar o roadmap MMO, focando primeiramente na compressão de pacotes.
+
+#### PR 14 — Delta Compression e ACKs [x]
+
+- [x] Criar classe `QNDeltaSerializer` no Domínio, suportando criação de P-Frames (Deltas a partir de um estado base).
+- [x] Implementar a troca de ACKs: Cliente anexa o último *seq* recebido nos pacotes de input, e o Host armazena um histórico circular para gerar o Delta a partir desse *seq*.
+- [x] Integrar no `QNClientSession` e `QNHostSession` de forma que a demonstração não quebre, utilizando *Fallback* para enviar I-Frames (estados absolutos) quando não há ACK sincronizado.
+

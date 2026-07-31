@@ -41,7 +41,20 @@ O despache não pode enviar os dados do mundo inteiro para todo mundo. Implement
 Como consequência do `NetProfile`, a sessão autoritativa do servidor orquestrará dois (ou mais) regimes de tick simultâneos.
 Isso só será introduzido no servidor após um cenário de regime único ser devidamente homologado e testado em infraestrutura de rede real (internet/produção simulada).
 
-### 5. Automação e Infraestrutura como Processo (Day 1)
+### 5. Delta Compression & ACKs (Snapshot Compression)
+
+O envio do estado do mundo consome a maior parte da banda do servidor. O servidor e o cliente devem trocar `ACKs` (confirmações de recebimento). Com isso, o servidor envia apenas a **diferença quantizada (Delta)** entre o estado atual da entidade e o último estado reconhecido pelo cliente. Entidades estáticas custarão próximo de `0 bytes`.
+
+### 6. Jitter Buffer & Snapshot Interpolation
+
+O movimento do próprio jogador (`Client-Side Prediction`) já está isolado, mas a renderização de todas as outras entidades (outros jogadores, NPCs) do perfil `MMO` deve fluir por um atraso intencional (`Jitter Buffer` no cliente, atualmente embrionário no `QNInterpBuffer`). Esse buffer armazena os *snapshots* do servidor e interpola suavemente no passado, blindando o jogador das perdas de pacotes do UDP.
+
+### 7. Congestion Avoidance & Packet Fragmentation
+
+- **Fragmentation:** Snapshots de áreas superpovoadas ultrapassarão o MTU (1400 bytes). Se a `ENet` se provar insuficiente ou gargalar no *overhead*, uma lógica de re-montagem de *Chunks* confiáveis sobre UDP (Fragmentação) será delegada ao Domínio.
+- **Congestion Avoidance:** O servidor monitorará ativamente a perda de pacotes e o RTT (`QNLossTracker`) de cada conexão, estrangulando dinamicamente o tráfego enviado (reduzindo a taxa de atualização ou encolhendo a *Area of Interest*) quando a saúde da rota se deteriorar.
+
+### 8. Automação e Infraestrutura como Processo (Day 1)
 
 Scripts para levantar cenários de teste rapidamente serão nativos do ecossistema:
 

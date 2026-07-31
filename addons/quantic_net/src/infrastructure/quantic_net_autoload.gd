@@ -83,7 +83,7 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 	_host_session = QNHostSession.new()
 	_host_session.validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
 	_host_session.snapback_requested.connect(_on_host_snapback_requested)
-	_host_session.broadcast_ready.connect(_on_host_broadcast_ready)
+	_host_session.packet_ready.connect(_on_host_packet_ready)
 	_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
 		print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
 		if s >= 5:
@@ -220,17 +220,10 @@ func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
 	body.append_array(pkt)
 	_hook.send_custom(peer_id, body, CH_STATE, TRANSFER_UNRELIABLE)
 
-func _on_host_broadcast_ready(states: Array) -> void:
-	var now = Time.get_ticks_msec()
-	for s in states:
-		var raw = QNSerializer.encode_state_seq(s.seq, s.pos, s.rot, now, 0)
-		var pkt := PackedByteArray([QNSerializer.TYPE_STATE])
-		var id_bytes := PackedByteArray()
-		id_bytes.resize(4)
-		id_bytes.encode_u32(0, s.id)
-		pkt.append_array(id_bytes)
-		pkt.append_array(raw)
-		_hook.send_custom(0, pkt, CH_STATE, TRANSFER_UNRELIABLE)
+func _on_host_packet_ready(peer_id: int, data: PackedByteArray) -> void:
+	var pkt := PackedByteArray([4]) # 4 = TYPE_SNAPSHOT
+	pkt.append_array(data)
+	_hook.send_custom(peer_id, pkt, CH_STATE, TRANSFER_UNRELIABLE)
 
 func _on_client_submit_packet(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
 	_hook.send_custom(to, data, ch, mode)

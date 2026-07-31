@@ -42,6 +42,8 @@ var _input_buf   # QNInputBuffer
 var _interp := {}   # owner -> QNInterpBuffer
 var _trackers := {} # owner -> QNLossTracker
 var _state_history := []
+var _world_history := [] # {seq: int, states: Dictionary}
+var _last_server_seq := 0
 
 ## Estado local espelhado (o jogo escreve via submit_state; o snapback reescreve).
 var local_pos := Vector3.ZERO
@@ -94,6 +96,10 @@ func submit_state(pos: Vector3, rot: Vector3, custom_id: int, dt: float, now: in
 		_state_history.pop_back()
 	var raw: PackedByteArray = _serializer.encode_state_history(_state_history)
 	var pkt := PackedByteArray([_serializer.TYPE_STATE])
+	var ack_bytes := PackedByteArray()
+	ack_bytes.resize(2)
+	ack_bytes.encode_u16(0, _last_server_seq)
+	pkt.append_array(ack_bytes)
 	pkt.append_array(raw)
 	send_callable.call(1, pkt, CH_STATE, TRANSFER_UNRELIABLE)
 	return true
@@ -116,6 +122,11 @@ func handle_packet(data: PackedByteArray, now: int) -> void:
 	if ptype == _serializer.TYPE_SNAPBACK:
 		_handle_snapback(data.slice(1))
 		return
+	
+	if ptype == 4: # TYPE_SNAPSHOT
+		_handle_snapshot(data.slice(1), now)
+		return
+		
 	if ptype != _serializer.TYPE_STATE or data.size() < 5:
 		return
 	var owner: int = data.decode_u32(1)
@@ -155,3 +166,47 @@ func _handle_snapback(body: PackedByteArray) -> void:
 	local_rot = d["rot"]
 	var replay: Array = _input_buf.drain_after(d["seq"])
 	snapback_received.emit(d["seq"], d["pos"], d["rot"], d["custom_id"], replay)
+
+func _handle_snapshot(body: PackedByteArray, now: int) -> void:
+	var buf = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd").new(body)
+	var server_seq = buf.read_bits(16)
+	var ack = buf.read_bits(16)
+	var num_entities = buf.read_bits(8)
+	
+	var base_states = {}
+	for hist in _world_history:
+		if hist.seq == ack:
+			base_states = hist.states
+			break
+			
+	var parsed_states = {}
+	for i in range(num_entities):
+		var entity_id = buf.read_bits(32)
+		var base = base_states.get(entity_id, {})
+		var st = preload("res://addons/quantic_net/src/domain/qn_delta_serializer.gd").decode_state(buf, base)
+		parsed_states[entity_id] = st
+		
+		# Process state just like TYPE_STATE
+		var owner = entity_id
+		var d = st
+		
+		if not _trackers.has(owner):
+			_trackers[owner] = preload("res://addons/quantic_net/src/domain/qn_loss_tracker.gd").new()
+			_interp[owner] = preload("res://addons/quantic_net/src/domain/qn_interp_buffer.gd").new()
+		_trackers[owner].on_packet(d["seq"])
+		
+		if owner == _my_id:
+			var sent_ts: int = _input_buf.get_sent_ts(d["seq"])
+			_clock.on_pong(sent_ts, d["ts"], now)
+			_input_buf.drain_after(d["seq"])
+			pong_received.emit(_clock.rtt_ms, _clock.offset_ms)
+		else:
+			_interp[owner].push(d["ts"], d["pos"], d["rot"])
+			remote_state_received.emit(owner, d["pos"], d["rot"], d.get("custom_id", 0))
+			
+	_world_history.push_front({"seq": server_seq, "states": parsed_states})
+	if _world_history.size() > 60:
+		_world_history.pop_back()
+		
+	_last_server_seq = server_seq
+
