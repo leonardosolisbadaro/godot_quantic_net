@@ -14,7 +14,7 @@
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
-class_name QNClockSync
+
 
 const SAMPLE_WINDOW := 10
 const EMA_ALPHA := 0.2

@@ -34,6 +34,8 @@ const CH_STATE := 1
 const SEND_INTERVAL := 0.05  # 20 Hz (regime MMO; o COMPETITIVE e' Marco D do roadmap)
 const TRANSFER_UNRELIABLE := 2  # MultiplayerPeer.TRANSFER_MODE_UNRELIABLE (int, sem enum na camada)
 
+const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
+
 var _serializer  # QNSerializer (static)
 var _clock       # QNClockSync
 var _input_buf   # QNInputBuffer

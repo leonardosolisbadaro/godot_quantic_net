@@ -58,4 +58,4 @@ Quando o milestone 1.0 do plugin for atingido (Auth, Snapshot, Replay Local, DTL
 2. **AoI como Política de Despacho:** Modificação da `QNHostSession` para calcular `snapshot` diferencial por par peer-to-peer.
 3. **NetProfile e Tick Híbrido:** Orquestrar relógios secundários (60Hz para peers cujo perfil seja `COMPETITIVE`).
 4. **Profiling:** Obtenção de métricas de estresse real na rede (ex: centenas de CCUs). Se gargalar, reescrita isolada em GDExtension C++ para o Grid.
-5. **Demo MMO Rica:** Evoluir a demo inicial de 2 cubos para múltiplos avatares simulando movimentação mista (predição vs interpolação).
+5. **Catálogo de Demos (`quantic-net-demos`):** Evoluir o "espaço de possibilidades" em um repositório separado consumindo o addon, demonstrando implementações ricas com múltiplos avatares, integração de UI (HUD), e simulação híbrida (predição vs interpolação) via NetProfile e AoI.

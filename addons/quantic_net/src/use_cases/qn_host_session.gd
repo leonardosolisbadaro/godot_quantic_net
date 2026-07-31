@@ -45,6 +45,12 @@ func on_peer_authenticated(peer_id: int) -> void:
 		"profile": "MMO"
 	}
 
+func on_peer_disconnected(peer_id: int) -> void:
+	if _registry.has(peer_id):
+		_registry.erase(peer_id)
+	if validator and validator.has_method("peer_left"):
+		validator.peer_left(peer_id)
+
 func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 	if not _registry.has(peer_id) or not validator:
 		return
@@ -77,7 +83,8 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 func tick_broadcast(now: int) -> void:
 	var states := []
 	for id in _registry:
-		states.append(_registry[id])
+		var st = _registry[id]
+		states.append({"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot})
 	broadcast_ready.emit(states)
 
 func get_registry() -> Dictionary:

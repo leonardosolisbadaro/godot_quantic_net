@@ -15,7 +15,7 @@
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
-class_name QNInterpBuffer
+
 
 const RENDER_DELAY_MS := 120
 const MAX_SNAPSHOTS := 16

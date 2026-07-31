@@ -43,7 +43,7 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNClockSync` (modelo NTP aprimorado).
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNSerializer`, garantindo quantização binária extrema.
 - "Casca" estrutural do `QuanticNet` em `addons/` orientada a Clean Architecture.
-- Criação da Cena de Demonstração (Demo 3D) 100% autônoma (Code-First), isolada em `demo/`. Focada em validar o uso consumidor do plugin (Prediction Client-Side e Remote Interpolation) via código e garantida por testes de integração (PR 9).
+- Criação da Cena de Demonstração (Demo 3D) 100% autônoma "Bare Metal", isolada em `addons/quantic_net/demo/`. Focada em validar o uso consumidor do plugin (Prediction Client-Side e Remote Interpolation) via código de forma plug-and-play e garantida por testes de integração (PR 9).
 - Restrição arquitetural no `GEMINI.md` exigindo uso obrigatório de **bitwes/Gut**.
 
 ### Corrigido

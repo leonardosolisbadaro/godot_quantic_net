@@ -14,7 +14,7 @@
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
-class_name QNLossTracker
+
 
 const WINDOW := 128
 

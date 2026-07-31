@@ -15,6 +15,9 @@
 
 extends "res://tests/integration/helpers/qn_integration_base.gd"
 
+const TEST_PORT = 13579
+const DEADLINE_MS = 2000
+
 func test_host_sobe_imediato_em_estado_connected() -> void:
 	var srv := _spawn_autoload()
 	var err: int = srv.host(_next_test_port(), SECRET, "127.0.0.1", 8)

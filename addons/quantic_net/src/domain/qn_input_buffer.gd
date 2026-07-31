@@ -15,7 +15,7 @@
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
-class_name QNInputBuffer
+
 
 const MAX_PENDING := 256
 

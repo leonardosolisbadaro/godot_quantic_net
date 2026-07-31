@@ -201,14 +201,12 @@ Evidência executável de que o addon instala uma vez, funciona em projeto
 
 #### PR 9 — Demo agnóstica de gameplay [x]
 
-- [x] Criar demo 3D isolada em `demo/`, fora de `addons/`.
+- [x] Criar demo 3D "bare metal" isolada em `addons/quantic_net/demo/` (smoke test embutido).
 - [x] Demonstrar apenas integração consumidora:
-  prediction local, `submit_state`, `remote_state`, visualização de
-  peers e aplicação de snapback.
-- [x] Incluir instruções code-first: projeto vazio, cópia da pasta
-  `addons/`, ativação do plugin e execução servidor/cliente.
-- [x] Manter valores didáticos (porta, secret e assets) somente na
-  demo, nunca no núcleo do addon.
+  `host()`, `join()`, `submit_state()` e sinais `peer_joined`/`state_received`.
+  Deve ser estritamente plug-and-play sem acoplamento à UI, AoI ou regras de domínio complexas.
+- [x] Teste de fumaça Gut em `tests/integration/` para instanciar a demo e prevenir crashes na API pública.
+- [x] Bugfix: Corrigido bug onde clientes remotos sofriam jitter e ficavam presos em `(0,0,0)` devido à instância nula de `QNServerValidator` em `QNHostSession`.
 - [x] Commit sugerido:
   `docs(demo): add minimal 3D plug-and-play example`
 
@@ -222,7 +220,7 @@ Evidência executável de que o addon instala uma vez, funciona em projeto
 - [ ] Adicionar `LICENSE`, ícone, screenshots/GIF da demo e README de
   instalação/API voltado à Godot Asset Library.
 - [ ] Definir `.gitattributes`/artefato de release para distribuir
-  somente `addons/quantic_net/`; excluir `tests/`, `demo/`, `.github/`
+  somente `addons/quantic_net/` (que agora já inclui a `demo/`); excluir `tests/` e afins.
   e ferramentas internas do pacote ao usuário.
 - [ ] Documentar filtros de export para cliente e servidor:
   cliente exclui chave privada, testes e demo; servidor inclui a chave

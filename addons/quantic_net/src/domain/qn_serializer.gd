@@ -14,10 +14,11 @@
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
-class_name QNSerializer
+
 
 const TYPE_STATE := 1
 const TYPE_SNAPBACK := 2
+const TYPE_PEER_LEFT := 3
 
 const POS_LO := -64.0
 const POS_HI := 64.0

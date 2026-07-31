@@ -193,7 +193,6 @@ func _set_refuse_new_connections(enable: bool) -> void:
 func _put_packet_script(p_buffer: PackedByteArray) -> Error:
 	var current_ts = Time.get_ticks_msec()
 	var encoded = _encode(_transfer_channel, p_buffer)
-	print("WIRE_PEER SEND (", _transfer_channel, "): ", p_buffer.hex_encode())
 	var queued = _queue_netem(_transfer_channel, encoded, current_ts)
 	
 	if not netem_enabled:
@@ -235,6 +234,10 @@ func _get_unique_id() -> int: return 1 if _is_server_flag else _client_id
 func _is_server() -> bool: return _is_server_flag
 func _get_connection_status() -> int: return _status
 func _close() -> void: pass
+
+func set_client_id(id: int) -> void:
+	_client_id = id
+
 func _disconnect_peer(peer: int, force: bool) -> void: pass
 func _is_server_relay_supported() -> bool: return false
 func _get_max_packet_size() -> int: return 1048576
@@ -265,7 +268,6 @@ func _poll() -> void:
 			if _peer_map.has(ep):
 				var data = ep.get_packet()
 				var decoded = _decode(data)
-				print("SERVER RECEIVED DATA: ", decoded.hex_encode())
 				if decoded.size() > 0:
 					_in_queue.append({"peer": _peer_map[ep], "data": decoded, "channel": event[2]})
 		event = enet.service(0)

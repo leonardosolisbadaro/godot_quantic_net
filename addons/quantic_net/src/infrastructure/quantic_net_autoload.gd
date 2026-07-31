@@ -26,7 +26,7 @@ signal state_received(owner: int, pos: Vector3, rot: Vector3, custom: int)
 signal pong_received(rtt: float, offset: float)
 signal snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array)
 
-enum ConnectionState { DISCONNECTED, CONNECTING, AUTHENTICATING, CONNECTED, FAILED }
+enum ConnectionState {DISCONNECTED, CONNECTING, AUTHENTICATING, CONNECTED, FAILED}
 
 const QNDTLSBootstrap = preload("res://addons/quantic_net/src/infrastructure/qn_dtls_bootstrap.gd")
 const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd")
@@ -54,6 +54,12 @@ func get_state() -> int:
 func is_server() -> bool:
 	return _is_server
 
+func get_unique_id() -> int:
+	if _is_server: return 1
+	if _hook != null and _hook.base != null:
+		return _hook.base.get_unique_id()
+	return 0
+
 func _set_state(s: int) -> void:
 	if _state != s:
 		_state = s
@@ -75,21 +81,35 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 	_hook.base.server_relay = true
 	
 	_host_session = QNHostSession.new()
+	_host_session.validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
 	_host_session.snapback_requested.connect(_on_host_snapback_requested)
 	_host_session.broadcast_ready.connect(_on_host_broadcast_ready)
 	_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
-		_hook.base.disconnect_peer(id))
+		print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
+		if s >= 5:
+			_hook.base.disconnect_peer(id)
+	)
 		
 	_hook.custom_packet.connect(_on_custom_packet)
 	_hook.base.auth_timeout = 3.0
-	_hook.base.auth_callback = _on_server_auth_callback
-	_hook.peer_connected.connect(func(id: int) -> void: 
+	_hook.base.allow_object_decoding = false
+	_hook.base.auth_callback = Callable(self, "_on_auth_callback")
+	_hook.peer_connected.connect(func(id: int) -> void:
 		if _is_server:
 			print("HOOK PEER CONNECTED: ", id)
 			peer_joined.emit(id))
 	_hook.peer_disconnected.connect(func(id: int) -> void:
-		if _is_server and _host_session.has_method("on_peer_disconnected"):
-			_host_session.on_peer_disconnected(id)
+		if _is_server:
+			if _host_session.has_method("on_peer_disconnected"):
+				_host_session.on_peer_disconnected(id)
+			
+			var pkt := PackedByteArray([QNSerializer.TYPE_PEER_LEFT])
+			var id_bytes := PackedByteArray()
+			id_bytes.resize(4)
+			id_bytes.encode_u32(0, id)
+			pkt.append_array(id_bytes)
+			_hook.send_custom(0, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+			
 		peer_left.emit(id))
 		
 	get_tree().set_multiplayer(_hook, self.get_path())
@@ -125,9 +145,15 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	
 	_hook.custom_packet.connect(_on_custom_packet)
 	_hook.connected_to_server.connect(func() -> void:
-		_client_session._my_id = _hook.base.get_unique_id()
-		_set_state(ConnectionState.CONNECTED))
+		var my_id: int = _hook.base.get_unique_id()
+		_client_session.set_local_id(my_id)
+		_set_state(ConnectionState.CONNECTED)
+		peer_joined.emit(my_id))
+	_hook.peer_connected.connect(func(id: int) -> void:
+		if id != SERVER_PEER_ID:
+			peer_joined.emit(id))
 	_hook.peer_disconnected.connect(func(id: int) -> void:
+		peer_left.emit(id)
 		if id == SERVER_PEER_ID:
 			_set_state(ConnectionState.DISCONNECTED))
 			
@@ -149,19 +175,31 @@ func _process(delta: float) -> void:
 				print("CLIENT SEND AUTH RESULT: ", err)
 				_hook.base.complete_auth(SERVER_PEER_ID)
 
+func _on_auth_callback(id: int, data: PackedByteArray) -> void:
+	if _is_server:
+		_on_server_auth_callback(id, data)
+	else:
+		_on_client_auth_callback(id, data)
+
 func _on_server_auth_callback(id: int, data: PackedByteArray) -> void:
 	print("SERVER AUTH CALLBACK TRIGGERED: ", id)
 	if data == _secret.to_utf8_buffer():
 		print("SERVER AUTH SECRET MATCH!")
 		_host_session.on_peer_authenticated(id)
+		var b = PackedByteArray()
+		b.resize(4)
+		b.encode_u32(0, id)
+		_hook.base.send_auth(id, b)
 		_hook.base.complete_auth(id)
 	else:
 		_hook.base.disconnect_peer(id)
 
 func _on_client_auth_callback(id: int, data: PackedByteArray) -> void:
 	print("CLIENT AUTH CALLBACK TRIGGERED: ", id)
-	# The server completes auth and Godot sends an empty data packet to the client to confirm.
-	# The client just needs to complete_auth locally to finalize the connection.
+	if data.size() >= 4:
+		var assigned_id = data.decode_u32(0)
+		_wire.set_client_id(assigned_id)
+		print("CLIENT ASSIGNED ID: ", assigned_id)
 	_hook.base.complete_auth(id)
 
 func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -> void:
@@ -169,7 +207,12 @@ func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -
 		if data.size() >= 20 and data[0] == QNSerializer.TYPE_STATE:
 			_host_session.on_client_snapshot(peer_id, data.slice(1), Time.get_ticks_msec())
 	else:
-		_client_session.handle_packet(data, Time.get_ticks_msec())
+		if data.size() >= 1:
+			if data[0] == QNSerializer.TYPE_PEER_LEFT and data.size() >= 5:
+				var left_id = data.decode_u32(1)
+				peer_left.emit(left_id)
+			else:
+				_client_session.handle_packet(data, Time.get_ticks_msec())
 
 func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
 	var body := PackedByteArray([QNSerializer.TYPE_SNAPBACK])
@@ -226,6 +269,5 @@ func toggle_netem() -> void:
 func _exit_tree() -> void:
 	if get_tree().has_method("get_multiplayer") and get_tree().get_multiplayer(self.get_path()) == _hook:
 		get_tree().set_multiplayer(SceneMultiplayer.new(), self.get_path())
-	if _wire and _wire.has_method("_close"):
-		_wire._close()
-
+	if _wire and _wire.has_method("close"):
+		_wire.close()

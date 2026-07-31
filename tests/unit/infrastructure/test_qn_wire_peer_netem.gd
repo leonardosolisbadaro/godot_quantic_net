@@ -102,9 +102,9 @@ func test_duplicacao_gera_dois_pacotes() -> void:
 func test_drain_netem_retorna_apenas_pacotes_vencidos() -> void:
 	# Arrange
 	var peer = _new_peer()
-	peer._netem_queue.append({"channel": QNWirePeer.CH_STATE, "payload": PackedByteArray([1]), "release_ts": 1000})
-	peer._netem_queue.append({"channel": QNWirePeer.CH_STATE, "payload": PackedByteArray([2]), "release_ts": 1050})
-	peer._netem_queue.append({"channel": QNWirePeer.CH_STATE, "payload": PackedByteArray([3]), "release_ts": 950})
+	peer._netem_queue.append({"channel": QNWirePeer.CH_STATE, "payload": PackedByteArray([1]), "release_ts": 1000, "target": 0})
+	peer._netem_queue.append({"channel": QNWirePeer.CH_STATE, "payload": PackedByteArray([2]), "release_ts": 1050, "target": 0})
+	peer._netem_queue.append({"channel": QNWirePeer.CH_STATE, "payload": PackedByteArray([3]), "release_ts": 950, "target": 0})
 	
 	# Act
 	var ready_1000 = peer._drain_netem(1000)

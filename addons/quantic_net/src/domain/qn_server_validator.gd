@@ -14,7 +14,7 @@
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
-class_name QNServerValidator
+
 
 signal peer_rejected(id: int, reason: String, strikes: int)
 
@@ -28,6 +28,7 @@ class PeerState:
 	var rot: Vector3
 	var last_ts: int
 	var strikes: int = 0
+	var seq: int = 0
 
 var peers := {}
 
@@ -52,7 +53,8 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 		dt = 0.001
 		
 	var dist: float = pos.distance_to(st.pos)
-	var speed: float = dist / dt
+	var effective_dt: float = maxf(dt, 0.05)
+	var speed: float = dist / effective_dt
 	
 	if speed <= MAX_SPEED:
 		st.pos = pos
