@@ -140,7 +140,7 @@ func tick_broadcast(now: int) -> void:
 		var st = _registry[id]
 		if st.has_state:
 			world_snapshot[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0, "ts": st.ts}
-		
+			
 	_world_history.push_front({"seq": _server_seq, "states": world_snapshot})
 	if _world_history.size() > 60:
 		_world_history.pop_back()
@@ -208,7 +208,23 @@ func tick_broadcast(now: int) -> void:
 		for entity_id in selected_states:
 			buf.write_bits(entity_id, 32)
 			var base = base_states.get(entity_id, {})
-			QNDeltaSerializer.encode_state(buf, base, selected_states[entity_id])
+			
+			# Lógica Stateless de AoI:
+			# Verifica se no momento do 'ack', a entidade estava DENTRO da visão do cliente.
+			# Se estava FORA da visão, significa que o cliente NUNCA a recebeu naquele pacote.
+			# Portanto, a base dele é VAZIA, e devemos enviar um I-Frame!
+			if not base.is_empty():
+				var peer_base = base_states.get(id, {})
+				if not peer_base.is_empty():
+					var cull_radius = 50.0
+					if profiles.has(entity_id):
+						cull_radius = profiles[entity_id].spatial_culling_radius
+					
+					var old_dist = peer_base.pos.distance_to(base.pos)
+					if old_dist > cull_radius:
+						base = {} # Culled at ACK time -> Força I-Frame!
+			
+			QNDeltaSerializer.encode_state(buf, base, current_states[entity_id])
 			
 		packet_ready.emit(id, buf.get_buffer())
 

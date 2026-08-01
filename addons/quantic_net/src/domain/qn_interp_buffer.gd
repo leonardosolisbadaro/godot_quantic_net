@@ -18,8 +18,8 @@
 
 const BASE_DELAY_MS := 60
 const MAX_DELAY_MS := 250
-const MAX_SNAPSHOTS := 16
-const EXTRAPOLATION_LIMIT_MS := 250
+const MAX_SNAPSHOTS = 20
+const EXTRAPOLATION_LIMIT_MS = 250 # Restaurado para 250ms para evitar stuttering em props de 5Hz (200ms)
 const ERROR_BLEND_SPEED := 5.0 # Fator de decaimento por segundo
 
 var render_delay_ms: int = 60
@@ -40,6 +40,15 @@ func update_jitter(jitter_ms: float) -> void:
 
 
 func push(ts: int, pos: Vector3, rot: Vector3) -> void:
+	if not snaps.is_empty() and ts - snaps[-1]["ts"] > 300:
+		# Se houve um hiato (>300ms), a entidade provavelmente saiu e voltou
+		# da Area of Interest (AoI) ou sofreu um packet loss. 
+		# Limpamos o buffer para forçar um Hard-Snap e evitar "patinação" (deslize).
+		snaps.clear()
+		_error_pos = Vector3.ZERO
+		_error_rot = Vector3.ZERO
+		_was_extrapolating = false
+		
 	if not snaps.is_empty() and ts <= snaps[-1]["ts"]:
 		return
 	snaps.append({"ts": ts, "pos": pos, "rot": rot})
@@ -82,18 +91,22 @@ func sample(now: int) -> Dictionary:
 				found = true
 				break
 				
-	if not found and snaps.size() >= 2:
-		var a: Dictionary = snaps[-2]
-		var b: Dictionary = snaps[-1]
-		var span: float = float(b["ts"] - a["ts"])
-		if span > 0.0:
-			var over: int = mini(render_ts - b["ts"], EXTRAPOLATION_LIMIT_MS)
-			# Proteção contra spans anomalamente pequenos (ex: jitter de clock) que explodiriam o t
-			var safe_span: float = maxf(span, 25.0) 
-			var t: float = 1.0 + float(over) / safe_span
-			out_pos = a["pos"].lerp(b["pos"], t)
-			out_rot = _lerp_angle_vec(a["rot"], b["rot"], t)
-			is_extrapolating = true
+	if not found:
+		if snaps.size() == 1:
+			out_pos = snaps[0]["pos"]
+			out_rot = snaps[0]["rot"]
+		elif snaps.size() >= 2:
+			var a: Dictionary = snaps[-2]
+			var b: Dictionary = snaps[-1]
+			var span: float = float(b["ts"] - a["ts"])
+			if span > 0.0:
+				var over: int = mini(render_ts - b["ts"], EXTRAPOLATION_LIMIT_MS)
+				# Proteção contra spans anomalamente pequenos (ex: jitter de clock) que explodiriam o t
+				var safe_span: float = maxf(span, 25.0) 
+				var t: float = 1.0 + float(over) / safe_span
+				out_pos = a["pos"].lerp(b["pos"], t)
+				out_rot = _lerp_angle_vec(a["rot"], b["rot"], t)
+				is_extrapolating = true
 			found = true
 			
 	if not found:

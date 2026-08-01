@@ -35,6 +35,7 @@ const SPEED := 2.0
 var cubes := {} # peer_id -> MeshInstance3D
 var auto_move := true
 var auto_time := 0.0
+var _last_rx := {}
 
 
 func _ready() -> void:
@@ -74,16 +75,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			print("[DEMO] FPS Limitado: ", "SIM (60)" if Engine.max_fps == 60 else "NAO (Unlimited)")
 
 func _setup_server_props() -> void:
-	# Cria 100 entidades (props) que existem apenas no servidor
-	# Perfil customizado para a Demo: 5Hz, prioridade 1.0, e Cull Radius de apenas 5 metros!
-	var prop_profile = QuanticNet.NetProfile.new(5.0, 1.0, 5.0) 
+	# Cria 5 entidades (props) para depuração intensiva
+	# Perfil customizado para a Demo: 5Hz, prioridade 1.0, e Cull Radius de 10 metros.
+	var prop_profile = QuanticNet.NetProfile.new(5.0, 1.0, 10.0) 
 	
-	for i in range(100):
+	for i in range(5):
 		var prop_id = 1000 + i
 		QuanticNet.register_entity(prop_id, false, true, prop_profile)
 		
 		# Distribui em círculo amplo para que a distância influencie no despache
-		var angle = (i / 100.0) * TAU
+		var angle = (i / 5.0) * TAU
 		var radius = 10.0 + randf_range(-2, 2)
 		QuanticNet.get_registry()[prop_id].pos = Vector3(cos(angle) * radius, 0.5, sin(angle) * radius)
 		
@@ -123,7 +124,7 @@ func _on_peer_joined(id: int) -> void:
 	elif id >= 1000:
 		mat.albedo_color = Color.RED # Props (NPCs) do Servidor
 	else:
-		mat.albedo_color = Color(1.0, 0.5, 0.0) # Laranja para Outros Clientes
+		mat.albedo_color = Color.CYAN # Ciano para Outros Clientes Reais
 		
 	mesh.material = mat
 	cube.mesh = mesh
@@ -138,11 +139,11 @@ func _on_peer_joined(id: int) -> void:
 	cubes[id] = cube
 	
 	if id == QuanticNet.get_unique_id():
-		# Adiciona uma área translúcida ao redor do jogador para visualizar o Cull Radius (5m)
+		# Adiciona uma área translúcida ao redor do jogador para visualizar o Cull Radius (10m)
 		var area = MeshInstance3D.new()
 		var area_mesh = CylinderMesh.new()
-		area_mesh.top_radius = 5.0
-		area_mesh.bottom_radius = 5.0
+		area_mesh.top_radius = 10.0
+		area_mesh.bottom_radius = 10.0
 		area_mesh.height = 0.05
 		
 		var area_mat = StandardMaterial3D.new()
@@ -168,17 +169,17 @@ func _physics_process(delta: float) -> void:
 		auto_move = not auto_move
 		print("[DEMO] Auto-move: ", auto_move)
 		
-	# Servidor: Atualiza fisicamente os 100 props (bots) em movimento contínuo
+	# Servidor: Atualiza fisicamente os 5 props (bots) em movimento contínuo
 	if QuanticNet.is_server():
 		auto_time += delta
 		var reg = QuanticNet.get_registry()
 		var server_now = Time.get_ticks_msec()
 		
-		for i in range(100):
+		for i in range(5):
 			var prop_id = 1000 + i
 			if reg.has(prop_id):
 				var p = reg[prop_id]
-				var angle = (i / 100.0) * TAU + auto_time * 0.2
+				var angle = (i / 5.0) * TAU + auto_time * 0.2
 				var radius = 10.0 + sin(auto_time * 0.5 + i) * 2.0
 				p.pos.x = cos(angle) * radius
 				p.pos.z = sin(angle) * radius
@@ -216,9 +217,27 @@ func _process(delta: float) -> void:
 	var fps := Engine.get_frames_per_second()
 	var mode := "LOCKED 60" if Engine.max_fps == 60 else "UNLIMITED"
 	DisplayServer.window_set_title("QuanticNet Client - %d FPS [%s]" % [fps, mode])
-
+	
+	# Desabilita/Oculta cubos que não recebem atualizações há mais de 0.5 segundo (saíram do AoI)
+	var now = Time.get_ticks_msec()
+	var my_id = QuanticNet.get_unique_id()
+	var my_pos = cubes[my_id].position if cubes.has(my_id) else Vector3.ZERO
+	
+	for id in cubes.keys():
+		if id != my_id:
+			var dist = my_pos.distance_to(cubes[id].position)
+			# Culling visual no cliente: 
+			# Props têm raio 10.0m. Outros peers têm raio 50.0m (default).
+			var max_dist = 11.0 if id >= 1000 else 52.0
+			
+			if dist > max_dist:
+				cubes[id].visible = false
+			elif _last_rx.has(id) and now - _last_rx[id] > 500:
+				cubes[id].visible = false
+			else:
+				cubes[id].visible = true
+				
 	# Aplica estado interpolado de peers remotos puramente no frame visual (desacoplado de fisica).
-	var my_id := QuanticNet.get_unique_id()
 	for id in cubes.keys():
 		if id == my_id:
 			continue
@@ -228,6 +247,13 @@ func _process(delta: float) -> void:
 			cubes[id].rotation = s["rot"]
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, _custom: int) -> void:
+	if not QuanticNet.is_server():
+		if _last_rx.has(owner):
+			var gap = Time.get_ticks_msec() - _last_rx[owner]
+			if owner >= 1000 and gap > 200:
+				print("[CLIENT] Recebeu %d apos %d ms! Pos: %s" % [owner, gap, str(pos)])
+				
+	_last_rx[owner] = Time.get_ticks_msec()
 	# Cria cubo remoto caso o sinal de peer_connected nativo nao tenha notificado ainda.
 	if not QuanticNet.is_server() and not cubes.has(owner) and owner != QuanticNet.get_unique_id():
 		_on_peer_joined(owner)
