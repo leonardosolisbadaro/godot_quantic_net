@@ -32,8 +32,11 @@ var _was_extrapolating: bool = false
 var _error_pos: Vector3 = Vector3.ZERO
 var _error_rot: Vector3 = Vector3.ZERO
 
+var _target_delay_ms: float = float(BASE_DELAY_MS)
+var _current_delay_ms: float = float(BASE_DELAY_MS)
+
 func update_jitter(jitter_ms: float) -> void:
-	render_delay_ms = clampi(BASE_DELAY_MS + int(jitter_ms * 2.0), BASE_DELAY_MS, MAX_DELAY_MS)
+	_target_delay_ms = clampf(BASE_DELAY_MS + (jitter_ms * 2.0), float(BASE_DELAY_MS), float(MAX_DELAY_MS))
 
 
 func push(ts: int, pos: Vector3, rot: Vector3) -> void:
@@ -47,9 +50,16 @@ func sample(now: int) -> Dictionary:
 	if snaps.is_empty():
 		return {}
 		
-	var render_ts: int = now - render_delay_ms
 	var dt: float = 0.0 if _last_sample_now == 0 else float(now - _last_sample_now) / 1000.0
 	_last_sample_now = now
+	
+	if _target_delay_ms > _current_delay_ms:
+		_current_delay_ms = lerpf(_current_delay_ms, _target_delay_ms, minf(1.0, dt * 10.0))
+	else:
+		_current_delay_ms = lerpf(_current_delay_ms, _target_delay_ms, minf(1.0, dt * 0.5))
+		
+	render_delay_ms = int(_current_delay_ms)
+	var render_ts: int = now - render_delay_ms
 	
 	var out_pos := Vector3.ZERO
 	var out_rot := Vector3.ZERO
@@ -78,7 +88,9 @@ func sample(now: int) -> Dictionary:
 		var span: float = float(b["ts"] - a["ts"])
 		if span > 0.0:
 			var over: int = mini(render_ts - b["ts"], EXTRAPOLATION_LIMIT_MS)
-			var t: float = 1.0 + float(over) / span
+			# Proteção contra spans anomalamente pequenos (ex: jitter de clock) que explodiriam o t
+			var safe_span: float = maxf(span, 25.0) 
+			var t: float = 1.0 + float(over) / safe_span
 			out_pos = a["pos"].lerp(b["pos"], t)
 			out_rot = _lerp_angle_vec(a["rot"], b["rot"], t)
 			is_extrapolating = true
