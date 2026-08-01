@@ -34,6 +34,7 @@ const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_ho
 const QNHostSession = preload("res://addons/quantic_net/src/use_cases/qn_host_session.gd")
 const QNClientSession = preload("res://addons/quantic_net/src/use_cases/qn_client_session.gd")
 const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
+const NetProfile = preload("res://addons/quantic_net/src/domain/qn_net_profile.gd")
 
 const CH_STATE := 1
 const SERVER_PEER_ID := 1
@@ -253,6 +254,10 @@ func get_registry() -> Dictionary:
 	if _is_server and _host_session:
 		return _host_session.get_registry()
 	return {}
+	
+func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, profile: RefCounted = null) -> void:
+	if _is_server and _host_session:
+		_host_session.register_entity(entity_id, is_peer, has_initial_state, profile)
 
 func kick(peer_id: int) -> void:
 	if _is_server and _hook:

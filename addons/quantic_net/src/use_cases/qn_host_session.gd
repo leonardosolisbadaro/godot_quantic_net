@@ -27,6 +27,7 @@ var _registry := {}
 const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
 const QNDeltaSerializer = preload("res://addons/quantic_net/src/domain/qn_delta_serializer.gd")
 const QNBitBuffer = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd")
+const QNNetProfile = preload("res://addons/quantic_net/src/domain/qn_net_profile.gd")
 
 var _server_seq: int = 0
 var _world_history := []
@@ -42,17 +43,25 @@ var validator: RefCounted:
 func _on_validator_peer_rejected(id: int, reason: String, strikes: int) -> void:
 	peer_rejected.emit(id, reason, strikes)
 
-func on_peer_authenticated(peer_id: int) -> void:
-	_registry[peer_id] = {
-		"id": peer_id,
+func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, profile: RefCounted = null) -> void:
+	if profile == null:
+		profile = QNNetProfile.preset_standard()
+		
+	_registry[entity_id] = {
+		"id": entity_id,
 		"pos": Vector3.ZERO,
 		"rot": Vector3.ZERO,
 		"seq": 0,
 		"ts": 0,
 		"ack": 0,
-		"profile": "MMO",
-		"has_state": false
+		"profile": profile,
+		"has_state": has_initial_state,
+		"last_broadcast_ts": 0,
+		"is_peer": is_peer
 	}
+
+func on_peer_authenticated(peer_id: int, profile: RefCounted = null) -> void:
+	register_entity(peer_id, true, false, profile)
 
 func on_peer_disconnected(peer_id: int) -> void:
 	if _registry.has(peer_id):
@@ -111,18 +120,44 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 
 func tick_broadcast(now: int) -> void:
 	_server_seq = (_server_seq + 1) & 0xFFFF
-	var current_states := {}
+	var world_snapshot := {}
 	for id in _registry:
 		var st = _registry[id]
 		if st.has_state:
-			current_states[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0, "ts": st.ts}
+			world_snapshot[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0, "ts": st.ts}
 		
-	_world_history.push_front({"seq": _server_seq, "states": current_states})
+	_world_history.push_front({"seq": _server_seq, "states": world_snapshot})
 	if _world_history.size() > 60:
 		_world_history.pop_back()
 		
+	var current_states := {}
 	for id in _registry:
-		var ack = _registry[id].get("ack", 0)
+		var st = _registry[id]
+		if not st.has_state:
+			continue
+			
+		var profile = st.profile
+		var tick_rate_hz: float = profile.tick_rate_hz if profile else 20.0
+		var should_broadcast := false
+		
+		if tick_rate_hz > 0.0:
+			var interval_ms: int = int(1000.0 / tick_rate_hz)
+			if now - st.last_broadcast_ts >= interval_ms:
+				should_broadcast = true
+		else:
+			if st.last_broadcast_ts == 0:
+				should_broadcast = true
+				
+		if should_broadcast:
+			current_states[id] = world_snapshot[id]
+			st.last_broadcast_ts = now
+		
+	for id in _registry:
+		var st = _registry[id]
+		if not st.get("is_peer", false):
+			continue
+			
+		var ack = st.get("ack", 0)
 		var base_states = {}
 		for hist in _world_history:
 			if hist.seq == ack:

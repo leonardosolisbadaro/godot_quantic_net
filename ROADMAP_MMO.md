@@ -23,11 +23,11 @@ Jogadores, NPCs estáticos e NPCs móveis são indistinguíveis para o gerenciad
 
 ### 2. O Domínio do `NetProfile`
 
-O `NetProfile` define a forma como o estado da entidade será processado e transmitido pela rede:
+O `NetProfile` define a forma como o estado da entidade será processado e transmitido pela rede, sendo uma abstração estritamente técnica (agnóstica à regra de negócio do jogo). É uma classe de dados que dita o comportamento de tráfego:
 
-- **`MMO` (Padrão):** Baixa frequência de atualização (ex: 10-15 Hz). Os clientes utilizam interpolação suave para exibir o movimento. Prioriza economia de banda e CPU.
-- **`COMPETITIVE`:** Alta frequência de atualização (ex: 60 Hz). Utiliza predição do cliente pesada e correção imediata (Snapback). Ativado durante momentos críticos, como um combate.
-O *Duelo* é concebido como um **estado mútuo** temporário entre entidades específicas, e não uma zona física restrita do mapa.
+- **`QNNetProfile.HIGH_FREQUENCY`:** Alta frequência de atualização (ex: 60 Hz) e alta prioridade. Utilizado para mecânicas competitivas ou predição intensa. O *Duelo* é concebido como a adoção temporária deste perfil, e não uma zona física restrita do mapa.
+- **`QNNetProfile.LOW_FREQUENCY` (MMO Padrão):** Baixa frequência de atualização (ex: 10-15 Hz). Os clientes utilizam interpolação suave para exibir o movimento. Prioriza economia de banda e CPU.
+- **`QNNetProfile.STATIC`:** Atualiza apenas quando sofre mutação (*On Change Only*).
 
 ### 3. Spatial Hashing (Area of Interest - AoI)
 
@@ -56,7 +56,7 @@ O movimento do próprio jogador (`Client-Side Prediction`) já está isolado, ma
 
 ### 8. NetProfile e Tick Híbrido (Hybrid Ticking)
 
-Para escalar o limite de entidades no servidor, o sistema não pode enviar tudo na mesma frequência. Entidades passarão a ter um `NetProfile` que define a taxa de atualização (ex: Jogador a 20Hz, NPCs menores a 5Hz, Props estáticos "On-Demand"). O despachante do servidor será escalonado por perfis.
+Para escalar o limite de entidades no servidor, o sistema não pode enviar tudo na mesma frequência. Entidades passarão a ter um `NetProfile` (`tick_rate_hz`, `base_priority`, etc). O despachante do servidor será escalonado por perfis, respeitando o ritmo exato de cada entidade (ex: 20Hz, 5Hz) independentemente se o jogo a considera um NPC, um Jogador ou uma Árvore.
 
 ### 9. Dynamic Jitter Buffer e Error Blending
 

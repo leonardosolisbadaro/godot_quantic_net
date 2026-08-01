@@ -193,6 +193,10 @@ func _handle_snapshot(body: PackedByteArray, now: int) -> void:
 			break
 			
 	var parsed_states = {}
+	if not _world_history.is_empty():
+		for id in _world_history[0].states:
+			parsed_states[id] = _world_history[0].states[id].duplicate()
+			
 	for i in range(num_entities):
 		var entity_id = buf.read_bits(32)
 		var base = base_states.get(entity_id, {})

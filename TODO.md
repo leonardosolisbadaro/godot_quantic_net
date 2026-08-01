@@ -253,8 +253,9 @@ Nesta fase focaremos na transição arquitetural para suportar o roadmap MMO, fo
 
 #### PR 16 — NetProfile e Tick Híbrido (Hybrid Ticking)
 
-- [ ] Modelar o `NetProfile` nativo no núcleo, categorizando entidades (ex: `PLAYER`, `NPC_MINOR`, `STATIC_PROP`).
-- [ ] Alterar o loop do `QNHostSession.tick_broadcast` para escalonar envios. Entidades não devem atualizar na mesma frequência obrigatoriamente (ex: Jogadores em 20Hz, NPCs de fundo em 5Hz).
+- [ ] Criar classe de dados agnóstica `QNNetProfile` no domínio, expondo apenas parâmetros de rede (ex: `tick_rate_hz`, `base_priority`, `spatial_culling_radius`). O QuanticNet não conhecerá enums de jogo (ex: PLAYER, NPC).
+- [ ] Fornecer perfis pré-configurados convenientes (ex: `HIGH_FREQUENCY`, `LOW_FREQUENCY`, `STATIC`).
+- [ ] Alterar o loop do `QNHostSession.tick_broadcast` para escalonar envios (Hybrid Ticking). Entidades devem respeitar seu próprio `tick_rate_hz` para economizar banda, sendo empacotadas nos snapshots apenas quando o seu respectivo intervalo de envio for atingido.
 
 #### PR 17 — Priority Accumulator e Limite de MTU
 
