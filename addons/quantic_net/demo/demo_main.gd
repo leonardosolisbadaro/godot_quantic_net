@@ -74,21 +74,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			print("[DEMO] FPS Limitado: ", "SIM (60)" if Engine.max_fps == 60 else "NAO (Unlimited)")
 
 func _setup_server_props() -> void:
-	# Cria entidades (props) que existem apenas no servidor
-	# e atualizam os clientes em frequências baixas.
+	# Cria 100 entidades (props) que existem apenas no servidor
+	# e atualizam os clientes em frequências baixas. Forçará estouro de MTU.
 	var prop_profile = QuanticNet.NetProfile.preset_low_frequency() # 5Hz
-	var prop1_id = 1001
-	var prop2_id = 1002
 	
-	QuanticNet.register_entity(prop1_id, false, true, prop_profile)
-	QuanticNet.register_entity(prop2_id, false, true, prop_profile)
-	
-	# Posição inicial (já no registry)
-	QuanticNet.get_registry()[prop1_id].pos = Vector3(-4, 0.5, -4)
-	QuanticNet.get_registry()[prop2_id].pos = Vector3(4, 0.5, -4)
-	
-	_on_peer_joined(prop1_id)
-	_on_peer_joined(prop2_id)
+	for i in range(100):
+		var prop_id = 1000 + i
+		QuanticNet.register_entity(prop_id, false, true, prop_profile)
+		
+		# Distribui em círculo amplo para que a distância influencie no despache
+		var angle = (i / 100.0) * TAU
+		var radius = 10.0 + randf_range(-2, 2)
+		QuanticNet.get_registry()[prop_id].pos = Vector3(cos(angle) * radius, 0.5, sin(angle) * radius)
+		
+		_on_peer_joined(prop_id)
 
 func _setup_client_scene() -> void:
 	var cam := Camera3D.new()
@@ -144,24 +143,22 @@ func _physics_process(delta: float) -> void:
 		auto_move = not auto_move
 		print("[DEMO] Auto-move: ", auto_move)
 		
-	# Servidor: Atualiza fisicamente os props (bots) em movimento contínuo
+	# Servidor: Atualiza fisicamente os 100 props (bots) em movimento contínuo
 	if QuanticNet.is_server():
 		auto_time += delta
-		var prop1_id = 1001
-		var prop2_id = 1002
-		
 		var reg = QuanticNet.get_registry()
-		if reg.has(prop1_id):
-			var p = reg[prop1_id]
-			p.pos.x = -4 + sin(auto_time * 0.5) * 2
-			p.ts = Time.get_ticks_msec()
-			_on_state(prop1_id, p.pos, p.rot, 0)
-			
-		if reg.has(prop2_id):
-			var p = reg[prop2_id]
-			p.pos.z = -4 + cos(auto_time * 0.5) * 2
-			p.ts = Time.get_ticks_msec()
-			_on_state(prop2_id, p.pos, p.rot, 0)
+		var server_now = Time.get_ticks_msec()
+		
+		for i in range(100):
+			var prop_id = 1000 + i
+			if reg.has(prop_id):
+				var p = reg[prop_id]
+				var angle = (i / 100.0) * TAU + auto_time * 0.2
+				var radius = 10.0 + sin(auto_time * 0.5 + i) * 2.0
+				p.pos.x = cos(angle) * radius
+				p.pos.z = sin(angle) * radius
+				p.ts = server_now
+				_on_state(prop_id, p.pos, p.rot, 0)
 			
 		return
 		

@@ -28,9 +28,18 @@ const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.
 const QNDeltaSerializer = preload("res://addons/quantic_net/src/domain/qn_delta_serializer.gd")
 const QNBitBuffer = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd")
 const QNNetProfile = preload("res://addons/quantic_net/src/domain/qn_net_profile.gd")
+const QNPriorityAccumulator = preload("res://addons/quantic_net/src/domain/qn_priority_accumulator.gd")
 
 var _server_seq: int = 0
 var _world_history := []
+var _accumulator = QNPriorityAccumulator.new()
+
+var _stats: Dictionary = {
+	"entities_total": 0,
+	"entities_sent_this_tick": 0,
+	"bytes_saved_by_hybrid_ticking": 0,
+	"ticks_since_log": 0
+}
 
 var validator: RefCounted:
 	set(v):
@@ -63,9 +72,15 @@ func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, pro
 func on_peer_authenticated(peer_id: int, profile: RefCounted = null) -> void:
 	register_entity(peer_id, true, false, profile)
 
+func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
+	if _registry.has(entity_id):
+		_registry[entity_id].profile = new_profile
+		_registry[entity_id].last_broadcast_ts = 0
+
 func on_peer_disconnected(peer_id: int) -> void:
 	if _registry.has(peer_id):
 		_registry.erase(peer_id)
+	_accumulator._cleanup_peer(peer_id)
 	if validator and validator.has_method("peer_left"):
 		validator.peer_left(peer_id)
 
@@ -150,8 +165,7 @@ func tick_broadcast(now: int) -> void:
 				
 		if should_broadcast:
 			current_states[id] = world_snapshot[id]
-			st.last_broadcast_ts = now
-		
+			
 	for id in _registry:
 		var st = _registry[id]
 		if not st.get("is_peer", false):
@@ -164,16 +178,37 @@ func tick_broadcast(now: int) -> void:
 				base_states = hist.states
 				break
 				
+		var profiles = {}
+		for cid in current_states:
+			profiles[cid] = _registry[cid].profile if _registry.has(cid) else null
+			
+		# Filtra entidades por MTU e Priority
+		var selected_states = _accumulator.select_entities(id, current_states, profiles, st.pos, 1200, 19)
+		
+		# Atualiza last_broadcast_ts APENAS para os que foram efetivamente selecionados
+		for selected_id in selected_states:
+			if _registry.has(selected_id):
+				_registry[selected_id].last_broadcast_ts = now
+				
+		_stats["entities_total"] = _registry.size()
+		_stats["entities_sent_this_tick"] = selected_states.size()
+		var omitted_entities = _registry.size() - selected_states.size()
+		_stats["bytes_saved_by_hybrid_ticking"] += omitted_entities * 19 # Aprox. 19 bytes por estado omitido
+		_stats["ticks_since_log"] += 1
+		if _stats["ticks_since_log"] >= 600: # Log a cada 10s (a 60Hz)
+			print("[QNHostSession] Bandwidth Stats (Peer %d): %d entities sent out of %d. Savings so far: %d bytes" % [id, selected_states.size(), _registry.size(), _stats["bytes_saved_by_hybrid_ticking"]])
+			_stats["ticks_since_log"] = 0
+				
 		var buf = QNBitBuffer.new()
 		buf.write_bits(_server_seq, 16)
 		buf.write_bits(ack, 16)
 		buf.write_bits(now & 0xFFFFFFFF, 32)
-		buf.write_bits(current_states.size(), 8)
+		buf.write_bits(selected_states.size(), 8)
 		
-		for entity_id in current_states:
+		for entity_id in selected_states:
 			buf.write_bits(entity_id, 32)
 			var base = base_states.get(entity_id, {})
-			QNDeltaSerializer.encode_state(buf, base, current_states[entity_id])
+			QNDeltaSerializer.encode_state(buf, base, selected_states[entity_id])
 			
 		packet_ready.emit(id, buf.get_buffer())
 

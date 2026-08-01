@@ -259,6 +259,10 @@ func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, pro
 	if _is_server and _host_session:
 		_host_session.register_entity(entity_id, is_peer, has_initial_state, profile)
 
+func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
+	if _is_server and _host_session:
+		_host_session.change_entity_profile(entity_id, new_profile)
+
 func kick(peer_id: int) -> void:
 	if _is_server and _hook:
 		_hook.base.disconnect_peer(peer_id)

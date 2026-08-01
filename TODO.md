@@ -251,17 +251,18 @@ Nesta fase focaremos na transição arquitetural para suportar o roadmap MMO, fo
 - [x] Modificar o `QNInterpBuffer` para que `RENDER_DELAY_MS` seja dinâmico, baseado na variância real do RTT (ping jitter) monitorado pelo Cliente.
 - [x] Implementar decaimento exponencial (Error Blending) na extrapolação. Quando o pacote correto chega após um Jitter Spike, não realizar um hard-snap, mas diluir o erro de posição/rotação ao longo de múltiplos frames interpolados (reduzir engasgos visuais agressivos).
 
-#### PR 16 — NetProfile e Tick Híbrido (Hybrid Ticking)
+#### PR 16 — NetProfile e Tick Híbrido (Hybrid Ticking) [x]
 
-- [ ] Criar classe de dados agnóstica `QNNetProfile` no domínio, expondo apenas parâmetros de rede (ex: `tick_rate_hz`, `base_priority`, `spatial_culling_radius`). O QuanticNet não conhecerá enums de jogo (ex: PLAYER, NPC).
-- [ ] Fornecer perfis pré-configurados convenientes (ex: `HIGH_FREQUENCY`, `LOW_FREQUENCY`, `STATIC`).
-- [ ] Alterar o loop do `QNHostSession.tick_broadcast` para escalonar envios (Hybrid Ticking). Entidades devem respeitar seu próprio `tick_rate_hz` para economizar banda, sendo empacotadas nos snapshots apenas quando o seu respectivo intervalo de envio for atingido.
+- [x] Criar classe de dados agnóstica `QNNetProfile` no domínio, expondo apenas parâmetros de rede (ex: `tick_rate_hz`, `base_priority`, `spatial_culling_radius`). O QuanticNet não conhecerá enums de jogo (ex: PLAYER, NPC).
+- [x] Fornecer perfis pré-configurados convenientes (ex: `HIGH_FREQUENCY`, `LOW_FREQUENCY`, `STATIC`).
+- [x] Alterar o loop do `QNHostSession.tick_broadcast` para escalonar envios (Hybrid Ticking). Entidades devem respeitar seu próprio `tick_rate_hz` para economizar banda, sendo empacotadas nos snapshots apenas quando o seu respectivo intervalo de envio for atingido.
 
 #### PR 17 — Priority Accumulator e Limite de MTU
 
-- [ ] Implementar sistema de pontuação (Priority Accumulator) no despache do servidor para ranquear entidades de acordo com a proximidade, mira do cliente e `NetProfile`.
-- [ ] Restringir pacotes de `TYPE_SNAPSHOT` para respeitar o limite máximo do MTU (ex: 1200 bytes de payload).
-- [ ] Entidades rejeitadas por falta de espaço no MTU ganham "débito de prioridade" para forçar envio nos próximos ticks.
+- [ ] Implementar `QNPriorityAccumulator` no domínio: um sistema de ranqueamento que seleciona quais entidades cabem no pacote atual sem estourar o limite de payload (ex: MTU - UDP overhead).
+- [ ] Lógica de Score: (Distância + NetProfile.base_priority + [Opcional] Look Direction) + Débito Acumulado.
+- [ ] Entidades que não couberem no pacote (`mtu_budget` esgotado) recebem incremento no seu "débito acumulado", garantindo que eventualmente serão enviadas no futuro.
+- [ ] Expandir suporte dinâmico no `tick_broadcast`: permitir mudança de `NetProfile` em runtime resetando `last_broadcast_ts` e integrar logs de contabilidade de banda.
 
 ### Fase 9: Combate e Simulação Física Avançada
 

@@ -38,6 +38,20 @@ Retorna `true` se a instância atual estiver operando como servidor (host).
 
 ---
 
+## NetProfiles (Tick Híbrido)
+
+O QuanticNet permite que diferentes entidades sejam atualizadas em frequências diferentes para economizar banda (Hybrid Ticking).
+A classe de domínio `QuanticNet.NetProfile` (exposta através da constante `QuanticNet.NetProfile`) dita a política de envio da entidade.
+
+### Presets de Fábrica
+Você pode criar perfis personalizados instanciando `QuanticNet.NetProfile.new(tick_rate_hz, base_priority, cull_radius)`, mas recomendamos usar os *presets* padrão:
+* `QuanticNet.NetProfile.preset_high_frequency()`: 60Hz. Uso: Jogadores e mecânicas competitivas.
+* `QuanticNet.NetProfile.preset_standard()`: 20Hz. Uso: Regime padrão de MMO.
+* `QuanticNet.NetProfile.preset_low_frequency()`: 5Hz. Uso: NPCs periféricos, "Props" movendo lentamente.
+* `QuanticNet.NetProfile.preset_static()`: On-change. Uso: Portas, checkpoints, construções.
+
+---
+
 ## Funções Públicas
 
 As seguintes funções expõem os Casos de Uso do plugin. Todas as dependências internas (ex.: `QNHostSession`, `QNWirePeer`) estão encapsuladas na Infraestrutura, em conformidade com a Clean Architecture. Use **apenas** o Autoload.
@@ -60,6 +74,18 @@ Envia o estado atual do cliente (player predito) para o servidor. Este estado va
 
 * O servidor recebe e processa (valida a predição).
 * Deve ser chamado periodicamente (ex.: dentro do `_process` ou `_physics_process`).
+
+### `register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, profile: RefCounted = null) -> void`
+
+(Servidor) Adiciona e registra manualmente uma nova entidade (ex.: NPCs) no rastreador do servidor.
+
+* `is_peer`: Se a entidade for também uma conexão (socket real). Use `false` para bots controlados puramente pelo servidor.
+* `has_initial_state`: `true` se você for fornecer os dados manualmente, `false` se for aguardar input da rede.
+* `profile`: A política de `QNNetProfile` (ver seção NetProfiles).
+
+### `change_entity_profile(entity_id: int, new_profile: RefCounted) -> void`
+
+(Servidor) Altera dinamicamente o `NetProfile` de uma entidade (Ex: Um NPC que estava dormindo a 5Hz acorda e passa para 20Hz). Isso forçará um envio imediato no próximo tick.
 
 ### `remote_state(owner_id: int) -> Dictionary`
 
