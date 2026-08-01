@@ -63,10 +63,10 @@ func test_pacote_tem_formato_do_protocolo_com_seq_crescente() -> void:
 	# Assert: seq 1 e 2, tipo STATE, posicao quantizada
 	assert_eq(_sent.size(), 2)
 	assert_eq(_sent[0]["data"].decode_u8(0), QNSerializer.TYPE_STATE)
-	var d1: Dictionary = QNSerializer.decode_state_seq(_sent[0]["data"].slice(1))
-	var d2: Dictionary = QNSerializer.decode_state_seq(_sent[1]["data"].slice(1))
-	assert_eq(d1["seq"], 1, "primeiro envio seq=1")
-	assert_eq(d2["seq"], 2, "segundo envio seq=2")
+	var hist1: Array = QNSerializer.decode_state_history(_sent[0]["data"].slice(3))
+	var hist2: Array = QNSerializer.decode_state_history(_sent[1]["data"].slice(3))
+	assert_eq(hist1[0]["seq"], 1, "primeiro envio seq=1")
+	assert_eq(hist2[0]["seq"], 2, "segundo envio seq=2")
 
 func test_submit_sem_id_valido_nao_envia() -> void:
 	# Arrange: id ainda nao atribuido (0)

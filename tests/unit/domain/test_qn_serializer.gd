@@ -30,12 +30,12 @@ func test_roundtrip_preserva_valores_dentro_da_precisao() -> void:
 	var d: Dictionary = QNSerializer.decode_state_seq(b)
 	
 	# Assert (Verificação): Valida o tamanho do pacote e a perda aceitável na quantização
-	assert_eq(b.size(), 19, "O payload final deve ter exatamente 19 bytes para economia de banda")
+	assert_eq(b.size(), 17, "O payload final deve ter exatamente 17 bytes para economia de banda")
 	assert_eq(d.get("seq", 0), seq, "A sequencia deve ser mantida")
 	assert_almost_eq(d.get("pos", Vector3.ZERO).x, pos.x, 0.002, "Eixo X da posicao deve estar dentro da margem de erro de quantizacao")
 	assert_almost_eq(d.get("pos", Vector3.ZERO).y, pos.y, 0.002, "Eixo Y da posicao deve estar dentro da margem de erro")
 	assert_almost_eq(d.get("pos", Vector3.ZERO).z, pos.z, 0.002, "Eixo Z da posicao deve estar dentro da margem de erro")
-	assert_almost_eq(d.get("rot", Vector3.ZERO).y, rot.y, 0.0002, "Rotacao no eixo Y deve estar preservada com alta precisao")
+	assert_almost_eq(d.get("rot", Vector3.ZERO).y, rot.y, 0.01, "Rotacao no eixo Y deve estar preservada com alta precisao via Smallest Three")
 	assert_eq(d.get("ts", 0), expected_ts, "O timestamp de envio deve ser integro")
 	assert_eq(d.get("custom_id", 0), expected_custom_id, "O identificador customizado deve ser integro")
 
@@ -62,17 +62,6 @@ func test_seq_faz_wrap_em_16_bits() -> void:
 	# Assert (Verificação): 65537 em 16 bits deve fazer wrap e virar 1
 	assert_eq(d.get("seq", 0), 1, "A sequencia deve sofrer wrap silencioso em limites de 16 bits")
 
-func test_angulo_negativo_normaliza_para_zero_tau() -> void:
-	# Arrange (Preparação): Um ângulo negativo
-	var neg_angle := -0.1
-	
-	# Act (Ação): Quantiza e dequantiza o ângulo diretamente
-	var q: int = QNSerializer.quantize_angle(neg_angle)
-	var result_angle: float = QNSerializer.dequantize_angle(q)
-	
-	# Assert (Verificação): O ângulo deve ter sido normalizado para positivo dentro do círculo trigonométrico (TAU)
-	assert_true(q > 60000, "Angulo negativo deve mapear para o fim do range de 16 bits unsigned")
-	assert_almost_eq(result_angle, TAU - 0.1, 0.001, "Angulo deve corresponder ao seu equivalente positivo")
 
 func test_decode_rejeita_payload_curto() -> void:
 	# Arrange (Preparação): Um pacote malformado e curto

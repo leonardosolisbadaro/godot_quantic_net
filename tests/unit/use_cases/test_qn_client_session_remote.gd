@@ -57,8 +57,8 @@ func test_remote_state_interpola_entre_snapshots() -> void:
 	# Dois snapshots do peer 3 em t=1000 e t=1100
 	sess.handle_packet(_state_from(3, 1, Vector3.ZERO, 1000), 1000)
 	sess.handle_packet(_state_from(3, 2, Vector3(2, 0, 0), 1100), 1100)
-	# Act: amostra no meio do intervalo + render delay
-	var s: Dictionary = sess.remote_state(3, 1000 + 50 + 120)
+	# Act: amostra no meio do intervalo + render delay (60ms)
+	var s: Dictionary = sess.remote_state(3, 1000 + 50 + 60)
 	# Assert: posicao interpolada ~x=1
 	assert_false(s.is_empty(), "ha estado interpolado")
 	assert_almost_eq(s["pos"].x, 1.0, 0.2, "lerp no meio do caminho")

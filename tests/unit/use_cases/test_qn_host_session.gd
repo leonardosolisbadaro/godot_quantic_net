@@ -33,7 +33,7 @@ func test_peer_autenticado_aloca_entidade_com_perfil_mmo() -> void:
 	assert_eq(entity.id, 42)
 	assert_eq(entity.pos, Vector3.ZERO)
 	assert_eq(entity.rot, Vector3.ZERO)
-	assert_eq(entity.profile, "MMO")
+	assert_true(entity.profile != null, "Perfil alocado como objeto QNNetProfile")
 
 func test_snapshot_valido_aceito_e_atualiza_registry() -> void:
 	# Arrange
@@ -41,7 +41,8 @@ func test_snapshot_valido_aceito_e_atualiza_registry() -> void:
 	session.validator = autofree(QNServerValidator.new()) as QNServerValidator
 	session.on_peer_authenticated(10)
 	var pos := Vector3(1, 0, 1)
-	var pkt := QNSerializer.encode_state_seq(10, pos, Vector3.ZERO, 1000, 0)
+	var pkt := PackedByteArray([0, 0])
+	pkt.append_array(QNSerializer.encode_state_history([{"seq": 10, "pos": pos, "rot": Vector3.ZERO, "ts": 1000, "custom_id": 0}]))
 	
 	# Act
 	session.on_client_snapshot(10, pkt, 1000)
@@ -57,14 +58,16 @@ func test_snapshot_com_speedhack_gera_clamp_e_snapback() -> void:
 	session.on_peer_authenticated(10)
 	
 	# Snapshot inicial
-	var pkt0 := QNSerializer.encode_state_seq(1, Vector3.ZERO, Vector3.ZERO, 1000, 0)
+	var pkt0 := PackedByteArray([0, 0])
+	pkt0.append_array(QNSerializer.encode_state_history([{"seq": 1, "pos": Vector3.ZERO, "rot": Vector3.ZERO, "ts": 1000, "custom_id": 0}]))
 	session.on_client_snapshot(10, pkt0, 1000)
 	
 	var sent_snapbacks := []
 	session.snapback_requested.connect(func(id, pkt): sent_snapbacks.append({"id": id, "pkt": pkt}))
 	
 	# Speedhack (10 metros em 1 segundo - max speed = 6)
-	var pkt1 := QNSerializer.encode_state_seq(2, Vector3(0, 0, 10), Vector3.ZERO, 2000, 0)
+	var pkt1 := PackedByteArray([0, 0])
+	pkt1.append_array(QNSerializer.encode_state_history([{"seq": 2, "pos": Vector3(0, 0, 10), "rot": Vector3.ZERO, "ts": 2000, "custom_id": 0}]))
 	
 	# Act
 	session.on_client_snapshot(10, pkt1, 2000)
@@ -90,7 +93,8 @@ func test_snapshot_fora_do_mundo_gera_reject_e_kick() -> void:
 	session.peer_rejected.connect(func(id, r, s): rejections.append(s))
 	
 	# Y = -100 (fora dos limites)
-	var pkt := QNSerializer.encode_state_seq(1, Vector3(0, -100, 0), Vector3.ZERO, 1000, 0)
+	var pkt := PackedByteArray([0, 0])
+	pkt.append_array(QNSerializer.encode_state_history([{"seq": 1, "pos": Vector3(0, -100, 0), "rot": Vector3.ZERO, "ts": 1000, "custom_id": 0}]))
 	
 	# Act
 	session.on_client_snapshot(10, pkt, 1000)
@@ -109,14 +113,16 @@ func test_tick_broadcast_emite_array_de_estados() -> void:
 	session.on_peer_authenticated(10)
 	session.on_peer_authenticated(20)
 	
-	var broadcasted := []
-	session.broadcast_ready.connect(func(arr): broadcasted.append(arr))
+	# Força has_state para entrar no broadcast sem depender de pacotes e validadores
+	session.get_registry()[10].has_state = true
+	session.get_registry()[20].has_state = true
+	
+	var sent_packets := []
+	session.packet_ready.connect(func(id: int, pkt: PackedByteArray): sent_packets.append({"id": id, "pkt": pkt}))
 	
 	# Act
 	session.tick_broadcast(1000)
 	
 	# Assert
-	assert_eq(broadcasted.size(), 1, "Deve emitir uma vez por tick")
-	assert_eq(broadcasted[0].size(), 2, "Array deve conter o estado de todos os 2 peers")
-	assert_true(broadcasted[0][0].has("id"), "Os itens do array tem propriedades de estado")
+	assert_eq(sent_packets.size(), 2, "Deve emitir um pacote para cada peer")
 

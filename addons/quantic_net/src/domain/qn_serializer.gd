@@ -84,7 +84,7 @@ static func decode_state_history(b: PackedByteArray) -> Array:
 	var history := []
 	
 	for i in range(count):
-		if (buf.get_position() + 136) / 8 > b.size():
+		if (buf.get_position() + 133) / 8 > b.size():
 			break
 			
 		var d = {}
