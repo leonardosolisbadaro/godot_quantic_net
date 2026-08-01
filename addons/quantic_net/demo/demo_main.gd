@@ -75,8 +75,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _setup_server_props() -> void:
 	# Cria 100 entidades (props) que existem apenas no servidor
-	# e atualizam os clientes em frequências baixas. Forçará estouro de MTU.
-	var prop_profile = QuanticNet.NetProfile.preset_low_frequency() # 5Hz
+	# Perfil customizado para a Demo: 5Hz, prioridade 1.0, e Cull Radius de apenas 5 metros!
+	var prop_profile = QuanticNet.NetProfile.new(5.0, 1.0, 5.0) 
 	
 	for i in range(100):
 		var prop_id = 1000 + i
@@ -117,7 +117,14 @@ func _on_peer_joined(id: int) -> void:
 	var cube := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color.GREEN if id == QuanticNet.get_unique_id() else Color.RED
+	
+	if id == QuanticNet.get_unique_id():
+		mat.albedo_color = Color.GREEN # Jogador Local
+	elif id >= 1000:
+		mat.albedo_color = Color.RED # Props (NPCs) do Servidor
+	else:
+		mat.albedo_color = Color(1.0, 0.5, 0.0) # Laranja para Outros Clientes
+		
 	mesh.material = mat
 	cube.mesh = mesh
 	
@@ -129,6 +136,24 @@ func _on_peer_joined(id: int) -> void:
 	cube.name = "Cube_%d" % id
 	add_child(cube)
 	cubes[id] = cube
+	
+	if id == QuanticNet.get_unique_id():
+		# Adiciona uma área translúcida ao redor do jogador para visualizar o Cull Radius (5m)
+		var area = MeshInstance3D.new()
+		var area_mesh = CylinderMesh.new()
+		area_mesh.top_radius = 5.0
+		area_mesh.bottom_radius = 5.0
+		area_mesh.height = 0.05
+		
+		var area_mat = StandardMaterial3D.new()
+		area_mat.albedo_color = Color(0.0, 0.5, 1.0, 0.25) # Azul preenchido semi-transparente
+		area_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		area_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		
+		area.mesh = area_mesh
+		area.position.y = -0.45 # Fica quase rente ao chão
+		cube.add_child(area)
+		
 	print("[DEMO] peer %d ganhou cubo" % id)
 
 func _on_peer_left(id: int) -> void:
