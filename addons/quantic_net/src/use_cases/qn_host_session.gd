@@ -49,7 +49,8 @@ func on_peer_authenticated(peer_id: int) -> void:
 		"rot": Vector3.ZERO,
 		"seq": 0,
 		"ack": 0,
-		"profile": "MMO"
+		"profile": "MMO",
+		"has_state": false
 	}
 
 func on_peer_disconnected(peer_id: int) -> void:
@@ -91,10 +92,12 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 			_registry[peer_id].pos = result.pos
 			_registry[peer_id].rot = result.rot
 			_registry[peer_id].seq = seq
+			_registry[peer_id].has_state = true
 		elif action == "clamp":
 			_registry[peer_id].pos = result.pos
 			_registry[peer_id].rot = result.rot
 			_registry[peer_id].seq = seq
+			_registry[peer_id].has_state = true
 			var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, ts, SNAPBACK_REASON_CLAMP)
 			snapback_requested.emit(peer_id, snap)
 			break
@@ -108,7 +111,8 @@ func tick_broadcast(now: int) -> void:
 	var current_states := {}
 	for id in _registry:
 		var st = _registry[id]
-		current_states[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0}
+		if st.has_state:
+			current_states[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0, "ts": now}
 		
 	_world_history.push_front({"seq": _server_seq, "states": current_states})
 	if _world_history.size() > 60:

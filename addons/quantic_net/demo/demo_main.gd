@@ -87,7 +87,12 @@ func _on_peer_joined(id: int) -> void:
 	mat.albedo_color = Color.GREEN if id == QuanticNet.get_unique_id() else Color.RED
 	mesh.material = mat
 	cube.mesh = mesh
-	cube.position = Vector3(randf_range(-3, 3), 0.5, randf_range(-3, 3))
+	
+	if id == QuanticNet.get_unique_id() or QuanticNet.is_server():
+		cube.position = Vector3(randf_range(-3, 3), 0.5, randf_range(-3, 3))
+	else:
+		cube.visible = false
+		
 	cube.name = "Cube_%d" % id
 	add_child(cube)
 	cubes[id] = cube
@@ -142,6 +147,11 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, _custom: int) -> void:
 	# Cria cubo remoto caso o sinal de peer_connected nativo nao tenha notificado ainda.
 	if not QuanticNet.is_server() and not cubes.has(owner) and owner != QuanticNet.get_unique_id():
 		_on_peer_joined(owner)
+		
+	if not QuanticNet.is_server() and cubes.has(owner) and not cubes[owner].visible:
+		cubes[owner].position = pos
+		cubes[owner].rotation = rot
+		cubes[owner].visible = true
 		
 	# No servidor, atualiza cubos diretamente.
 	if QuanticNet.is_server() and cubes.has(owner):

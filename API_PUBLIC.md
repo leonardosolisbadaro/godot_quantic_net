@@ -203,3 +203,17 @@ O QuanticNet é projetado via **TDD (Test-Driven Development)**, e seu projeto c
 
 * **Regra de Ouro**: Instancie ou simule a camada QuanticNet sem subir um servidor de rede real, controlando as dependências.
 * **Referência Viva**: Para visualizar fluxos completos (como os estados mudam e afetam os peers), consulte os testes de integração do plugin: `tests/integration/test_quantic_net_api.gd` e `tests/integration/test_server_two_clients.gd`.
+
+---
+
+## Próximos Passos (Fase 9: API Futura)
+
+Conforme ditado pelo `ROADMAP_MMO.md`, a arquitetura do QuanticNet em breve expandirá a API pública para suportar **Combate** e **Física Avançada**. As seguintes assinaturas são um "spoiler" (contrato arquitetural) do que será introduzido:
+
+### `raycast_past(origin: Vector3, direction: Vector3, timestamp: int) -> Dictionary`
+
+**(Em Breve)** A essência do *Lag Compensation*. Permitirá que a lógica do seu jogo (no servidor) dispare um raycast contra o estado do mundo rebobinado para um momento exato no passado, validando se o tiro do cliente realmente acertou o alvo.
+
+### `submit_physics(linear_vel: Vector3, angular_vel: Vector3, sleeping: bool, dt: float) -> void`
+
+**(Em Breve)** Permitirá o envio de vetores de aceleração para entidades físicas, emulando Corpos Rígidos (RigidBodies) através da rede. O perfil atual de interpolação será expandido para `NetProfile.RIGID_BODY`, poupando banda para objetos em repouso.

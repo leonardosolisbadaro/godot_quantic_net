@@ -221,6 +221,8 @@ func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
 	_hook.send_custom(peer_id, body, CH_STATE, TRANSFER_UNRELIABLE)
 
 func _on_host_packet_ready(peer_id: int, data: PackedByteArray) -> void:
+	if not _hook.base.get_peers().has(peer_id):
+		return
 	var pkt := PackedByteArray([4]) # 4 = TYPE_SNAPSHOT
 	pkt.append_array(data)
 	_hook.send_custom(peer_id, pkt, CH_STATE, TRANSFER_UNRELIABLE)
