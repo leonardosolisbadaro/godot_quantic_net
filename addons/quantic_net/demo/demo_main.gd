@@ -38,6 +38,15 @@ var auto_time := 0.0
 var _last_rx := {}
 var _netem_active := false
 
+var _profiles = [
+	QuanticNet.NetProfile.new(20.0, 5.0, 50.0),  # 1: Padrão (20Hz)
+	QuanticNet.NetProfile.new(10.0, 3.0, 30.0),  # 2: Intermediário (10Hz)
+	QuanticNet.NetProfile.new(5.0, 1.0, 10.0),   # 3: Prop (5Hz)
+	QuanticNet.NetProfile.new(1.0, 0.5, 5.0),    # 4: Muito Lento (1Hz)
+	QuanticNet.NetProfile.new(60.0, 10.0, 100.0) # 5: Extremo (60Hz)
+]
+var _current_profile_idx = 0
+var _next_prop_id = 1000
 
 func _ready() -> void:
 	Engine.max_fps = 60
@@ -61,6 +70,10 @@ func _ready() -> void:
 		QuanticNet.set_netem_config(0.10, 150, 50) # 10% perda, 150ms atraso, 50ms jitter
 		print("[DEMO] Cliente conectando (netem=%s) [Pressione 'N' para alternar]" % ("true" if _netem_active else "false"))
 		_setup_client_scene()
+		
+	# A demo precisa do MESMO `MultiplayerAPI` que o QuanticNet instanciou,
+	# caso contrário, os @rpc nativos de `demo_main.gd` falharão silenciosamente.
+	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -75,22 +88,82 @@ func _unhandled_input(event: InputEvent) -> void:
 				Engine.max_fps = 0
 				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 			print("[DEMO] FPS Limitado: ", "SIM (60)" if Engine.max_fps == 60 else "NAO (Unlimited)")
+		elif event.keycode >= KEY_1 and event.keycode <= KEY_5:
+			_current_profile_idx = event.keycode - KEY_1
+			if QuanticNet.is_server():
+				_apply_profile.rpc_id(1, QuanticNet.get_unique_id(), _current_profile_idx)
+			else:
+				_apply_profile.rpc_id(1, QuanticNet.get_unique_id(), _current_profile_idx)
+		elif event.keycode == KEY_0:
+			_request_spawn_props.rpc_id(1, 100, true) # '0' reseta para 100
+		elif event.keycode == KEY_EQUAL:
+			_request_spawn_props.rpc_id(1, 5, false) # '+' (ou '=') adiciona 5
+		elif event.keycode == KEY_MINUS:
+			_request_remove_props.rpc_id(1, 5) # '-' remove 5
+		elif event.keycode == KEY_KP_ADD:
+			_request_spawn_props.rpc_id(1, 5, false) # numpad '+' adiciona 5
+		elif event.keycode == KEY_KP_SUBTRACT:
+			_request_remove_props.rpc_id(1, 5) # numpad '-' remove 5
 
-func _setup_server_props() -> void:
-	# Cria 5 entidades (props) para depuração intensiva
-	# Perfil customizado para a Demo: 5Hz, prioridade 1.0, e Cull Radius de 10 metros.
-	var prop_profile = QuanticNet.NetProfile.new(5.0, 1.0, 10.0) 
+@rpc("any_peer", "call_local")
+func _apply_profile(peer_id: int, profile_idx: int) -> void:
+	if QuanticNet.is_server():
+		if profile_idx >= 0 and profile_idx < _profiles.size():
+			QuanticNet.change_entity_profile(peer_id, _profiles[profile_idx])
+			print("[SERVER] Perfil alterado para o Peer %d -> Index: %d (%.0f HZ)" % [peer_id, profile_idx, _profiles[profile_idx].tick_rate_hz])
+
+@rpc("any_peer", "call_local")
+func _request_spawn_props(count: int, clear_previous: bool) -> void:
+	if not QuanticNet.is_server(): return
 	
-	for i in range(5):
-		var prop_id = 1000 + i
-		QuanticNet.register_entity(prop_id, false, true, prop_profile)
+	if clear_previous:
+		var to_remove = []
+		for id in cubes.keys():
+			if id >= 1000: to_remove.append(id)
+		for id in to_remove:
+			if QuanticNet.get_registry().has(id):
+				QuanticNet.get_registry().erase(id)
+			cubes[id].queue_free()
+			cubes.erase(id)
+		_next_prop_id = 1000
+		print("[SERVER] Limpando props anteriores...")
 		
-		# Distribui em círculo amplo para que a distância influencie no despache
-		var angle = (i / 5.0) * TAU
-		var radius = 10.0 + randf_range(-2, 2)
-		QuanticNet.get_registry()[prop_id].pos = Vector3(cos(angle) * radius, 0.5, sin(angle) * radius)
+	for i in range(count):
+		var prop_id = _next_prop_id
+		_next_prop_id += 1
+		QuanticNet.register_entity(prop_id, false, true, _profiles[2]) # Perfil Prop (5Hz)
+		
+		# Inicia exatamente na posição onde o physics_process vai atualizá-lo, evitando 'drifting' interpolado inicial.
+		QuanticNet.get_registry()[prop_id].pos = _calc_prop_pos(prop_id - 1000, auto_time)
 		
 		_on_peer_joined(prop_id)
+		
+	print("[SERVER] Spawnei %d props! Total atual de props: %d" % [count, _next_prop_id - 1000])
+
+@rpc("any_peer", "call_local")
+func _request_remove_props(count: int) -> void:
+	var removed = 0
+	var keys = cubes.keys()
+	keys.reverse() # Remove os últimos criados primeiro
+	for id in keys:
+		if id >= 1000:
+			if QuanticNet.is_server() and QuanticNet.get_registry().has(id):
+				QuanticNet.get_registry().erase(id)
+			cubes[id].queue_free()
+			cubes.erase(id)
+			removed += 1
+			if removed >= count:
+				break
+				
+	if QuanticNet.is_server():
+		print("[SERVER] Removidos %d props! Props restantes: %d" % [removed, _next_prop_id - 1000 - removed])
+		# Ajusta id proximo (opcional)
+		_next_prop_id -= removed
+		if _next_prop_id < 1000: _next_prop_id = 1000
+
+func _setup_server_props() -> void:
+	# Inicia com 5 props
+	_request_spawn_props(5, true)
 
 func _setup_client_scene() -> void:
 	var cam := Camera3D.new()
@@ -131,8 +204,12 @@ func _on_peer_joined(id: int) -> void:
 	mesh.material = mat
 	cube.mesh = mesh
 	
-	if id == QuanticNet.get_unique_id() or QuanticNet.is_server():
-		cube.position = Vector3(randf_range(-3, 3), 0.5, randf_range(-3, 3))
+	if id == QuanticNet.get_unique_id():
+		# O próprio jogador inicia em zero e será movido localmente.
+		cube.position = Vector3(0, 0.5, 0)
+	elif QuanticNet.is_server():
+		# O servidor mantém os props em posições determinísticas calculadas depois.
+		cube.position = Vector3(0, 0.5, 0)
 	else:
 		cube.visible = false
 		
@@ -171,25 +248,21 @@ func _physics_process(delta: float) -> void:
 		auto_move = not auto_move
 		print("[DEMO] Auto-move: ", auto_move)
 		
-	# Servidor: Atualiza fisicamente os 5 props (bots) em movimento contínuo
+	# Servidor: Atualiza fisicamente todos os props (bots) em movimento contínuo
 	if QuanticNet.is_server():
 		auto_time += delta
 		var reg = QuanticNet.get_registry()
 		var server_now = Time.get_ticks_msec()
 		
-		for i in range(5):
-			var prop_id = 1000 + i
-			if reg.has(prop_id):
+		for prop_id in reg.keys():
+			if prop_id >= 1000:
 				var p = reg[prop_id]
-				var angle = (i / 5.0) * TAU + auto_time * 0.2
-				var radius = 10.0 + sin(auto_time * 0.5 + i) * 2.0
-				p.pos.x = cos(angle) * radius
-				p.pos.z = sin(angle) * radius
+				p.pos = _calc_prop_pos(prop_id - 1000, auto_time)
 				p.ts = server_now
 				_on_state(prop_id, p.pos, p.rot, 0)
 			
 		return
-		
+
 	var my_id := QuanticNet.get_unique_id()
 	# Prediction local do cubo proprio (id do autoload).
 	if my_id > 1 and cubes.has(my_id):
@@ -209,8 +282,10 @@ func _physics_process(delta: float) -> void:
 				
 		cube.position.x += move.x * SPEED * delta
 		cube.position.z += move.y * SPEED * delta
-		# Envia estado para o servidor.
-		QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
+		
+		# Envia estado para o servidor se estivermos conectados.
+		if QuanticNet._state == QuanticNet.ConnectionState.CONNECTED:
+			QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
 
 func _process(delta: float) -> void:
 	if QuanticNet.is_server():
@@ -218,8 +293,12 @@ func _process(delta: float) -> void:
 		
 	var fps := Engine.get_frames_per_second()
 	var my_id = QuanticNet.get_unique_id()
-	var netem_str = "10%% perda, 150ms atraso, 50ms jitter" if _netem_active else "20 HZ"
-	DisplayServer.window_set_title("#%d | FPS %d | %s" % [my_id, fps, netem_str])
+	
+	var prof = _profiles[_current_profile_idx]
+	var prof_str = "%.0f HZ" % prof.tick_rate_hz
+	
+	var netem_str = "NETEM - LOSS 10%%, DELAY 150ms, JITTER 50ms" if _netem_active else "NETEM - OFF"
+	DisplayServer.window_set_title("#%d | FPS %d | %s | %s" % [my_id, fps, prof_str, netem_str])
 	
 	# Desabilita/Oculta cubos que não recebem atualizações há mais de 0.5 segundo (saíram do AoI)
 	var now = Time.get_ticks_msec()
@@ -269,6 +348,12 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, _custom: int) -> void:
 	if QuanticNet.is_server() and cubes.has(owner):
 		cubes[owner].position = pos
 		cubes[owner].rotation = rot
+
+func _calc_prop_pos(offset: int, time: float) -> Vector3:
+	# Golden angle (~2.3999 radianos) distribui radialmente sem depender do count.
+	var angle = offset * 2.4 + time * 0.2
+	var radius = 5.0 + (offset % 10) * 2.0 + sin(time * 0.5 + offset) * 2.0
+	return Vector3(cos(angle) * radius, 0.5, sin(angle) * radius)
 
 func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
 	print("[DEMO] snapback (seq=%d reason=%d replay=%d)" % [seq, reason, replay.size()])

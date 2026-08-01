@@ -44,7 +44,9 @@ O QuanticNet permite que diferentes entidades sejam atualizadas em frequências 
 A classe de domínio `QuanticNet.NetProfile` (exposta através da constante `QuanticNet.NetProfile`) dita a política de envio da entidade.
 
 ### Presets de Fábrica
+
 Você pode criar perfis personalizados instanciando `QuanticNet.NetProfile.new(tick_rate_hz, base_priority, cull_radius)`, mas recomendamos usar os *presets* padrão:
+
 * `QuanticNet.NetProfile.preset_high_frequency()`: 60Hz. Uso: Jogadores e mecânicas competitivas.
 * `QuanticNet.NetProfile.preset_standard()`: 20Hz. Uso: Regime padrão de MMO.
 * `QuanticNet.NetProfile.preset_low_frequency()`: 5Hz. Uso: NPCs periféricos, "Props" movendo lentamente.
