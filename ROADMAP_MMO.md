@@ -54,23 +54,31 @@ O movimento do próprio jogador (`Client-Side Prediction`) já está isolado, ma
 - **Fragmentation:** Snapshots de áreas superpovoadas ultrapassarão o MTU (1400 bytes). Se a `ENet` se provar insuficiente ou gargalar no *overhead*, uma lógica de re-montagem de *Chunks* confiáveis sobre UDP (Fragmentação) será delegada ao Domínio.
 - **Congestion Avoidance:** O servidor monitorará ativamente a perda de pacotes e o RTT (`QNLossTracker`) de cada conexão, estrangulando dinamicamente o tráfego enviado (reduzindo a taxa de atualização ou encolhendo a *Area of Interest*) quando a saúde da rota se deteriorar.
 
-### 8. Lag Compensation (Server-Side Rewind / Hit Registration)
+### 8. NetProfile e Tick Híbrido (Hybrid Ticking)
+
+Para escalar o limite de entidades no servidor, o sistema não pode enviar tudo na mesma frequência. Entidades passarão a ter um `NetProfile` que define a taxa de atualização (ex: Jogador a 20Hz, NPCs menores a 5Hz, Props estáticos "On-Demand"). O despachante do servidor será escalonado por perfis.
+
+### 9. Dynamic Jitter Buffer e Error Blending
+
+Um buffer rígido de 120ms sucumbe a perdas drásticas (10% de packet loss / alto jitter). A evolução arquitetural exige um *Dynamic Jitter Buffer*, onde o tempo de retenção do passado (`RENDER_DELAY_MS`) incha e desincha em tempo real acompanhando a variância do ping do cliente. Além disso, o fim de uma extrapolação utilizará *Error Blending* (decaimento exponencial) para mesclar a posição sem sobressaltos.
+
+### 10. Lag Compensation (Server-Side Rewind / Hit Registration)
 
 Para combates competitivos ou MMOs de ação (hitscan, projéteis), o servidor deve manter um histórico rigoroso de *hitboxes* de todas as entidades. Ao processar um tiro do cliente, o servidor rebobina o mundo para o momento exato em que o cliente efetuou o disparo, realiza o teste de colisão e, em seguida, avança o estado de volta ao presente.
 
-### 9. Extrapolação e Dead Reckoning (Sobrevivência à Latência)
+### 11. Extrapolação e Dead Reckoning (Sobrevivência à Latência)
 
-Quando pacotes são perdidos consecutivamente e o *Jitter Buffer* do cliente esvazia (falta de *snapshots* futuros), em vez de congelar a entidade, o motor de rede deverá calcular o vetor de velocidade instantânea e *extrapolar* (prever) a continuidade do movimento. Isso mantém a ilusão de fluidez até que a conexão se recupere.
+Quando pacotes são perdidos consecutivamente e o *Jitter Buffer* do cliente esvazia (falta de *snapshots* futuros), em vez de congelar a entidade, o motor de rede calcula o vetor de velocidade instantânea e *extrapola* (prevê) a continuidade do movimento. Isso mantém a ilusão de fluidez até que a conexão se recupere.
 
-### 10. Gerenciamento Avançado de Banda (Priority Accumulator)
+### 12. Gerenciamento Avançado de Banda (Priority Accumulator)
 
-O `QNSpatialGrid` resolve quem está próximo, mas o limite físico da rede (MTU ~1400 bytes) impõe contenções rigorosas. Utilizaremos um *Priority Accumulator*: entidades ganham pontuação de prioridade com base na distância e no alvo do jogador. Se uma entidade não couber no pacote atual, ela não é enviada, mas acumula "débito" de prioridade até que seja obrigatoriamente incluída no próximo pacote disponível.
+O `QNSpatialGrid` resolve quem está próximo, mas o limite físico da rede (MTU ~1400 bytes) impõe contenções rigorosas. Utilizaremos um *Priority Accumulator*: entidades ganham pontuação de prioridade com base na distância, no alvo do jogador e no `NetProfile`. Se uma entidade não couber no pacote atual, ela não é enviada, mas acumula "débito" de prioridade até que seja obrigatoriamente incluída no próximo pacote disponível.
 
-### 11. Networked Physics (Sincronização de Corpos Rígidos)
+### 13. Networked Physics (Sincronização de Corpos Rígidos)
 
 A evolução do `NetProfile` englobará estados físicos puros (Rigid Bodies). Além de cinemática básica (posição e rotação), a rede sincronizará vetores de Força (Velocidade Linear e Angular) e detecção otimizada de repouso (`Sleep/Awake`) para economizar largura de banda na simulação de ambientes com alta interação física.
 
-### 12. Automação e Infraestrutura como Processo (Day 1)
+### 14. Automação e Infraestrutura como Processo (Day 1)
 
 Scripts para levantar cenários de teste rapidamente serão nativos do ecossistema:
 

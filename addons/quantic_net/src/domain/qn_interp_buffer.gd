@@ -16,12 +16,25 @@
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 
-
-const RENDER_DELAY_MS := 120
+const BASE_DELAY_MS := 60
+const MAX_DELAY_MS := 250
 const MAX_SNAPSHOTS := 16
 const EXTRAPOLATION_LIMIT_MS := 250
+const ERROR_BLEND_SPEED := 5.0 # Fator de decaimento por segundo
 
+var render_delay_ms: int = 60
 var snaps: Array[Dictionary] = []
+
+var _last_sample_now: int = 0
+var _last_sample_pos: Vector3 = Vector3.ZERO
+var _last_sample_rot: Vector3 = Vector3.ZERO
+var _was_extrapolating: bool = false
+var _error_pos: Vector3 = Vector3.ZERO
+var _error_rot: Vector3 = Vector3.ZERO
+
+func update_jitter(jitter_ms: float) -> void:
+	render_delay_ms = clampi(BASE_DELAY_MS + int(jitter_ms * 2.0), BASE_DELAY_MS, MAX_DELAY_MS)
+
 
 func push(ts: int, pos: Vector3, rot: Vector3) -> void:
 	if not snaps.is_empty() and ts <= snaps[-1]["ts"]:
@@ -34,31 +47,70 @@ func sample(now: int) -> Dictionary:
 	if snaps.is_empty():
 		return {}
 		
-	var render_ts: int = now - RENDER_DELAY_MS
+	var render_ts: int = now - render_delay_ms
+	var dt: float = 0.0 if _last_sample_now == 0 else float(now - _last_sample_now) / 1000.0
+	_last_sample_now = now
+	
+	var out_pos := Vector3.ZERO
+	var out_rot := Vector3.ZERO
+	var is_extrapolating := false
+	var found := false
 	
 	if render_ts <= snaps[0]["ts"]:
-		return {"pos": snaps[0]["pos"], "rot": snaps[0]["rot"]}
-		
-	for i: int in range(snaps.size() - 1):
-		var a: Dictionary = snaps[i]
-		var b: Dictionary = snaps[i + 1]
-		if render_ts >= a["ts"] and render_ts <= b["ts"]:
-			var span: float = float(b["ts"] - a["ts"])
-			var t: float = 0.0 if span <= 0.0 else float(render_ts - a["ts"]) / span
-			return {"pos": a["pos"].lerp(b["pos"], t), "rot": _lerp_angle_vec(a["rot"], b["rot"], t)}
-			
-	if snaps.size() >= 2:
+		out_pos = snaps[0]["pos"]
+		out_rot = snaps[0]["rot"]
+		found = true
+	else:
+		for i: int in range(snaps.size() - 1):
+			var a: Dictionary = snaps[i]
+			var b: Dictionary = snaps[i + 1]
+			if render_ts >= a["ts"] and render_ts <= b["ts"]:
+				var span: float = float(b["ts"] - a["ts"])
+				var t: float = 0.0 if span <= 0.0 else float(render_ts - a["ts"]) / span
+				out_pos = a["pos"].lerp(b["pos"], t)
+				out_rot = _lerp_angle_vec(a["rot"], b["rot"], t)
+				found = true
+				break
+				
+	if not found and snaps.size() >= 2:
 		var a: Dictionary = snaps[-2]
 		var b: Dictionary = snaps[-1]
 		var span: float = float(b["ts"] - a["ts"])
 		if span > 0.0:
-			# Correção de TDD: Extrapolar usando render_ts no lugar do now,
-			# pois a "cabeça de leitura" temporal (playhead) reside no render_ts.
 			var over: int = mini(render_ts - b["ts"], EXTRAPOLATION_LIMIT_MS)
 			var t: float = 1.0 + float(over) / span
-			return {"pos": a["pos"].lerp(b["pos"], t), "rot": _lerp_angle_vec(a["rot"], b["rot"], t)}
+			out_pos = a["pos"].lerp(b["pos"], t)
+			out_rot = _lerp_angle_vec(a["rot"], b["rot"], t)
+			is_extrapolating = true
+			found = true
 			
-	return {"pos": snaps[-1]["pos"], "rot": snaps[-1]["rot"]}
+	if not found:
+		out_pos = snaps[-1]["pos"]
+		out_rot = snaps[-1]["rot"]
+		
+	# MÁQUINA DE ESTADOS DO ERROR BLENDING
+	if _was_extrapolating and not is_extrapolating:
+		# Acabou de retornar da extrapolação! Captura o erro.
+		_error_pos = _last_sample_pos - out_pos
+		# Simplificacao do erro rotacional via euler pra demo
+		_error_rot = _last_sample_rot - out_rot
+		
+	if _error_pos.length_squared() > 0.0001:
+		_error_pos = _error_pos.lerp(Vector3.ZERO, minf(1.0, dt * ERROR_BLEND_SPEED))
+		_error_rot = _error_rot.lerp(Vector3.ZERO, minf(1.0, dt * ERROR_BLEND_SPEED))
+	else:
+		_error_pos = Vector3.ZERO
+		_error_rot = Vector3.ZERO
+		
+	_was_extrapolating = is_extrapolating
+	
+	out_pos += _error_pos
+	out_rot += _error_rot
+	
+	_last_sample_pos = out_pos
+	_last_sample_rot = out_rot
+	
+	return {"pos": out_pos, "rot": out_rot}
 
 static func _lerp_angle_vec(a: Vector3, b: Vector3, t: float) -> Vector3:
 	return Vector3(

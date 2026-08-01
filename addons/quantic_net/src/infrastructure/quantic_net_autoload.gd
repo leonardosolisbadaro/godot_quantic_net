@@ -261,6 +261,14 @@ func kick(peer_id: int) -> void:
 func toggle_netem() -> void:
 	if _wire:
 		_wire.netem_enabled = not _wire.netem_enabled
+		print("[QuanticNet] Netem: ", "ON" if _wire.netem_enabled else "OFF")
+
+func set_netem_config(loss_pct: float, latency_ms: int, jitter_ms: int, dup_pct: float = 0.0) -> void:
+	if _wire:
+		_wire.netem_loss_pct = loss_pct
+		_wire.netem_latency_ms = latency_ms
+		_wire.netem_jitter_ms = jitter_ms
+		_wire.netem_dup_pct = dup_pct
 
 func _exit_tree() -> void:
 	if get_tree().has_method("get_multiplayer") and get_tree().get_multiplayer(self.get_path()) == _hook:

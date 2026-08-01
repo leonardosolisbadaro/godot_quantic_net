@@ -37,7 +37,7 @@ func test_interpolacao_linear_entre_snapshots() -> void:
 	
 	# Act (Ação): Requisita amostragem exatamente no meio lógico entre os dois snapshots,
 	# compensando o RENDER_DELAY interno (que joga o tempo pro passado)
-	var sample_time: int = t + 50 + QNInterpBuffer.RENDER_DELAY_MS
+	var sample_time: int = t + 50 + buf.render_delay_ms
 	var s: Dictionary = buf.sample(sample_time)
 	
 	# Assert (Verificação): O resultado da posição deve ser 0.5 no eixo X (fator t=0.5)
@@ -51,7 +51,7 @@ func test_rotacao_usa_caminho_curto_do_angulo() -> void:
 	buf.push(t + 100, Vector3.ZERO, Vector3(0.0, TAU - 0.1, 0.0))
 	
 	# Act (Ação): Amostra o exato meio termo
-	var s: Dictionary = buf.sample(t + 50 + QNInterpBuffer.RENDER_DELAY_MS)
+	var s: Dictionary = buf.sample(t + 50 + buf.render_delay_ms)
 	
 	# Assert (Verificação): O angulo nao pode girar pelo caminho longo (quase TAU/2), e sim pelo mais curto ao redor do zero
 	assert_true(absf(s.get("rot", Vector3.ZERO).y) < 0.3, "Rotacao interpolada deve utilizar o caminho mais curto no circulo")
@@ -78,7 +78,7 @@ func test_gap_longo_extrapola_limitado() -> void:
 	
 	# Act (Ação): O playhead (render_ts) ultrapassa o último snapshot em 195ms.
 	var target_render_ts := t + 50 + 195
-	var now := target_render_ts + QNInterpBuffer.RENDER_DELAY_MS
+	var now := target_render_ts + buf.render_delay_ms
 	var s: Dictionary = buf.sample(now)
 	
 	# Assert (Verificação): 195ms < 250ms (limite de extrapolação). O alvo prevê velocidade constante de 0.0015u/ms.
@@ -94,9 +94,60 @@ func test_extrapolacao_trava_no_limite_de_seguranca() -> void:
 	
 	# Act (Ação): Playhead (render_ts) ultrapassa 500ms do último pacote
 	var target_render_ts := t + 50 + 500
-	var now := target_render_ts + QNInterpBuffer.RENDER_DELAY_MS
+	var now := target_render_ts + buf.render_delay_ms
 	var s: Dictionary = buf.sample(now)
 	
 	# Assert (Verificação): A extrapolação deve travar no hard limit da engine (250ms).
 	# Total = 0.075 + (250 * 0.0015) = 0.450
 	assert_almost_eq(s.get("pos", Vector3.ZERO).x, 0.450, 0.001, "Extrapolacao alem de 250ms deve ser clampada duramente (hard-stop) para evitar dead-reckoning voador")
+
+func test_dynamic_jitter_expands_delay() -> void:
+	# Arrange (Preparação): Instancia o buffer
+	var buf := QNInterpBuffer.new()
+	assert_eq(buf.render_delay_ms, 60, "Buffer inicializa com delay base otimista de 60ms")
+	
+	# Act (Ação): Reporta um jitter agressivo (ex: 80ms de variancia)
+	# Formula: BASE (60) + (80 * 2.0) = 220ms
+	buf.update_jitter(80.0)
+	
+	# Assert (Verificação): O delay de renderização deve dilatar para proteger contra o jitter
+	assert_eq(buf.render_delay_ms, 220, "O delay deve dilatar proporcionalmente ao Jitter recebido")
+	
+	# Act 2 (Ação): Jitter catastrofico de 500ms
+	buf.update_jitter(500.0)
+	
+	# Assert 2 (Verificação): Não pode dilatar infinitamente
+	assert_eq(buf.render_delay_ms, 250, "O delay nao pode ultrapassar o teto maximo de seguranca de 250ms")
+
+func test_error_blending_amortece_pulo_visual() -> void:
+	# Arrange (Preparação): Um buffer simulando Extrapolação seguida de Interpolação
+	var buf := QNInterpBuffer.new()
+	var t := 10000
+	buf.push(t, Vector3.ZERO, Vector3.ZERO)
+	buf.push(t + 50, Vector3(0.075, 0.0, 0.0), Vector3.ZERO)
+	
+	# Act 1 (Ação): Dispara extrapolação forçada (Renderizamos +100ms ALÉM do último pacote)
+	var extrapolate_now := t + 50 + 100 + buf.render_delay_ms
+	var ext_s: Dictionary = buf.sample(extrapolate_now)
+	# Velocidade era de 0.0015u/ms. Extrapolou 100ms -> 0.075 + 0.150 = 0.225
+	assert_almost_eq(ext_s.get("pos", Vector3.ZERO).x, 0.225, 0.001, "Pre-condicao: Ocorreu extrapolacao")
+	
+	# Act 2 (Ação): Finalmente chega o pacote verdadeiro (o pacote real não andou tanto)
+	buf.push(t + 100, Vector3(0.1, 0.0, 0.0), Vector3.ZERO) # Pacote diz que ele só estava em 0.1
+	buf.push(t + 150, Vector3(0.1, 0.0, 0.0), Vector3.ZERO) # Outro pacote futuro para forçar interpolação real
+	
+	# Amostra no exato momento que interpolaria o pacote de t+100 (now_2 = t+100 + render_delay)
+	# Assumindo que a renderizacao ta 30ms atrasada (um frame a 30fps)
+	var now_2 := t + 100 + buf.render_delay_ms + 30
+	var interp_s: Dictionary = buf.sample(now_2)
+	
+	# A posicao real de interpolação em t+100 + 30 (onde a diferença entre t+100 e t+150 é 0, ou seja, estático no 0.1)
+	# Então a pos real seria 0.1.
+	# MAS temos Error Blending! 
+	# Erro anterior: _last_sample_pos (0.225) - _true_pos (0.1) = 0.125
+	# dt = 30ms (0.03 seg).
+	# A pos retornada deve ser a _true_pos (0.1) + _error_pos atenuado.
+	# Para não engessar o teste em um float específico (por conta do BLEND_SPEED), apenas verificamos que
+	# a pos > 0.1 e < 0.225 (ou seja, ele misturou suavemente no meio do caminho).
+	assert_true(interp_s.get("pos", Vector3.ZERO).x > 0.101, "Error Blending deve evitar que a posicao real (0.1) seja aplicada bruscamente")
+	assert_true(interp_s.get("pos", Vector3.ZERO).x < 0.224, "Error Blending deve decair o erro antigo")

@@ -21,6 +21,7 @@ const EMA_ALPHA := 0.2
 
 var offset_ms: float = 0.0
 var rtt_ms: float = 0.0
+var jitter_ms: float = 0.0
 var _samples: Array[float] = []
 var _initialized := false
 
@@ -38,8 +39,11 @@ func on_pong(client_sent_time: int, server_time: int, client_now: int) -> void:
 	if not _initialized:
 		offset_ms = best
 		rtt_ms = float(rtt)
+		jitter_ms = 0.0
 		_initialized = true
 	else:
+		var current_jitter: float = absf(float(rtt) - rtt_ms)
+		jitter_ms = lerpf(jitter_ms, current_jitter, EMA_ALPHA)
 		offset_ms = lerpf(offset_ms, best, EMA_ALPHA)
 		rtt_ms = lerpf(rtt_ms, float(rtt), EMA_ALPHA)
 

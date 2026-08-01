@@ -246,27 +246,32 @@ Nesta fase focaremos na transição arquitetural para suportar o roadmap MMO, fo
 - [x] Implementar a troca de ACKs: Cliente anexa o último *seq* recebido nos pacotes de input, e o Host armazena um histórico circular para gerar o Delta a partir desse *seq*.
 - [x] Integrar no `QNClientSession` e `QNHostSession` de forma que a demonstração não quebre, utilizando *Fallback* para enviar I-Frames (estados absolutos) quando não há ACK sincronizado.
 
-#### PR 15 — Priority Accumulator e Limite de MTU
+#### PR 15 — Dynamic Jitter Buffer e Error Blending [x]
 
-- [ ] Implementar sistema de pontuação (Priority Accumulator) no despache do servidor para ranquear entidades de acordo com a proximidade ou mira do cliente.
+- [x] Modificar o `QNInterpBuffer` para que `RENDER_DELAY_MS` seja dinâmico, baseado na variância real do RTT (ping jitter) monitorado pelo Cliente.
+- [x] Implementar decaimento exponencial (Error Blending) na extrapolação. Quando o pacote correto chega após um Jitter Spike, não realizar um hard-snap, mas diluir o erro de posição/rotação ao longo de múltiplos frames interpolados (reduzir engasgos visuais agressivos).
+
+#### PR 16 — NetProfile e Tick Híbrido (Hybrid Ticking)
+
+- [ ] Modelar o `NetProfile` nativo no núcleo, categorizando entidades (ex: `PLAYER`, `NPC_MINOR`, `STATIC_PROP`).
+- [ ] Alterar o loop do `QNHostSession.tick_broadcast` para escalonar envios. Entidades não devem atualizar na mesma frequência obrigatoriamente (ex: Jogadores em 20Hz, NPCs de fundo em 5Hz).
+
+#### PR 17 — Priority Accumulator e Limite de MTU
+
+- [ ] Implementar sistema de pontuação (Priority Accumulator) no despache do servidor para ranquear entidades de acordo com a proximidade, mira do cliente e `NetProfile`.
 - [ ] Restringir pacotes de `TYPE_SNAPSHOT` para respeitar o limite máximo do MTU (ex: 1200 bytes de payload).
 - [ ] Entidades rejeitadas por falta de espaço no MTU ganham "débito de prioridade" para forçar envio nos próximos ticks.
-
-#### PR 16 — Extrapolação no Jitter Buffer (Dead Reckoning)
-
-- [ ] Alterar o `QNInterpBuffer` para calcular a velocidade instantânea (vetor direcional) com base nos últimos 2-3 snapshots recebidos.
-- [ ] Implementar fallback visual: quando o buffer esvaziar (devido a perda sequencial severa), extrapolar o movimento da entidade baseando-se na última velocidade calculada ao invés de paralisá-la.
 
 ### Fase 9: Combate e Simulação Física Avançada
 
 Uma transição para mecânicas de ação, hit-registration e física sincronizada (Networked Physics).
 
-#### PR 17 — Lag Compensation (Server-Side Rewind)
+#### PR 18 — Lag Compensation (Server-Side Rewind)
 
 - [ ] Implementar buffer histórico global no Servidor (`QNWorldHistoryBuffer`) que armazena as *hitboxes* e posições exatas de todas as entidades dos últimos 1-2 segundos.
 - [ ] Criar API exposta para o usuário testar colisões/raycasts no passado autoritativo (ex: `QuanticNet.raycast_past(origin, direction, timestamp)`), compensando o RTT do atirador.
 
-#### PR 18 — Networked Physics (RigidBody Sync)
+#### PR 19 — Networked Physics (RigidBody Sync)
 
 - [ ] Implementar perfil de simulação física rigorosa (`NetProfile.RIGID_BODY`).
 - [ ] Expandir o protocolo de sincronização do Domínio para incluir *Linear Velocity*, *Angular Velocity* e detecção binária de repouso (Sleeping states) para otimização extrema de banda.

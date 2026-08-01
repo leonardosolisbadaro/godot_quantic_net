@@ -31,15 +31,15 @@ signal remote_state_received(owner: int, pos: Vector3, rot: Vector3, custom_id: 
 signal snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array)
 
 const CH_STATE := 1
-const SEND_INTERVAL := 0.05  # 20 Hz (regime MMO; o COMPETITIVE e' Marco D do roadmap)
-const TRANSFER_UNRELIABLE := 2  # MultiplayerPeer.TRANSFER_MODE_UNRELIABLE (int, sem enum na camada)
+const SEND_INTERVAL := 0.05 # 20 Hz (regime MMO; o COMPETITIVE e' Marco D do roadmap)
+const TRANSFER_UNRELIABLE := 2 # MultiplayerPeer.TRANSFER_MODE_UNRELIABLE (int, sem enum na camada)
 
 const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
 
-var _serializer  # QNSerializer (static)
-var _clock       # QNClockSync
-var _input_buf   # QNInputBuffer
-var _interp := {}   # owner -> QNInterpBuffer
+var _serializer # QNSerializer (static)
+var _clock # QNClockSync
+var _input_buf # QNInputBuffer
+var _interp := {} # owner -> QNInterpBuffer
 var _trackers := {} # owner -> QNLossTracker
 var _state_history := []
 var _world_history := [] # {seq: int, states: Dictionary}
@@ -90,7 +90,7 @@ func submit_state(pos: Vector3, rot: Vector3, custom_id: int, dt: float, now: in
 	_send_accum = 0.0
 	_send_seq = (_send_seq + 1) & 0xFFFF
 	_input_buf.record(_send_seq, Vector2.ZERO, 0.0, dt, now)
-	var state_dict = {"seq": _send_seq, "pos": pos, "rot": rot, "ts": now, "custom_id": custom_id}
+	var state_dict = {"seq": _send_seq, "pos": pos, "rot": rot, "ts": server_time(now), "custom_id": custom_id}
 	_state_history.push_front(state_dict)
 	if _state_history.size() > 3:
 		_state_history.pop_back()
@@ -143,6 +143,11 @@ func handle_packet(data: PackedByteArray, now: int) -> void:
 		var sent_ts: int = _input_buf.get_sent_ts(d["seq"])
 		_clock.on_pong(sent_ts, d["ts"], now)
 		_input_buf.drain_after(d["seq"])
+		
+		var current_jitter: float = _clock.jitter_ms
+		for owner_id in _interp.keys():
+			_interp[owner_id].update_jitter(current_jitter)
+			
 		pong_received.emit(_clock.rtt_ms, _clock.offset_ms)
 		return
 	_interp[owner].push(d["ts"], d["pos"], d["rot"])
@@ -170,7 +175,15 @@ func _handle_snapback(body: PackedByteArray) -> void:
 func _handle_snapshot(body: PackedByteArray, now: int) -> void:
 	var buf = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd").new(body)
 	var server_seq = buf.read_bits(16)
+	
+	var diff = server_seq - _last_server_seq
+	if diff < -32768: diff += 65536
+	elif diff > 32768: diff -= 65536
+	if _last_server_seq != 0 and diff <= 0:
+		return # Previne pacotes atrasados/duplicados de corromperem o histórico de ACKs
+		
 	var ack = buf.read_bits(16)
+	var server_now = buf.read_bits(32)
 	var num_entities = buf.read_bits(8)
 	
 	var base_states = {}
@@ -197,8 +210,13 @@ func _handle_snapshot(body: PackedByteArray, now: int) -> void:
 		
 		if owner == _my_id:
 			var sent_ts: int = _input_buf.get_sent_ts(d["seq"])
-			_clock.on_pong(sent_ts, d["ts"], now)
+			_clock.on_pong(sent_ts, server_now, now)
 			_input_buf.drain_after(d["seq"])
+			
+			var current_jitter: float = _clock.jitter_ms
+			for owner_id in _interp.keys():
+				_interp[owner_id].update_jitter(current_jitter)
+				
 			pong_received.emit(_clock.rtt_ms, _clock.offset_ms)
 		else:
 			_interp[owner].push(d["ts"], d["pos"], d["rot"])
@@ -209,4 +227,3 @@ func _handle_snapshot(body: PackedByteArray, now: int) -> void:
 		_world_history.pop_back()
 		
 	_last_server_seq = server_seq
-

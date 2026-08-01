@@ -48,6 +48,7 @@ func on_peer_authenticated(peer_id: int) -> void:
 		"pos": Vector3.ZERO,
 		"rot": Vector3.ZERO,
 		"seq": 0,
+		"ts": 0,
 		"ack": 0,
 		"profile": "MMO",
 		"has_state": false
@@ -75,7 +76,7 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 		var pos: Vector3 = state.get("pos", Vector3.ZERO)
 		var rot: Vector3 = state.get("rot", Vector3.ZERO)
 		var seq: int = state.get("seq", 0)
-		var ts: int = state.get("ts", now)
+		var client_ts: int = state.get("ts", 0)
 		
 		var last_seq = _registry[peer_id].seq
 		var diff = seq - last_seq
@@ -85,24 +86,26 @@ func on_client_snapshot(peer_id: int, data: PackedByteArray, now: int) -> void:
 		if last_seq != 0 and diff <= 0:
 			continue
 			
-		var result: Dictionary = validator.validate(peer_id, pos, rot, ts)
+		var result: Dictionary = validator.validate(peer_id, pos, rot, client_ts)
 		var action: String = result.get("action", "")
 		
 		if action == "accept":
 			_registry[peer_id].pos = result.pos
 			_registry[peer_id].rot = result.rot
 			_registry[peer_id].seq = seq
+			_registry[peer_id].ts = client_ts
 			_registry[peer_id].has_state = true
 		elif action == "clamp":
 			_registry[peer_id].pos = result.pos
 			_registry[peer_id].rot = result.rot
 			_registry[peer_id].seq = seq
+			_registry[peer_id].ts = client_ts
 			_registry[peer_id].has_state = true
-			var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, ts, SNAPBACK_REASON_CLAMP)
+			var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, client_ts, SNAPBACK_REASON_CLAMP)
 			snapback_requested.emit(peer_id, snap)
 			break
 		elif action == "reject":
-			var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, ts, SNAPBACK_REASON_REJECT)
+			var snap = QNSerializer.encode_snapback(seq, result.pos, result.rot, client_ts, SNAPBACK_REASON_REJECT)
 			snapback_requested.emit(peer_id, snap)
 			break
 
@@ -112,7 +115,7 @@ func tick_broadcast(now: int) -> void:
 	for id in _registry:
 		var st = _registry[id]
 		if st.has_state:
-			current_states[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0, "ts": now}
+			current_states[id] = {"id": id, "seq": st.seq, "pos": st.pos, "rot": st.rot, "custom_id": 0, "ts": st.ts}
 		
 	_world_history.push_front({"seq": _server_seq, "states": current_states})
 	if _world_history.size() > 60:
@@ -129,6 +132,7 @@ func tick_broadcast(now: int) -> void:
 		var buf = QNBitBuffer.new()
 		buf.write_bits(_server_seq, 16)
 		buf.write_bits(ack, 16)
+		buf.write_bits(now & 0xFFFFFFFF, 32)
 		buf.write_bits(current_states.size(), 8)
 		
 		for entity_id in current_states:

@@ -38,6 +38,8 @@ var auto_time := 0.0
 
 
 func _ready() -> void:
+	Engine.max_fps = 60
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
 	# Conecta sinais ANTES de host/join.
 	QuanticNet.peer_joined.connect(_on_peer_joined)
 	QuanticNet.peer_left.connect(_on_peer_left)
@@ -53,8 +55,22 @@ func _ready() -> void:
 	else:
 		var netem := "--netem" in args
 		QuanticNet.join("127.0.0.1", PORT, SECRET, netem)
-		print("[DEMO] Cliente conectando (netem=%s)" % ("true" if netem else "false"))
+		QuanticNet.set_netem_config(0.10, 150, 50) # 10% perda, 150ms atraso, 50ms jitter
+		print("[DEMO] Cliente conectando (netem=%s) [Pressione 'N' para alternar]" % ("true" if netem else "false"))
 		_setup_client_scene()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_N:
+			QuanticNet.toggle_netem()
+		elif event.keycode == KEY_L:
+			if Engine.max_fps == 0:
+				Engine.max_fps = 60
+				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
+			else:
+				Engine.max_fps = 0
+				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+			print("[DEMO] FPS Limitado: ", "SIM (60)" if Engine.max_fps == 60 else "NAO (Unlimited)")
 
 func _setup_client_scene() -> void:
 	var cam := Camera3D.new()
@@ -134,7 +150,17 @@ func _physics_process(delta: float) -> void:
 		cube.position.z += move.y * SPEED * delta
 		# Envia estado para o servidor.
 		QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
-	# Aplica estado interpolado de peers remotos.
+
+func _process(delta: float) -> void:
+	if QuanticNet.is_server():
+		return
+		
+	var fps := Engine.get_frames_per_second()
+	var mode := "LOCKED 60" if Engine.max_fps == 60 else "UNLIMITED"
+	DisplayServer.window_set_title("QuanticNet Client - %d FPS [%s]" % [fps, mode])
+
+	# Aplica estado interpolado de peers remotos puramente no frame visual (desacoplado de fisica).
+	var my_id := QuanticNet.get_unique_id()
 	for id in cubes.keys():
 		if id == my_id:
 			continue
