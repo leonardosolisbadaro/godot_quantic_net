@@ -21,6 +21,7 @@ O motor de rede atualmente suporta o "Estado da Arte" do netcode de ação moder
 - **Client-Side Prediction & Server Reconciliation (Snapback)**: O jogador local move-se instantaneamente, e o servidor autoritativo emite correções apenas quando fraudes ou dessincronizações severas são detectadas.
 - **Snapshot Interpolation (Jitter Buffer)**: Mitiga a percepção de perda de pacotes e flutuações de latência interpolando fluidamente os avatares remotos no passado.
 - **Delta Compression & ACKs**: O servidor quantiza a banda de rede enviando apenas P-Frames (Deltas) ao invés de I-Frames integrais, reduzindo drasticamente o tamanho do payload.
+- **Priority Accumulator & Hybrid Ticking**: Gestão inteligente de banda limitando o pacote pelo MTU (Maximum Transmission Unit) da rede, controlando o Tick Rate de cada entidade com base em sua prioridade e distância (Spatial Culling).
 - **DTLS Auth & Anti-Cheat**: Conexões seguras e validação rígida de distâncias e velocidades de todos os clientes no lado servidor.
 - **Simulador Netem Integrado**: Injeção proposital de latência, jitter e packet loss na própria engine para testes em ambiente agressivo.
 
@@ -28,10 +29,9 @@ O motor de rede atualmente suporta o "Estado da Arte" do netcode de ação moder
 
 Inspirado nas teses absolutas de Glenn Fiedler (Gaffer on Games) e Gabriel Gambetta, o QuanticNet está ativamente em transição para sua **Fase 9**, que contemplará:
 
-1. **Priority Accumulator (Bandwidth Throttling)**: Respeito máximo ao limite do MTU da internet filtrando pacotes por distância e mira, garantindo escalabilidade para milhares de entidades.
-2. **Lag Compensation (Server-Side Rewind)**: Histórico global no servidor permitindo colisões precisas (Hit Registration) em jogos de tiro, re-simulando o passado para compensar a latência do atirador.
-3. **Dead Reckoning & Extrapolação**: Algoritmos de sobrevivência à perda aguda de rede, prevendo continuidades direcionais para manter a fluidez quando os pacotes pararem de chegar.
-4. **Networked Physics**: Integração profunda de *Rigid Bodies*, sincronizando velocidade linear, angular, torques e atrito.
+1. **Lag Compensation (Server-Side Rewind)**: Histórico global no servidor permitindo colisões precisas (Hit Registration) em jogos de tiro, re-simulando o passado para compensar a latência do atirador.
+2. **Dead Reckoning & Extrapolação**: Algoritmos de sobrevivência à perda aguda de rede, prevendo continuidades direcionais para manter a fluidez quando os pacotes pararem de chegar.
+3. **Networked Physics**: Integração profunda de *Rigid Bodies*, sincronizando velocidade linear, angular, torques e atrito.
 
 *(Para o planejamento técnico detalhado, consulte o **[ROADMAP_MMO.md](./ROADMAP_MMO.md)** e as tarefas do **[TODO.md](./TODO.md)**).*
 

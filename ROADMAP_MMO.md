@@ -41,38 +41,41 @@ O despache não pode enviar os dados do mundo inteiro para todo mundo. Implement
 Como consequência do `NetProfile`, a sessão autoritativa do servidor orquestrará dois (ou mais) regimes de tick simultâneos.
 Isso só será introduzido no servidor após um cenário de regime único ser devidamente homologado e testado em infraestrutura de rede real (internet/produção simulada).
 
-### 5. Delta Compression & ACKs (Snapshot Compression)
+### 5. Delta Compression & ACKs (Snapshot Compression) [IMPLEMENTADO]
 
-O envio do estado do mundo consome a maior parte da banda do servidor. O servidor e o cliente devem trocar `ACKs` (confirmações de recebimento). Com isso, o servidor envia apenas a **diferença quantizada (Delta)** entre o estado atual da entidade e o último estado reconhecido pelo cliente. Entidades estáticas custarão próximo de `0 bytes`.
+O envio do estado do mundo consome a maior parte da banda do servidor. O servidor e o cliente trocam `ACKs` (confirmações de recebimento). Com isso, o servidor envia apenas a **diferença quantizada (Delta)** entre o estado atual da entidade e o último estado reconhecido pelo cliente. Entidades estáticas custam próximo de `0 bytes`.
 
-### 6. Jitter Buffer & Snapshot Interpolation
+### 6. Jitter Buffer & Snapshot Interpolation [IMPLEMENTADO]
 
-O movimento do próprio jogador (`Client-Side Prediction`) já está isolado, mas a renderização de todas as outras entidades (outros jogadores, NPCs) do perfil `MMO` deve fluir por um atraso intencional (`Jitter Buffer` no cliente, atualmente embrionário no `QNInterpBuffer`). Esse buffer armazena os *snapshots* do servidor e interpola suavemente no passado, blindando o jogador das perdas de pacotes do UDP.
+O movimento do próprio jogador (`Client-Side Prediction`) está isolado, mas a renderização de todas as outras entidades (outros jogadores, NPCs) flui por um atraso intencional (`Jitter Buffer` via `QNInterpBuffer`). Esse buffer armazena os *snapshots* do servidor e interpola suavemente no passado, blindando o jogador das perdas de pacotes do UDP.
 
-### 7. Congestion Avoidance & Packet Fragmentation
+### 7. Congestion Avoidance & Packet Fragmentation [PARCIAL]
 
 - **Fragmentation:** Snapshots de áreas superpovoadas ultrapassarão o MTU (1400 bytes). Se a `ENet` se provar insuficiente ou gargalar no *overhead*, uma lógica de re-montagem de *Chunks* confiáveis sobre UDP (Fragmentação) será delegada ao Domínio.
 - **Congestion Avoidance:** O servidor monitorará ativamente a perda de pacotes e o RTT (`QNLossTracker`) de cada conexão, estrangulando dinamicamente o tráfego enviado (reduzindo a taxa de atualização ou encolhendo a *Area of Interest*) quando a saúde da rota se deteriorar.
 
-### 8. NetProfile e Tick Híbrido (Hybrid Ticking)
+### 8. NetProfile e Tick Híbrido (Hybrid Ticking) [IMPLEMENTADO]
 
-Para escalar o limite de entidades no servidor, o sistema não pode enviar tudo na mesma frequência. Entidades passarão a ter um `NetProfile` (`tick_rate_hz`, `base_priority`, etc). O despachante do servidor será escalonado por perfis, respeitando o ritmo exato de cada entidade (ex: 20Hz, 5Hz) independentemente se o jogo a considera um NPC, um Jogador ou uma Árvore.
+Para escalar o limite de entidades no servidor, o sistema não envia tudo na mesma frequência. Entidades possuem um `NetProfile` (`tick_rate_hz`, `base_priority`, etc). O despachante do servidor é escalonado por perfis, respeitando o ritmo exato de cada entidade (ex: 20Hz, 5Hz) independentemente se o jogo a considera um NPC, um Jogador ou uma Árvore.
 
-### 9. Dynamic Jitter Buffer e Error Blending
+### 9. Dynamic Jitter Buffer e Error Blending [IMPLEMENTADO]
 
-Um buffer rígido de 120ms sucumbe a perdas drásticas (10% de packet loss / alto jitter). A evolução arquitetural exige um *Dynamic Jitter Buffer*, onde o tempo de retenção do passado (`RENDER_DELAY_MS`) incha e desincha em tempo real acompanhando a variância do ping do cliente. Além disso, o fim de uma extrapolação utilizará *Error Blending* (decaimento exponencial) para mesclar a posição sem sobressaltos.
+O *Dynamic Jitter Buffer* garante que o tempo de retenção do passado (`RENDER_DELAY_MS`) incha e desincha em tempo real acompanhando a variância do ping do cliente. Além disso, o fim de uma extrapolação utiliza *Error Blending* (decaimento exponencial) para mesclar a posição sem sobressaltos e solavancos ("stuttering").
 
-### 10. Lag Compensation (Server-Side Rewind / Hit Registration)
+### 10. Gerenciamento Avançado de Banda (Priority Accumulator) [IMPLEMENTADO]
+
+O limite físico da rede (MTU ~1400 bytes) impõe contenções rigorosas. Utiliza-se um *Priority Accumulator*: entidades ganham pontuação de prioridade com base na distância, no alvo do jogador e no `NetProfile`. Se uma entidade não couber no pacote atual, ela não é enviada, mas acumula "débito" de prioridade até que seja obrigatoriamente incluída no próximo pacote disponível.
+
+---
+## O Futuro (Próximos Passos)
+
+### 11. Lag Compensation (Server-Side Rewind / Hit Registration)
 
 Para combates competitivos ou MMOs de ação (hitscan, projéteis), o servidor deve manter um histórico rigoroso de *hitboxes* de todas as entidades. Ao processar um tiro do cliente, o servidor rebobina o mundo para o momento exato em que o cliente efetuou o disparo, realiza o teste de colisão e, em seguida, avança o estado de volta ao presente.
 
-### 11. Extrapolação e Dead Reckoning (Sobrevivência à Latência)
+### 12. Extrapolação e Dead Reckoning (Sobrevivência à Latência)
 
-Quando pacotes são perdidos consecutivamente e o *Jitter Buffer* do cliente esvazia (falta de *snapshots* futuros), em vez de congelar a entidade, o motor de rede calcula o vetor de velocidade instantânea e *extrapola* (prevê) a continuidade do movimento. Isso mantém a ilusão de fluidez até que a conexão se recupere.
-
-### 12. Gerenciamento Avançado de Banda (Priority Accumulator)
-
-O `QNSpatialGrid` resolve quem está próximo, mas o limite físico da rede (MTU ~1400 bytes) impõe contenções rigorosas. Utilizaremos um *Priority Accumulator*: entidades ganham pontuação de prioridade com base na distância, no alvo do jogador e no `NetProfile`. Se uma entidade não couber no pacote atual, ela não é enviada, mas acumula "débito" de prioridade até que seja obrigatoriamente incluída no próximo pacote disponível.
+Quando pacotes são perdidos consecutivamente e o *Jitter Buffer* do cliente esvazia (falta de *snapshots* futuros), em vez de congelar a entidade, o motor de rede calcula o vetor de velocidade instantânea e *extrapola* (prevê) a continuidade do movimento em casos extremos (além da extrapolação linear).
 
 ### 13. Networked Physics (Sincronização de Corpos Rígidos)
 

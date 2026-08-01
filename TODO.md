@@ -259,21 +259,27 @@ Nesta fase focaremos na transição arquitetural para suportar o roadmap MMO, fo
 
 #### PR 17 — Priority Accumulator e Limite de MTU
 
-- [ ] Implementar `QNPriorityAccumulator` no domínio: um sistema de ranqueamento que seleciona quais entidades cabem no pacote atual sem estourar o limite de payload (ex: MTU - UDP overhead).
-- [ ] Lógica de Score: (Distância + NetProfile.base_priority + [Opcional] Look Direction) + Débito Acumulado.
-- [ ] Entidades que não couberem no pacote (`mtu_budget` esgotado) recebem incremento no seu "débito acumulado", garantindo que eventualmente serão enviadas no futuro.
-- [ ] Expandir suporte dinâmico no `tick_broadcast`: permitir mudança de `NetProfile` em runtime resetando `last_broadcast_ts` e integrar logs de contabilidade de banda.
+- [x] Implementar `QNPriorityAccumulator` no domínio: um sistema de ranqueamento que seleciona quais entidades cabem no pacote atual sem estourar o limite de payload (ex: MTU - UDP overhead).
+- [x] Lógica de Score: (Distância + NetProfile.base_priority + [Opcional] Look Direction) + Débito Acumulado.
+- [x] Entidades que não couberem no pacote (`mtu_budget` esgotado) recebem incremento no seu "débito acumulado", garantindo que eventualmente serão enviadas no futuro.
+- [x] Expandir suporte dinâmico no `tick_broadcast`: permitir mudança de `NetProfile` em runtime resetando `last_broadcast_ts` e integrar logs de contabilidade de banda.
+
+#### PR 18 — Stress Test & Robustness Validation (Testes de Estresse e Netem)
+
+- [ ] Desenvolver suítes de teste de integração focadas em escalabilidade (ex: 5 props, 50 props, 100 props) monitorando a contabilidade de banda e limites de MTU.
+- [ ] Mapear o impacto real e prático das simulações de anomalias (`Netem` extremo) sobre a movimentação, extrapolando comportamentos atípicos ("patinação" e stuttering).
+- [ ] Documentar contramedidas (aumento dinâmico de delay, restrição de extrapolação) e assegurar que a engine de rede suporta latências agressivas mantendo o estado da demo tolerável.
 
 ### Fase 9: Combate e Simulação Física Avançada
 
 Uma transição para mecânicas de ação, hit-registration e física sincronizada (Networked Physics).
 
-#### PR 18 — Lag Compensation (Server-Side Rewind)
+#### PR 19 — Lag Compensation (Server-Side Rewind)
 
 - [ ] Implementar buffer histórico global no Servidor (`QNWorldHistoryBuffer`) que armazena as *hitboxes* e posições exatas de todas as entidades dos últimos 1-2 segundos.
 - [ ] Criar API exposta para o usuário testar colisões/raycasts no passado autoritativo (ex: `QuanticNet.raycast_past(origin, direction, timestamp)`), compensando o RTT do atirador.
 
-#### PR 19 — Networked Physics (RigidBody Sync)
+#### PR 20 — Networked Physics (RigidBody Sync)
 
 - [ ] Implementar perfil de simulação física rigorosa (`NetProfile.RIGID_BODY`).
 - [ ] Expandir o protocolo de sincronização do Domínio para incluir *Linear Velocity*, *Angular Velocity* e detecção binária de repouso (Sleeping states) para otimização extrema de banda.

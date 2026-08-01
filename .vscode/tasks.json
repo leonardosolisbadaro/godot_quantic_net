@@ -68,6 +68,21 @@
       "presentation": {
         "reveal": "silent"
       }
+    },
+    {
+      "label": "QuanticNet: Toggle Demo",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\toggle_demo.ps1"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
     }
   ]
 }

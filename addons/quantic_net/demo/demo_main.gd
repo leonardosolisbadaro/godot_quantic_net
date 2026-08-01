@@ -36,6 +36,7 @@ var cubes := {} # peer_id -> MeshInstance3D
 var auto_move := true
 var auto_time := 0.0
 var _last_rx := {}
+var _netem_active := false
 
 
 func _ready() -> void:
@@ -55,16 +56,17 @@ func _ready() -> void:
 		print("[DEMO] Servidor na porta %d" % PORT)
 		_setup_server_props()
 	else:
-		var netem := "--netem" in args
-		QuanticNet.join("127.0.0.1", PORT, SECRET, netem)
+		_netem_active = "--netem" in args
+		QuanticNet.join("127.0.0.1", PORT, SECRET, _netem_active)
 		QuanticNet.set_netem_config(0.10, 150, 50) # 10% perda, 150ms atraso, 50ms jitter
-		print("[DEMO] Cliente conectando (netem=%s) [Pressione 'N' para alternar]" % ("true" if netem else "false"))
+		print("[DEMO] Cliente conectando (netem=%s) [Pressione 'N' para alternar]" % ("true" if _netem_active else "false"))
 		_setup_client_scene()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_N:
 			QuanticNet.toggle_netem()
+			_netem_active = not _netem_active
 		elif event.keycode == KEY_L:
 			if Engine.max_fps == 0:
 				Engine.max_fps = 60
@@ -215,12 +217,12 @@ func _process(delta: float) -> void:
 		return
 		
 	var fps := Engine.get_frames_per_second()
-	var mode := "LOCKED 60" if Engine.max_fps == 60 else "UNLIMITED"
-	DisplayServer.window_set_title("QuanticNet Client - %d FPS [%s]" % [fps, mode])
+	var my_id = QuanticNet.get_unique_id()
+	var netem_str = "10%% perda, 150ms atraso, 50ms jitter" if _netem_active else "20 HZ"
+	DisplayServer.window_set_title("#%d | FPS %d | %s" % [my_id, fps, netem_str])
 	
 	# Desabilita/Oculta cubos que não recebem atualizações há mais de 0.5 segundo (saíram do AoI)
 	var now = Time.get_ticks_msec()
-	var my_id = QuanticNet.get_unique_id()
 	var my_pos = cubes[my_id].position if cubes.has(my_id) else Vector3.ZERO
 	
 	for id in cubes.keys():
