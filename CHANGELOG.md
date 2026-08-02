@@ -25,6 +25,18 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - ...
 
+## [0.3.0-rc.1] - 2026-08-02 (Atual)
+
+### Corrigido
+
+- **[CRÍTICO] Correção de Memory Leaks (ObjectDB):** Erradicação de vazamentos de instâncias ao garantir que a camada de testes GUT destrua corretamente ganchos e limpe o Singleton via injeção automática e segura no `after_each()`.
+- **[CRÍTICO] Prevenção de Crashes de Teardown (`SCRIPT ERROR`):** Injeção de verificação dinâmica `has_signal` no `QNNetHook` antes da chamada para desconectar em massa, viabilizando o teardown robusto tanto para ambientes reais quanto *FakeBase* instanciados nos testes.
+- **Resolução de `ERR_INVALID_PARAMETER` no fechamento:** O gerenciamento do ciclo de vida da `MultiplayerAPIExtension` e Godot's `SceneTree` foi segregado através do método `disconnect_net(is_exiting)`, prevenindo corrupção de estado interno quando o Godot é encerrado em modo headless.
+
+### Modificado
+
+- **Expansão de Blindagem da API:** Incorporação de guarda preventiva rigorosa contra nulidade (`if base == null`) em todos os métodos delegados da `MultiplayerAPIExtension`, preservando a sanidade da engine diante de chamadas marginais.
+
 ## [0.3.0] - 2026-07-31
 
 ### Adicionado
@@ -55,7 +67,7 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Implementação rigorosa dos Testes de Integração End-to-End via loopback (Host ↔ 2 Clients) em ambiente Headless simulando condições severas de rede (PR 8).
 - Implementação do interceptador `QNNetHook` atuando sobre a MultiplayerAPI, oferecendo controle absoluto sobre RPCs de saída e injeção de pacotes customizados transparentemente (Filtros e Transformers).
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInputBuffer`, finalizando a arquitetura core do plugin. Gerencia a drenagem circular de inputs do cliente utilizando compensação matemática para resistir ao wrap-around de sequências.
-- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNServerValidator`, isolada da engine. Protege o servidor contra pacotes forjados, limitando velocidade (`HARD_CAP`), aplicando _clamps_ em excessos toleráveis e punindo teletransportes via _strikes_.
+- Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNServerValidator`, isolada da engine. Protege o servidor contra pacotes forjados, limitando velocidade (`HARD_CAP`), aplicando *clamps* em excessos toleráveis e punindo teletransportes via *strikes*.
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNInterpBuffer` (extrapolação correta baseada no `render_ts`).
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNLossTracker` (wrap-around de 16-bits resiliênte).
 - Implementação rigorosa (TDD/AAA) da entidade de Domínio `QNClockSync` (modelo NTP aprimorado).
@@ -78,4 +90,6 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [0.1.0] - 2026-07-28
 
-###
+### Lançamento Inicial
+
+- Estruturação base do projeto.

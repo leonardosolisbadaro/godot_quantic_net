@@ -1,247 +1,132 @@
 # QuanticNet: API Pública
 
 Bem-vindo à documentação da API Pública do **QuanticNet**.
-O QuanticNet é um plugin de netcode autoritativo para **Godot 4.7**, desenvolvido seguindo rígidos padrões de **Code-First**, **TDD (Test-Driven Development)** e **Clean Architecture**. Ele fornece DTLS, codec binário compacto (19 Bytes), clock-sync, predição de cliente, reconciliação (snapback) e simulação de redes instáveis (Netem).
+O QuanticNet é um plugin de netcode autoritativo para **Godot 4.7**, desenvolvido seguindo rígidos padrões de **Code-First**, **TDD (Test-Driven Development)** e **Clean Architecture**. Ele fornece DTLS, codec binário compacto, clock-sync avançado, predição de cliente, reconciliação (snapback) e simulação nativa de redes instáveis (Netem).
 
-Esta documentação é voltada para desenvolvedores de jogos **3D** na Godot que irão consumir o plugin como uma caixa preta (plug and play), interagindo **apenas** através do Autoload.
+Esta documentação é voltada para desenvolvedores de jogos **3D** na Godot que irão consumir o plugin como uma caixa preta (plug and play), interagindo **apenas** através do Autoload. Nenhuma lógica visual (Mesh, UI, InputMap) vaza do plugin para a sua Engine.
 
-## Instalação e Ativação
+---
+
+## 🛠 Instalação e Ativação
 
 1. Copie o diretório `addons/quantic_net/` para a raiz do seu projeto.
 2. Acesse `Project` → `Project Settings` → `Plugins` e ative o **QuanticNet**.
-3. O Autoload `QuanticNet` será registrado automaticamente, atuando como o ponto único de entrada (Single-Point of Entry) da API.
+3. O Autoload `QuanticNet` será registrado automaticamente. Este Singleton é o seu ponto único de contato (Single-Point of Entry) com todo o ecossistema.
 
 ---
 
-## Estados de Conexão
+## 🌐 Máquina de Estados de Conexão
 
-A máquina de estados da conexão de rede é representada pelo enum `QuanticNet.ConnectionState`:
+O status do roteamento de rede é monitorado em tempo real via enum `QuanticNet.ConnectionState`:
 
-* `DISCONNECTED`: Sem conexão ativa.
-* `CONNECTING`: Tentando se conectar ao servidor (Cliente).
-* `AUTHENTICATING`: Negociando o `secret` (Cliente).
-* `CONNECTED`: Conectado e autenticado com sucesso.
-* `FAILED`: Falha na conexão (verificar sinal de razão).
+* `DISCONNECTED`: Nenhuma conexão ativa. O modo padrão de repouso.
+* `CONNECTING`: Tentando transpor os soquetes e criptografia DTLS ao servidor (Cliente).
+* `AUTHENTICATING`: Fase de handshake da Godot 4, validação do `secret` e injeção do Client ID (Cliente).
+* `CONNECTED`: Conectado e autenticado com sucesso. Pronto para submissão de pacotes.
+* `FAILED`: Falha crítica (verificar sinal `connection_failed_reason`).
 
-**Transições:**
+**Transições Naturais:**
 
-* O servidor (`host`) vai imediatamente para `CONNECTED` após iniciar com sucesso.
-* O cliente (`join`) transita sequencialmente: `CONNECTING` → `AUTHENTICATING` → `CONNECTED` (ou `FAILED`).
+* Servidor (`host()`): Ao concluir o bind da porta e certificados, salta direto para `CONNECTED`.
+* Cliente (`join()`): Evolui obrigatoriamente pelo funil `CONNECTING` → `AUTHENTICATING` → `CONNECTED`.
 
 ### `get_state() -> int`
 
-Retorna o estado atual da conexão.
+Retorna o estado atual mapeado pelo enum.
 
 ### `is_server() -> bool`
 
-Retorna `true` se a instância atual estiver operando como servidor (host).
+Retorna `true` se a instância atual assumiu a autoridade de host.
 
 ---
 
-## NetProfiles (Tick Híbrido)
+## ⏱️ NetProfiles (Tick Híbrido)
 
-O QuanticNet permite que diferentes entidades sejam atualizadas em frequências diferentes para economizar banda (Hybrid Ticking).
-A classe de domínio `QuanticNet.NetProfile` (exposta através da constante `QuanticNet.NetProfile`) dita a política de envio da entidade.
+O motor do QuanticNet não envia snapshots unificados. Diferentes entidades são atualizadas em frequências assimétricas para comprimir o uso da banda (Hybrid Ticking).
+A classe constante `QuanticNet.NetProfile` (exposta diretamente pelo Autoload) rege a cadência.
 
 ### Presets de Fábrica
 
-Você pode criar perfis personalizados instanciando `QuanticNet.NetProfile.new(tick_rate_hz, base_priority, cull_radius)`, mas recomendamos usar os *presets* padrão:
+Você deve repassar o profile durante a vida útil das entidades. Embora você possa criar perfis dinâmicos, recomendamos:
 
-* `QuanticNet.NetProfile.preset_high_frequency()`: 60Hz. Uso: Jogadores e mecânicas competitivas.
-* `QuanticNet.NetProfile.preset_standard()`: 20Hz. Uso: Regime padrão de MMO.
-* `QuanticNet.NetProfile.preset_low_frequency()`: 5Hz. Uso: NPCs periféricos, "Props" movendo lentamente.
-* `QuanticNet.NetProfile.preset_static()`: On-change. Uso: Portas, checkpoints, construções.
+* `QuanticNet.NetProfile.preset_high_frequency()`: 60Hz. Uso obrigatório para jogadores e projéteis rápidos.
+* `QuanticNet.NetProfile.preset_standard()`: 20Hz. Padrão MMO para monstros e NPCs comuns.
+* `QuanticNet.NetProfile.preset_low_frequency()`: 5Hz. Para Props móveis de baixo impacto (plataformas).
+* `QuanticNet.NetProfile.preset_static()`: Event-Driven. Só transmite a banda ao sofrer mutação.
 
 ---
 
-## Funções Públicas
+## 💻 Funções Públicas (Comandos)
 
-As seguintes funções expõem os Casos de Uso do plugin. Todas as dependências internas (ex.: `QNHostSession`, `QNWirePeer`) estão encapsuladas na Infraestrutura, em conformidade com a Clean Architecture. Use **apenas** o Autoload.
+As seguintes assinaturas orquestram o Casos de Uso. O QuanticNet blinda sua `SceneTree` gerenciando todas as Extensões de Multiplayer internamente.
 
 ### `host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32) -> int`
 
-Inicia um servidor DTLS na porta informada. Retorna `OK` em caso de sucesso.
+Sobe o servidor autoritativo em background. As chaves DTLS (RSA) são geradas em runtime para desenvolvimento ou importadas de `res://certs/` se encontradas.
 
-* `secret`: Chave compartilhada para autorizar conexões de clientes.
+* **Retorna:** Código `Error` da Godot (`OK` se sucesso).
 
 ### `join(ip: String, port: int, secret: String, netem: bool = false) -> int`
 
-Conecta um cliente a um servidor DTLS. Retorna `OK` em caso de sucesso.
+Lança um socket assíncrono contra o Host.
 
-* `netem`: Se `true`, ativa a simulação interna de problemas de rede (jitter, loss) definida no plugin.
+* `netem`: Ativa a infraestrutura de distúrbios da rede (*Jitter, Delay, Loss* simulados), ideal para provar o sistema preditivo do seu jogo durante o *debug* em localhost.
 
 ### `submit_state(pos: Vector3, rot: Vector3, custom: int, dt: float) -> void`
 
-Envia o estado atual do cliente (player predito) para o servidor. Este estado vai para um buffer local para possível replay em caso de *snapback*.
+Envia o frame preditivo do jogador local para o servidor (geralmente despachado do seu `_physics_process`).
 
-* O servidor recebe e processa (valida a predição).
-* Deve ser chamado periodicamente (ex.: dentro do `_process` ou `_physics_process`).
-
-### `register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, profile: RefCounted = null) -> void`
-
-(Servidor) Adiciona e registra manualmente uma nova entidade (ex.: NPCs) no rastreador do servidor.
-
-* `is_peer`: Se a entidade for também uma conexão (socket real). Use `false` para bots controlados puramente pelo servidor.
-* `has_initial_state`: `true` se você for fornecer os dados manualmente, `false` se for aguardar input da rede.
-* `profile`: A política de `QNNetProfile` (ver seção NetProfiles).
-
-### `change_entity_profile(entity_id: int, new_profile: RefCounted) -> void`
-
-(Servidor) Altera dinamicamente o `NetProfile` de uma entidade (Ex: Um NPC que estava dormindo a 5Hz acorda e passa para 20Hz). Isso forçará um envio imediato no próximo tick.
+* O servidor processa o Delta Time (`dt`), audita a validade (Anti-Speedhack) e insere no buffer de broadcast.
 
 ### `remote_state(owner_id: int) -> Dictionary`
 
-Recupera o estado interpolado mais recente de um peer remoto. Útil para aplicar sobre os avatares (cubos/jogadores) controlados pelos outros peers.
+Recupera o estado matematicamente interpolado no passado (com mitigação do Jitter Buffer) de um peer distante. Use este método para atualizar os seus *Meshes* visuais que representam os outros jogadores no seu mapa.
 
-* Retorna um dicionário `{"pos": Vector3, "rot": Vector3, "custom": int}` ou vazio se não houver dados.
+* **Retorna:** `{"pos": Vector3, "rot": Vector3, "custom": int}` ou dicionário vazio se aguardando dados.
+
+### `disconnect_net(is_exiting: bool = false) -> void`
+
+Expurga a máquina de estados, rompe o cache de referências nativas do `MultiplayerAPIExtension` e desativa o interceptador com total higiene de memória. Use sempre que quiser fechar o jogo para o Menu Principal.
+*Nota:* Se o jogo estiver fechando pelo OS, passe `is_exiting = true` para que ele não tente sobrepor a `SceneTree` do motor em pleno colapso.
 
 ### `loss_of(owner_id: int) -> float`
 
-Retorna a porcentagem de perda de pacotes de um cliente específico. (Válido apenas para peers autenticados).
-
-### `is_clock_synced() -> bool`
-
-Verifica se o relógio do cliente concluiu o passo inicial de sincronização com o servidor.
-
-### `get_registry() -> Dictionary`
-
-Retorna o registro (registry) com dados conhecidos das conexões (apenas válido no servidor).
-
-### `kick(peer_id: int) -> void`
-
-(Servidor) Desconecta forçadamente um peer.
+Monitoramento analítico da severidade de perdas percentuais (Packet Loss) de uma rota.
 
 ### `toggle_netem() -> void`
 
-(Cliente) Ativa/Desativa dinamicamente a emulação de atrasos e jitter (Netem).
+Ativa ou desativa a simulação de caos UDP em runtime no cliente.
 
 ---
 
-## Sinais Públicos
+## 📡 Sinais Públicos (Event-Driven)
 
-Os sinais são usados para orquestrar as instâncias nativas da cena reagindo aos eventos de rede, evitando forte acoplamento (UI-Bound Logic).
+Para respeitar as diretrizes de Clean Architecture, não embuta Singletons da Godot na sua interface. Deixe que sua lógica escute aos sinais.
 
 ### `connection_state_changed(new_state: int)`
 
-Emitido sempre que a conexão evolui (ex.: `CONNECTING` → `AUTHENTICATING`).
+Despachado a cada transição no handshake mbedTLS ou Godot.
 
 ### `connection_failed_reason(error: int)`
 
-Emitido se o `host` ou `join` falhar, passando o código de erro (`Error` do Godot).
+Avisa o momento de destruição do socket.
 
-### `peer_joined(id: int)`
+### `peer_joined(id: int)` / `peer_left(id: int)`
 
-Emitido quando um peer se conecta (após ser completamente autenticado no servidor).
-
-* No servidor: emite para cada cliente validado.
-* No cliente: emite quando a instância de rede toma conhecimento de um novo jogador no mundo.
-
-### `peer_left(id: int)`
-
-Emitido quando um peer se desconecta.
+A infraestrutura garante que esses sinais só sejam emitidos *após* um cliente confirmar a sua identidade e ID ao servidor (Autenticação limpa) e processa a propagação transparente.
 
 ### `state_received(owner: int, pos: Vector3, rot: Vector3, custom: int)`
 
-Emitido ao processar pacotes customizados contendo estados do mundo.
-
-* No servidor: dispara a cada estado recebido de clientes (onde ocorre a validação).
-* No cliente: estado interpolado chegando via broadcast do servidor. É mais comum consumir a função `remote_state(owner)` no cliente, mas o sinal atende event-driven archs.
-
-### `pong_received(rtt_ms: float, offset_ms: float)`
-
-Emitido no cliente durante o processo de sincronização de relógio (RTT - *Round Trip Time*).
+Broadcast do servidor. Muito consumido em arquitecturas reativas em vez do tradicional *polling* via `remote_state()`.
 
 ### `snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array)`
 
-Emitido no cliente quando o servidor rejeita a predição local e exige uma correção forçada de estado (snapback).
-
-* `replay_inputs`: Array de inputs (do `QNInputBuffer` local) para reaplicar na simulação.
+A correção autoritativa final. Se este sinal apitar no cliente local, a sua simulação foi cassada pelo Host. O seu avatar deverá ser "teletransportado" imediatamente para `pos` e `rot` confirmados, e os inputs do array reaplicados massivamente para mascarar a percepção do atraso.
 
 ---
 
-## Padrões de Uso (Bare Metal)
+## 🧪 Boas Práticas e Prevenção de Vazamento (TDD)
 
-Para garantir flexibilidade máxima para a árvore de cenas, o QuanticNet não amarra objetos 3D automaticamente. Abaixo um esqueleto de consumo do plugin, derivado do `demo_main.gd`.
+O plugin é coberto por +100 testes utilizando **bitwes/Gut**. Caso venha a escrever testes que importem componentes core (ex: simuladores em headless), invoque `disconnect_net()` rigorosamente ao fim de cada escopo ou teste.
 
-### Exemplo Base (Servidor e Cliente unificado)
-
-```gdscript
-extends Node3D
-
-var cubes := {} # peer_id -> MeshInstance3D
-
-func _ready() -> void:
-    # 1. Registrar eventos ANTES de conectar.
-    QuanticNet.peer_joined.connect(_on_peer_joined)
-    QuanticNet.peer_left.connect(_on_peer_left)
-    QuanticNet.state_received.connect(_on_state)
-    QuanticNet.snapback_received.connect(_on_snapback)
-
-    # 2. Iniciar Host ou Join
-    if "--server" in OS.get_cmdline_user_args():
-        QuanticNet.host(4242, "secret")
-    else:
-        QuanticNet.join("127.0.0.1", 4242, "secret")
-
-func _on_peer_joined(id: int) -> void:
-    var cube = MeshInstance3D.new()
-    cube.mesh = BoxMesh.new()
-    add_child(cube)
-    cubes[id] = cube
-
-func _on_peer_left(id: int) -> void:
-    if cubes.has(id):
-        cubes[id].queue_free()
-        cubes.erase(id)
-
-func _process(delta: float) -> void:
-    if QuanticNet.is_server():
-        return
-
-    # Submeter predição do jogador local
-    var my_id = multiplayer.get_unique_id()
-    if cubes.has(my_id):
-        var move = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-        cubes[my_id].position += Vector3(move.x, 0, move.y) * 2.0 * delta
-        QuanticNet.submit_state(cubes[my_id].position, cubes[my_id].rotation, 0, delta)
-
-    # Aplicar estados remotos (interpolados pelo plugin) aos outros avatares
-    for id in cubes.keys():
-        if id != my_id:
-            var s = QuanticNet.remote_state(id)
-            if not s.is_empty():
-                cubes[id].position = s["pos"]
-                cubes[id].rotation = s["rot"]
-
-func _on_state(owner: int, pos: Vector3, rot: Vector3, _custom: int) -> void:
-    # No servidor, o estado recém validado altera o cubo na memória
-    if QuanticNet.is_server() and cubes.has(owner):
-        cubes[owner].position = pos
-        cubes[owner].rotation = rot
-
-func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
-    print("Correção forçada do servidor. (Replay inputs: %d)" % replay.size())
-```
-
----
-
-## Integração com TDD (bitwes/Gut)
-
-O QuanticNet é projetado via **TDD (Test-Driven Development)**, e seu projeto cliente deve continuar essa tradição. Se você estiver escrevendo scripts (`Controllers` ou cenas) que dependem do QuanticNet, utilize mocks do `bitwes/Gut`.
-
-* **Regra de Ouro**: Instancie ou simule a camada QuanticNet sem subir um servidor de rede real, controlando as dependências.
-* **Referência Viva**: Para visualizar fluxos completos (como os estados mudam e afetam os peers), consulte os testes de integração do plugin: `tests/integration/test_quantic_net_api.gd` e `tests/integration/test_server_two_clients.gd`.
-
----
-
-## Próximos Passos (Fase 9: API Futura)
-
-Conforme ditado pelo `ROADMAP_MMO.md`, a arquitetura do QuanticNet em breve expandirá a API pública para suportar **Combate** e **Física Avançada**. As seguintes assinaturas são um "spoiler" (contrato arquitetural) do que será introduzido:
-
-### `raycast_past(origin: Vector3, direction: Vector3, timestamp: int) -> Dictionary`
-
-**(Em Breve)** A essência do *Lag Compensation*. Permitirá que a lógica do seu jogo (no servidor) dispare um raycast contra o estado do mundo rebobinado para um momento exato no passado, validando se o tiro do cliente realmente acertou o alvo.
-
-### `submit_physics(linear_vel: Vector3, angular_vel: Vector3, sleeping: bool, dt: float) -> void`
-
-**(Em Breve)** Permitirá o envio de vetores de aceleração para entidades físicas, emulando Corpos Rígidos (RigidBodies) através da rede. O perfil atual de interpolação será expandido para `NetProfile.RIGID_BODY`, poupando banda para objetos em repouso.
+As referências circulares em extensões de C++ da Godot (como a `MultiplayerAPI`) seguram hard-references. O `disconnect_net()` efetua um *graceful teardown* evitando que a console engula *ObjectDB Leaks* ou acuse o famigerado `ERR_INVALID_PARAMETER` ao fechar instâncias consecutivas.

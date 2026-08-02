@@ -1,48 +1,50 @@
 # QuanticNet
 
-**Versão Atual:** `0.3.0`
+**Versão Atual:** `0.3.0` (Stable Foundation)
 
-Plugin de network (`QuanticNet`) `plug-and-play`, focado no desenvolvimento de jogos `3D Open World MMO` e Competitivos usando a `Godot Engine 4.7`. Arquitetado a partir do zero focado em **Code-First**, **Test-Driven Development (TDD)** e **Clean Architecture**. Elimina a dependência de editores visuais para lógicas de negócio.
+O **QuanticNet** é um ecossistema de rede *plug-and-play* autoritativo construído para a **Godot Engine 4.7**. Focado estritamente na criação de jogos `3D Open World MMO` e arenas competitivas, ele resolve os desafios clássicos de infraestrutura de rede, despache e reconciliação sem acoplar a lógica de domínio aos nós visuais da Engine.
 
-## A Constituição do Projeto
+A sua arquitetura baseia-se desde a raiz no **Code-First**, **Test-Driven Development (TDD)** rigoroso via *bitwes/Gut* e na topologia de **Clean Architecture**, eliminando acoplamentos desnecessários e dependências de UI.
 
-Nenhum código novo deve ser gerado sem a aprovação explícita e o cumprimento integral do ficheiro **[GEMINI.md](./GEMINI.md)**, que governa o ciclo de vida deste repositório. Este é o pilar central do projeto, determinando as regras rígidas, restrições e diretrizes de desenvolvimento.
+---
 
-## Princípios Arquiteturais
+## 🏛️ A Constituição do Projeto
 
-A solução baseia-se numa arquitetura focada em **Code-First** e orientada a camadas concêntricas (Clean Architecture), visando total isolamento do **Domínio** (regras puras de simulação de rede e sincronização de estado MMO) em relação à **Infraestrutura** (APIs nativas do Godot 4.7). O foco é garantir escalabilidade, segurança e manutenibilidade com Test-Driven Development (TDD) e injeção de dependências.
+A evolução deste repositório é rigidamente governada pelo arquivo **[GEMINI.md](./GEMINI.md)**. O arquivo define o protocolo inegociável de trabalho: nenhuma linha de domínio ou adaptador é escrita sem que um teste unitário (`.gd`) falhando dite o seu comportamento, garantindo um código imutavelmente seguro e livre de vazamentos de memória (ObjectDB Leaks blindados).
 
-## Estado Atual da Tecnologia (Features)
+## 💡 Princípios Arquiteturais
 
-A fundação arquitetural e de rede está **concluída e robusta**. As sessões de host e cliente interagem transparentemente com a infraestrutura Godot (MultiplayerAPI e ENet), residindo isoladas em `addons/quantic_net/`.
+A solução baseia-se em camadas concêntricas visando o total isolamento do **Core Domain** em relação ao *Framework* da Godot:
 
-O motor de rede atualmente suporta o "Estado da Arte" do netcode de ação moderno:
+- **Domínio e Casos de Uso:** As regras puras (Sincronização de Estado, `QNServerValidator`, `QNInterpBuffer`, Acumuladores de Prioridade) não conhecem *Nodes*, não despacham física e não tocam em *Input*. Tudo é validado em frações de bytes.
+- **Interface e Adaptadores:** O uso da API nativa da Godot 4.7 (`MultiplayerAPIExtension`, `ENetConnection`) reside exclusivamente na fronteira. O Autoload do `QuanticNet` rege a máquina de estados atuando como o ponto único de entrada (Single-Point of Entry) isolado por sinais.
 
-- **Client-Side Prediction & Server Reconciliation (Snapback)**: O jogador local move-se instantaneamente, e o servidor autoritativo emite correções apenas quando fraudes ou dessincronizações severas são detectadas.
-- **Snapshot Interpolation (Jitter Buffer)**: Mitiga a percepção de perda de pacotes e flutuações de latência interpolando fluidamente os avatares remotos no passado.
-- **Delta Compression & ACKs**: O servidor quantiza a banda de rede enviando apenas P-Frames (Deltas) ao invés de I-Frames integrais, reduzindo drasticamente o tamanho do payload.
-- **Priority Accumulator & Hybrid Ticking**: Gestão inteligente de banda limitando o pacote pelo MTU (Maximum Transmission Unit) da rede, controlando o Tick Rate de cada entidade com base em sua prioridade e distância (Spatial Culling).
-- **DTLS Auth & Anti-Cheat**: Conexões seguras e validação rígida de distâncias e velocidades de todos os clientes no lado servidor.
-- **Simulador Netem Integrado**: Injeção proposital de latência, jitter e packet loss na própria engine para testes em ambiente agressivo.
+## 🚀 Estado da Arte: Features (v0.3.0)
 
-## O Futuro (Visão ROADMAP MMO)
+A fundação arquitetural encontra-se **estável e homologada** sob testes de integração pesados (DTLS, Netem, Loopback de Hosts e Clientes e Memory Leaks exterminados). O motor de rede já dispõe de:
 
-Inspirado nas teses absolutas de Glenn Fiedler (Gaffer on Games) e Gabriel Gambetta, o QuanticNet está ativamente em transição para sua **Fase 9**, que contemplará:
+- **Client-Side Prediction & Server Reconciliation (Snapback)**: O jogador move-se instantaneamente no lado do cliente. O servidor autoritativo emite *snapbacks* (correções forçadas) seguidas de re-aplicação assíncrona de inputs unicamente quando fraudes ou dessincronizações severas são flagradas.
+- **Snapshot Interpolation (Dynamic Jitter Buffer)**: Mitigação elástica de flutuações de ping (Jitter) e Packet Loss, interpolando fluidamente os avatares remotos no passado e diluindo o erro residual de snaps através de algoritmos de *Error Blending*.
+- **Delta Compression & ACKs**: O servidor quantiza a banda de rede enviando apenas as diferenças (P-Frames) a partir do último estado confirmado pelo cliente (via *Sequence ACKs*), enxugando os payloads para dimensões de 10-15 bytes.
+- **Priority Accumulator & Hybrid Ticking (Tick Híbrido)**: Gestão cirúrgica de banda limitando pacotes ao teto do MTU (Maximum Transmission Unit). Entidades trafegam em regimes diferenciados (ex: Jogadores a 60Hz, Portas a 5Hz ou *On Change*) orquestradas pelo `QNNetProfile`.
+- **DTLS, Segurança e Identificação Segura**: Conexões com mbedTLS (certificados gerados sob demanda e "fingerprint pinning"). Prevenção rígida contra roubo de identidade, teletransporte (*Hard Caps* e *Strikes*) e pacotes malformados.
+- **Simulador Netem Nativamente Embutido**: O `QNWirePeer` permite injeção intencional de latência oscilante, duplicação e descarte caótico de pacotes para forçar a prova de carga da engine no desenvolvimento.
 
-1. **Lag Compensation (Server-Side Rewind)**: Histórico global no servidor permitindo colisões precisas (Hit Registration) em jogos de tiro, re-simulando o passado para compensar a latência do atirador.
-2. **Dead Reckoning & Extrapolação**: Algoritmos de sobrevivência à perda aguda de rede, prevendo continuidades direcionais para manter a fluidez quando os pacotes pararem de chegar.
-3. **Networked Physics**: Integração profunda de *Rigid Bodies*, sincronizando velocidade linear, angular, torques e atrito.
+## 🔮 O Futuro (Fase 9: MMO e Física de Rede)
 
-*(Para o planejamento técnico detalhado, consulte o **[ROADMAP_MMO.md](./ROADMAP_MMO.md)** e as tarefas do **[TODO.md](./TODO.md)**).*
+Com a arquitetura base de interpolação e predição estabilizada, o projeto engatilha a sua ascensão em direção às teses modernas (inspiradas por Glenn Fiedler / Gaffer on Games). Nossos próximos horizontes incluem:
 
-## Documentação e Demos
+1. **Lag Compensation (Server-Side Rewind / Hit Registration)**: Rebubinamento contínuo de estados no servidor (`QNWorldHistoryBuffer`) permitindo *raycasts* validados no passado, indispensável para atiradores competitivos.
+2. **Networked Physics**: Integração profunda de sincronização de *Rigid Bodies*, com troca autoritativa de velocidade linear, angular, torques de inércia e repouso (sleeping states).
+3. **Extrapolação e Dead Reckoning**: Previsão matemática de continuidades vetorizadas para garantir resiliência visual absoluta, mesmo quando uma conexão UDP perde pacotes sequencialmente.
 
-A arquitetura de documentação do QuanticNet divide o papel das demonstrações em duas frentes distintas:
+*(Para o planejamento técnico de longo prazo, consulte o **[ROADMAP_MMO.md](./ROADMAP_MMO.md)**).*
 
-1. **Bare Metal Demo (Teste de Aceitação):**
-   O plugin acompanha uma cena mínima embutida em `addons/quantic_net/demo/`. O objetivo desta demonstração é ser 100% *plug-and-play* e provar a infraestrutura base (host, join, submissão de estados preditivos e processamento de snapbacks) sem **nenhum** acoplamento a UI, mecânicas ou complexidade de gameplay.
+## 📚 Documentação e Integração (Plug and Play)
 
-2. **Repositório de Demos Ricas (`quantic-net-demos`):**
-   Para explorar o **espaço de possibilidades** do plugin (como perfis competitivos/MMO e sincronização de física complexa), o desenvolvimento e testes visuais migrarão para um repositório secundário e dedicado, blindando o repositório principal contra acoplamento visual.
+O QuanticNet não impõe hierarquias nem classes base ao desenvolvedor de jogo. O uso dá-se pelo consumo de métodos via Autoload `QuanticNet` e observação de seus Sinais de Domínio.
 
-Para aprender a consumir as funções e sinais do Autoload na prática, inicie pela leitura rigorosa da **[API_PUBLIC.md](./API_PUBLIC.md)**.
+1. **Demo Embardada (Bare Metal):**
+   O plugin acompanha uma cena autossuficiente e mínima em `addons/quantic_net/demo/` projetada como prova de vida. Valida predição, conectividade e processamento sem acoplar complexidade de gameplay.
+2. **Documentação Pública:**
+   Para orientações estritas sobre como acionar os Casos de Uso, instanciar a rede, manipular limites de MTU e responder a *snapbacks*, devore a **[API_PUBLIC.md](./API_PUBLIC.md)**.

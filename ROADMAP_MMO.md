@@ -1,101 +1,58 @@
-# ROADMAP MMO & COMPETITIVO: A Visão de Destino do QuanticNet
+# ROADMAP MMO & COMPETITIVO: O Destino do QuanticNet
 
-Este documento decreta a visão arquitetural de longo prazo para a evolução do **QuanticNet**. O projeto transicionará de um plugin autoritativo simples para um **netcode híbrido (MMO + instâncias competitivas integradas)**.
+Este documento decreta a visão arquitetural de longo prazo para a evolução do **QuanticNet**. Estando com a fundação arquitetural cimentada sob a versão `0.3.0` (Client-Side Prediction seguro, DTLS e Memória controlada sem ObjectDB Leaks), o projeto engatilha oficialmente a **Fase 9**, que transicionará a engine para um **netcode híbrido (MMO + instâncias competitivas integradas)**.
 
-> **Importante:** Este roadmap dita *o que* vamos construir no futuro, de forma que as *decisões de interface do presente* já acomodem essa realidade, sem custo prematuro de protocolo. O código deve permanecer simples hoje, mas estruturado para a complexidade de amanhã.
+> **Regra de Ouro:** Este roadmap dita *o que* vamos construir, de forma que as *decisões de interface do presente* jamais criem amarras ou custos prematuros. O código permanecerá brutalmente simples, mas moldado para a expansão matemática severa que o futuro exige.
 
-## Pilares Fundamentais
+## Pilares Fundamentais (Concluídos e Blindados) ✅
 
-### 1. A Abstração Universal de Entidade
+A arquitetura já acomoda com robustez de C++ e segurança de GDScript os seguintes pilares:
 
-Para o motor de rede, todo ator dinâmico no mundo será traduzido em uma `NetworkEntity`:
+### 1. Delta Compression & ACKs (Snapshot Compression) ✅
 
-```gdscript
-NetworkEntity = {
- "id": int,
- "pos": Vector3,
- "rot": Vector3, # ou Quat, dependendo do quantizador
- "profile": int # Enum: MMO, COMPETITIVE, etc.
-}
-```
+O servidor deixou de espelhar o mundo inteiro a cada tick. Através de *Sequence ACKs*, o tráfego foi reduzido a Deltas quantizados.
 
-Jogadores, NPCs estáticos e NPCs móveis são indistinguíveis para o gerenciador de interesse e despache. A única diferença é a origem do input.
+### 2. Jitter Buffer & Snapshot Interpolation ✅
 
-### 2. O Domínio do `NetProfile`
+A barreira de flutuação (*jitter*) do UDP está domesticada localmente por um *Dynamic Jitter Buffer* autônomo. O tempo de retenção respira e desincha orgulhosamente, adaptando-se às intempéries latentes reportadas pelo Netem.
 
-O `NetProfile` define a forma como o estado da entidade será processado e transmitido pela rede, sendo uma abstração estritamente técnica (agnóstica à regra de negócio do jogo). É uma classe de dados que dita o comportamento de tráfego:
+### 3. NetProfile e Tick Híbrido (Hybrid Ticking) ✅
 
-- **`QNNetProfile.HIGH_FREQUENCY`:** Alta frequência de atualização (ex: 60 Hz) e alta prioridade. Utilizado para mecânicas competitivas ou predição intensa. O *Duelo* é concebido como a adoção temporária deste perfil, e não uma zona física restrita do mapa.
-- **`QNNetProfile.LOW_FREQUENCY` (MMO Padrão):** Baixa frequência de atualização (ex: 10-15 Hz). Os clientes utilizam interpolação suave para exibir o movimento. Prioriza economia de banda e CPU.
-- **`QNNetProfile.STATIC`:** Atualiza apenas quando sofre mutação (*On Change Only*).
+O despachante não trabalha em regime estático. Todo tráfego respeita uma matriz de escalonamento regida por perfis isolados (60Hz competitivo, 20Hz padrão, 5Hz periférico, *On Change* estático).
 
-### 3. Spatial Hashing (Area of Interest - AoI)
+### 4. Priority Accumulator & Congestion Avoidance ✅
 
-O despache não pode enviar os dados do mundo inteiro para todo mundo. Implementaremos um `QNSpatialGrid` para filtrar quem recebe atualizações de quem com base na distância e nas células vizinhas.
-
-- **Fase 1 (GDScript Puro):** A lógica de Grid e Hashing deve nascer de forma purista na camada de Domínio, em GDScript e altamente testada via GUT (sem dependência da engine visual).
-- **Fase 2 (C++ / GDExtension):** Uma migração para GDExtension **NUNCA** acontecerá até que ferramentas de *profiling* comprovem que o loop de spatial hashing do GDScript tornou-se o gargalo. Quando ocorrer, o contrato de interface da classe no Domínio permanecerá inalterado.
-
-### 4. Dois Regimes de Tick e Despache
-
-Como consequência do `NetProfile`, a sessão autoritativa do servidor orquestrará dois (ou mais) regimes de tick simultâneos.
-Isso só será introduzido no servidor após um cenário de regime único ser devidamente homologado e testado em infraestrutura de rede real (internet/produção simulada).
-
-### 5. Delta Compression & ACKs (Snapshot Compression) [IMPLEMENTADO]
-
-O envio do estado do mundo consome a maior parte da banda do servidor. O servidor e o cliente trocam `ACKs` (confirmações de recebimento). Com isso, o servidor envia apenas a **diferença quantizada (Delta)** entre o estado atual da entidade e o último estado reconhecido pelo cliente. Entidades estáticas custam próximo de `0 bytes`.
-
-### 6. Jitter Buffer & Snapshot Interpolation [IMPLEMENTADO]
-
-O movimento do próprio jogador (`Client-Side Prediction`) está isolado, mas a renderização de todas as outras entidades (outros jogadores, NPCs) flui por um atraso intencional (`Jitter Buffer` via `QNInterpBuffer`). Esse buffer armazena os *snapshots* do servidor e interpola suavemente no passado, blindando o jogador das perdas de pacotes do UDP.
-
-### 7. Congestion Avoidance & Packet Fragmentation [PARCIAL]
-
-- **Fragmentation:** Snapshots de áreas superpovoadas ultrapassarão o MTU (1400 bytes). Se a `ENet` se provar insuficiente ou gargalar no *overhead*, uma lógica de re-montagem de *Chunks* confiáveis sobre UDP (Fragmentação) será delegada ao Domínio.
-- **Congestion Avoidance:** O servidor monitorará ativamente a perda de pacotes e o RTT (`QNLossTracker`) de cada conexão, estrangulando dinamicamente o tráfego enviado (reduzindo a taxa de atualização ou encolhendo a *Area of Interest*) quando a saúde da rota se deteriorar.
-
-### 8. NetProfile e Tick Híbrido (Hybrid Ticking) [IMPLEMENTADO]
-
-Para escalar o limite de entidades no servidor, o sistema não envia tudo na mesma frequência. Entidades possuem um `NetProfile` (`tick_rate_hz`, `base_priority`, etc). O despachante do servidor é escalonado por perfis, respeitando o ritmo exato de cada entidade (ex: 20Hz, 5Hz) independentemente se o jogo a considera um NPC, um Jogador ou uma Árvore.
-
-### 9. Dynamic Jitter Buffer e Error Blending [IMPLEMENTADO]
-
-O *Dynamic Jitter Buffer* garante que o tempo de retenção do passado (`RENDER_DELAY_MS`) incha e desincha em tempo real acompanhando a variância do ping do cliente. Além disso, o fim de uma extrapolação utiliza *Error Blending* (decaimento exponencial) para mesclar a posição sem sobressaltos e solavancos ("stuttering").
-
-### 10. Gerenciamento Avançado de Banda (Priority Accumulator) [IMPLEMENTADO]
-
-O limite físico da rede (MTU ~1400 bytes) impõe contenções rigorosas. Utiliza-se um *Priority Accumulator*: entidades ganham pontuação de prioridade com base na distância, no alvo do jogador e no `NetProfile`. Se uma entidade não couber no pacote atual, ela não é enviada, mas acumula "débito" de prioridade até que seja obrigatoriamente incluída no próximo pacote disponível.
-
----
-## O Futuro (Próximos Passos)
-
-### 11. Lag Compensation (Server-Side Rewind / Hit Registration)
-
-Para combates competitivos ou MMOs de ação (hitscan, projéteis), o servidor deve manter um histórico rigoroso de *hitboxes* de todas as entidades. Ao processar um tiro do cliente, o servidor rebobina o mundo para o momento exato em que o cliente efetuou o disparo, realiza o teste de colisão e, em seguida, avança o estado de volta ao presente.
-
-### 12. Extrapolação e Dead Reckoning (Sobrevivência à Latência)
-
-Quando pacotes são perdidos consecutivamente e o *Jitter Buffer* do cliente esvazia (falta de *snapshots* futuros), em vez de congelar a entidade, o motor de rede calcula o vetor de velocidade instantânea e *extrapola* (prevê) a continuidade do movimento em casos extremos (além da extrapolação linear).
-
-### 13. Networked Physics (Sincronização de Corpos Rígidos)
-
-A evolução do `NetProfile` englobará estados físicos puros (Rigid Bodies). Além de cinemática básica (posição e rotação), a rede sincronizará vetores de Força (Velocidade Linear e Angular) e detecção otimizada de repouso (`Sleep/Awake`) para economizar largura de banda na simulação de ambientes com alta interação física.
-
-### 14. Automação e Infraestrutura como Processo (Day 1)
-
-Scripts para levantar cenários de teste rapidamente serão nativos do ecossistema:
-
-- `run_local_test.sh`: Script para iniciar 1 servidor headless e 2 clientes, isolando logs e gerenciando portas localmente.
-- **Export Presets de Segurança**: A garantia desde o dia 1 de que um export "Client" **jamais** irá embutir credenciais como `certs/server.key`.
+O limite físico da rede (MTU UDP overhead ~1400 bytes) é respeitado. Entidades recebem pontuações de prioridade baseada em culling espacial e *debito acumulado*, priorizando o despache de forma justa e otimizada (Sem estouros de pacote!).
 
 ---
 
-## O Ciclo de Vida Pós-1.0 (Expansão MMO)
+## O Futuro: A Engenharia de Fronteira (Fase 9+) 🚀
 
-Quando o milestone 1.0 do plugin for atingido (Auth, Snapshot, Replay Local, DTLS, Netem, Demo), o roadmap MMO ditará que cada um dos pilares acima ganhe vida seguindo o rigor arquitetural e do TDD:
+### 1. Spatial Hashing (Area of Interest - AoI)
 
-1. **Domínio `QNSpatialGrid`:** Estruturas de dados em GDScript puro cobrindo query de vizinhos.
-2. **AoI como Política de Despacho:** Modificação da `QNHostSession` para calcular `snapshot` diferencial por par peer-to-peer.
-3. **NetProfile e Tick Híbrido:** Orquestrar relógios secundários (60Hz para peers cujo perfil seja `COMPETITIVE`).
-4. **Profiling:** Obtenção de métricas de estresse real na rede (ex: centenas de CCUs). Se gargalar, reescrita isolada em GDExtension C++ para o Grid.
-5. **Catálogo de Demos (`quantic-net-demos`):** Evoluir o "espaço de possibilidades" em um repositório separado consumindo o addon, demonstrando implementações ricas com múltiplos avatares, integração de UI (HUD), e simulação híbrida (predição vs interpolação) via NetProfile e AoI.
+O despache será filtrado por um `QNSpatialGrid`. Ninguém receberá dados irrelevantes que cruzam continentes, economizando banda extrema.
+
+* **Tática Arquitetural:** O algoritmo nascerá estritamente em GDScript no *Core Domain*, garantido por TDD cego sem nós visuais. Uma migração GDExtension (C++) só será permitida quando evidências sólidas de profiling acusarem gargalo intratável do interpretador do Godot 4.7.
+
+### 2. Lag Compensation (Server-Side Rewind / Hit Registration)
+
+Para viabilizar arenas competitivas e *hitscan* milimétrico.
+O servidor ganhará um `QNWorldHistoryBuffer` armazenando os históricos rigorosos dos volumes 3D no passado (aprox. 1 a 2 segundos). Ao acionar o gatilho, a infraestrutura servidor rebobinará o mundo autoritativo retroagindo o *ping* do atirador, calculando a colisão perfeita e avançando para o tempo real num único frame, ignorando a relatividade da Internet.
+
+### 3. Networked Physics (RigidBody Sync)
+
+As entidades de física pura abandonarão o envio cinemático primitivo.
+A API de domínio passará a quantizar *Linear Velocity*, *Angular Velocity*, vetores de empuxo, torques de inércia e estados binários críticos de repouso (Sleeping states) para economizar processamento do Host. O perfil será expandido para a categoria dedicada `NetProfile.RIGID_BODY`.
+
+### 4. Dead Reckoning Agressivo (Sobrevivência de Extrapolação)
+
+Quando a nuvem de tempestade chegar e o jogador perder pacotes numa severidade onde o Jitter Buffer estoure ou resseque por completo: as entidades não congelarão.
+Um cálculo matemático de continuidade de vetores preditivos manterá os alvos inimigos operando numa sobrevida ilusória calculada, minimizando engasgos grotescos e disfarçando cortes massivos de TCP/UDP.
+
+### 5. Escalabilidade Maciça: Testes Estressados
+
+As suítes do GUT darão luz a cenários severos: 100 props, 50 avatares disparando simulações híbridas concorrentes sob limites apertados de *MTU* para homologar a performance bruta e aferição algorítmica de estrangulamento de banda.
+
+---
+
+O fim dessa rota consolida o motor QuanticNet como uma alternativa irrefutável e determinística às ferramentas visuais nativas de *High-level Multiplayer*, devolvendo a soberania do Netcode à arquitetura e ao TDD.

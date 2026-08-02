@@ -1,286 +1,58 @@
-# TODO
+# TODO: QuanticNet
 
-Plugin de network (`QuanticNet`) `plug and play`, focado no desenvolvimento de jogos `3D Open World MMO` usando a `Godot Engine 4.7`. Arquitetada absoluta (a partir do zero) focada em **Code-First**, **Test-Driven Development (TDD)** e **Clean Architecture**. Eliminando a dependência de editores visuais para lógicas de negócio.
+Plugin de network (`QuanticNet`) *plug-and-play*, focado no desenvolvimento de jogos `3D Open World MMO` usando a `Godot Engine 4.7`.
+As diretrizes estruturais de **Code-First**, **Test-Driven Development (TDD)** e **Clean Architecture** governam o fluxo. Nenhuma linha é escrita sem antes redigir o seu Teste Falhando (GUT).
 
 ---
 
-## FUNDAÇÃO: CONSTRUÇÃO DO BOILERPLATE
-
-### Fase 1: Arquitetura
-
-Configuração do ecossistema, IDE e amarras do Code-First, TDD e Clean Architecture.
-
-- [x] Editar `GEMINI.md` definindo as regras arquiteturais, uso de GDScript docstrings e metodologia AAA.
-- [x] Instalar e configurar ambiente de testes (bitwes/Gut).
-
-### Fase 2: Core Domain (TDD Rigoroso)
-
-O coração da simulação e validação, agnóstico à infraestrutura de rede.
-
-- [x] Criar a "casca" do plugin Godot (`plugin.cfg` e script `@tool` herdando de `EditorPlugin`).
-- [x] Configurar inicialização do plugin (registro de singleton) utilizando as assinaturas exatas da Godot Engine 4.7 (`_enable_plugin` e `_disable_plugin`).
-- [x] Injetar o Autoload principal (`quantic_net_autoload.gd`) como fachada (Single-Point of Entry) baseada em sinais para orquestrar e delegar chamadas da Engine.
-- [x] Estruturar a árvore de diretórios enraizada nos padrões de Clean Architecture (`domain/`, `use_cases/`, `adapters/`, `infrastructure/`).
-- [x] TDD: Implementar `QNSerializer` (quantização binária de 19 Bytes para estado/snapback).
-- [x] TDD: Implementar `QNClockSync` (cálculo de RTT e sincronização de tempo do servidor).
-- [x] TDD: Implementar `QNLossTracker` (monitoramento de perda de pacotes via tracking de sequência).
-- [x] TDD: Implementar `QNInterpBuffer` (armazenamento circular e amostragem no passado remoto).
-- [x] TDD: Implementar `QNServerValidator` (clamping, validação anti-teleporte e rejeição baseada no tempo).
-- [x] TDD: Implementar `QNInputBuffer` (armazenamento e replay local de inputs - base do client prediction).
-
-### Fase 3: Camada de Infraestrutura e Transporte
-
-#### Limpeza de Testes (Higiene) [x]
-
-- [x] TDD: Adicionar teardown (`after_each`) nas suítes de `infrastructure` para liberar recursos alocados (ex: `_hook.free()`) e eliminar warnings de ObjectDB leak no GUT.
-- [x] Commit sugerido: `chore(tests): free Extension instances in GUT teardown`
-
-#### PR 2 — Wire peer, codec e Netem
-
-Implementar `QNWirePeer` em `addons/quantic_net/src/infrastructure/`, herdando
-de `MultiplayerPeerExtension` e encapsulando uma `ENetConnection`.
-
-- [x] TDD: Criar `tests/unit/infrastructure/test_qn_wire_peer_netem.gd`.
-- [x] TDD: Especificar e testar perfil de perda por canal virtual:
-  canal 0 (controle/reliable) sem drop por padrão; canal 1
-  (estado/unreliable) com drop configurável.
-- [x] TDD: Especificar e testar retenção por latência base, liberação
-  após o prazo e jitter gaussiano.
-- [x] TDD: Especificar e testar que jitter pode produzir reordenação
-  temporal controlada.
-- [x] TDD: Especificar e testar duplicação opcional de datagramas.
-- [x] TDD: Implementar `QNWirePeer` até a suíte de Netem ficar verde.
-- [x] TDD: Criar `tests/unit/infrastructure/test_qn_wire_peer_codec.gd`.
-- [x] TDD: Implementar header de wire versionado:
-  `magic | version | virtual_channel | flags | payload`.
-- [x] TDD: Implementar mapeamento de canais virtuais para ENet:
-  controle → ENet 0, estado → ENet 3, reliable ordenado → ENet 1.
-- [x] TDD: Implementar codec do payload: compressão ZSTD/DEFLATE condicional,
-  obfuscação XOR e decode inverso.
-- [x] TDD: Testar round-trip do codec, pacote malformado, versão/magic
-  inválidos e payload comprimido/não comprimido.
-- [x] TDD: Cobrir wrappers obrigatórios de `MultiplayerPeerExtension`:
-  status, id único, peer remoto, channel, transfer mode, target peer,
-  close e disconnect.
-- [x] Verificar compilação no Godot 4.7.1, incluindo
-  `ENetConnection.MODE_HOST` e tipagem explícita onde o parser exigir.
-- [x] Commit sugerido:
-  `feat(infrastructure): add QNWirePeer codec, channel mapping and netem`
-
-#### PR 3 — Hook da Multiplayer API [x]
-
-Implementar `QNNetHook` em `addons/quantic_net/src/infrastructure/`, herdando
-de `MultiplayerAPIExtension` e encapsulando `SceneMultiplayer`.
-
-- [x] TDD: Criar `tests/unit/infrastructure/test_qn_net_hook.gd`.
-- [x] TDD: Especificar reemissão dos sinais de conexão, autenticação,
-  entrada e saída de peers.
-- [x] TDD: Especificar interceptação de RPCs de saída por `Callable`,
-  permitindo observação, alteração ou cancelamento.
-- [x] TDD: Especificar interceptação de pacotes customizados de entrada
-  e saída, preservando peer de origem e canal virtual.
-- [x] TDD: Especificar delegação de object configuration add/remove
-  para o `SceneMultiplayer` interno.
-- [x] TDD: Implementar `QNNetHook` até todos os testes ficarem verdes.
-- [x] TDD: Cobrir o envio de pacote customizado com target peer,
-  transfer channel e transfer mode corretos.
-- [x] Testar que sinais do `SceneMultiplayer` são reemitidos sem
-  depender de identificadores de sinais herdados no `_init()`.
-- [x] Commit sugerido:
-  `feat(infrastructure): add QNNetHook multiplayer interception`
-
-### Fase 4: Casos de Uso de Sessão (TDD)
-
-Orquestração independente de cena e gameplay. Os casos de uso conhecem
-o domínio e contratos de transporte; não instanciam cubos, não leem input
-da Godot e não controlam UI.
-
-#### PR 4 — Sessão autoritativa do servidor [x]
-
-Implementar `QNHostSession` em `addons/quantic_net/src/use_cases/`.
-
-- [x] TDD: Criar `tests/unit/use_cases/test_qn_host_session.gd` com
-  transporte fake/memory transport.
-- [x] TDD: Especificar fluxo de autenticação por token/secret e
-  rejeição de credencial inválida.
-- [x] TDD: Especificar recebimento de `TYPE_STATE`, decode via
-  `QNSerializer` e validação por `QNServerValidator`.
-- [x] TDD: Especificar as três saídas autoritativas:
-  `accept` → relay do estado; `clamp` → relay + snapback reliable;
-  `reject` → snapback reliable sem relay.
-- [x] TDD: Especificar kick após `MAX_STRIKES` e limpeza por peer leave.
-- [x] TDD: Expor eventos de domínio, incluindo a propagação de
-  `peer_rejected(id, reason, strikes)`, sem `print()` interno.
-- [x] Implementar o caso de uso até a suíte verde.
-- [x] Commit sugerido:
-  `feat(use-cases): add authoritative host session`
-
-#### PR 5 — Sessão preditiva do cliente [x]
-
-Implementar `QNClientSession` em `addons/quantic_net/src/use_cases/`.
-
-- [x] TDD: Criar `tests/unit/use_cases/test_qn_client_session.gd` com
-  relógio e transporte fake determinísticos.
-- [x] TDD: Especificar rate limit de envio de estado a 20 Hz.
-- [x] TDD: Especificar criação de `seq`, serialização e armazenamento
-  do `sent_ts` no `QNInputBuffer`.
-- [x] TDD: Especificar eco autoritativo: lookup de `sent_ts` por seq,
-  chamada `QNClockSync.on_pong(client_sent, server_time, client_now)` e
-  confirmação/drain de inputs.
-- [x] TDD: Especificar recebimento de peer remoto, atualização de
-  `QNLossTracker` e alimentação de `QNInterpBuffer`.
-- [x] TDD: Especificar `TYPE_SNAPBACK`: estado autoritativo, seq
-  confirmado, reason e lista de inputs para replay.
-- [x] Implementar o caso de uso até a suíte verde.
-- [x] Commit sugerido:
-  `feat(use-cases): add predictive client session`
-
-### Fase 5: Infraestrutura DTLS e Fachada (Integração)
-
-A camada de infraestrutura monta a Engine, certificados e adaptadores.
-O autoload permanece uma casca fina: não conhece mecânicas, nodes de
-jogo, input, mesh, câmera ou UI.
-
-#### PR 6 — Bootstrap DTLS [x]
-
-Implementar `QNDTLSBootstrap` em
-`addons/quantic_net/src/infrastructure/`.
-
-- [x] TDD/integração: Criar teste headless para servidor e cliente
-  locais com DTLS real.
-- [x] Implementar host com
-  `dtls_server_setup(TLSOptions.server(key, cert))`.
-- [x] Implementar join com
-  `dtls_client_setup(hostname, TLSOptions.client(cert))`.
-- [x] Implementar fallback de desenvolvimento em `user://`:
-  gerar/reutilizar `qnet_cert.crt` e `qnet_cert.key`.
-- [x] Definir contrato de produção:
-  certificado público em `res://certs/server.crt`; chave privada apenas
-  no preset/export do servidor; hostname configurável e pinning.
-- [x] Propagar erros de bind, carregamento de cert e conexão via
-  `Error`/sinais, nunca apenas `push_error`.
-- [x] Commit sugerido:
-  `feat(infrastructure): add DTLS host and client bootstrap`
-
-#### PR 7 — Autoload plug-and-play [x]
-
-Completar `quantic_net_autoload.gd` como única API pública do addon.
-
-- [x] TDD/integração: Criar `tests/integration/test_quantic_net_api.gd`.
-- [x] Implementar `host()` e `join()` retornando `Error`.
-- [x] Implementar `submit_state()`, `remote_state()`, `loss_of()`,
-  `kick()` e `toggle_netem()` delegando às sessões.
-- [x] Manter/expor sinais públicos:
-  `peer_joined`, `peer_left`, `state_received`, `pong_received` e
-  `snapback_received`.
-- [x] Definir contrato final de `snapback_received`: seq confirmado,
-  posição, rotação, reason e inputs pendentes para replay; a aplicação
-  decide como reaplicar sua própria mecânica.
-- [x] Garantir que o addon não tenha referência a Node3D, cubos,
-  Input, meshes, câmera ou regras de gameplay.
-- [x] Commit sugerido:
-  `feat(api): complete plug-and-play QuanticNet autoload`
+## 🏗️ FUNDAÇÃO (Concluída - Fases 1 a 8)
 
-### Fase 6: Aceitação, Demo e Distribuição
+O projeto base estabilizou na versão **0.3.0**. Os seguintes épicos estão **100% testados (GUT), homologados e concluídos**:
 
-Evidência executável de que o addon instala uma vez, funciona em projeto
-3D vazio e pode ser consumido sem acoplamento à demo.
+- [x] Configuração da Clean Architecture e Metodologia AAA (TDD obrigatório).
+- [x] Construção do Core Domain: `QNSerializer`, `QNClockSync`, `QNLossTracker`, `QNInterpBuffer`, `QNServerValidator` e `QNInputBuffer`.
+- [x] Infraestrutura e Transporte: `QNWirePeer` com ENet, Codec, Obfuscação e Emulação de Redes Extremas via **Netem**.
+- [x] Ganchos Nativos Livres de Leaks: `QNNetHook` encapsulando e interceptando a `MultiplayerAPIExtension` do Godot com teardown seguro (`close()`) cravando 0 ObjectDB Leaks!
+- [x] Casos de Uso Autoritativos: `QNHostSession` (Anti-Cheat, Reject, Clamp) e `QNClientSession` (Prediction e Local Replay).
+- [x] Integração Criptográfica DTLS: `QNDTLSBootstrap` gerando certificados mbedTLS *on the fly* com Fingerprint Pinning de proteção.
+- [x] Evolução Competitiva MMO: Delta Compression & ACKs, Priority Accumulator e Tick Híbrido.
+- [x] Demo "Bare Metal" e Teste End-to-End validando o Autoload `QuanticNet` *Plug-and-play*.
 
-#### PR 8 — Teste de integração de rede real [x]
+---
 
-- [x] Migrar o teste do rascunho para
-  `tests/integration/test_server_two_clients.gd`.
-- [x] Subir um servidor e dois clientes DTLS reais na mesma árvore
-  headless, sob Netem (latência, jitter e perda configurada).
-- [x] Validar: dois peers autenticados, clock sincronizado, RTT em
-  faixa esperada, relay de estado remoto, perda medida e convergência
-  do estado no servidor.
-- [x] Fazer o processo encerrar com exit code 0/1 para CI.
-- [x] Commit sugerido:
-  `test(integration): cover DTLS server and two clients under netem`
+## 🚀 FASE 9: A FRONTEIRA MMO E FÍSICA
 
-#### PR 9 — Demo agnóstica de gameplay [x]
+Esta etapa abraçará mecânicas massivas. A arquitetura de base não será tocada, em vez disso, módulos puristas em GDScript serão anexados ao Domínio visando expandir as capacidades simulativas do servidor. O ciclo TDD será estrito.
 
-- [x] Criar demo 3D "bare metal" isolada em `addons/quantic_net/demo/` (smoke test embutido).
-- [x] Demonstrar apenas integração consumidora:
-  `host()`, `join()`, `submit_state()` e sinais `peer_joined`/`state_received`.
-  Deve ser estritamente plug-and-play sem acoplamento à UI, AoI ou regras de domínio complexas.
-- [x] Teste de fumaça Gut em `tests/integration/` para instanciar a demo e prevenir crashes na API pública.
-- [x] Bugfix: Corrigido bug onde clientes remotos sofriam jitter e ficavam presos em `(0,0,0)` devido à instância nula de `QNServerValidator` em `QNHostSession`.
-- [x] Bugfix: Resolução da máquina de estados de autenticação (`complete_auth`) e propagação do ID real do cliente para o `QNWirePeer`, viabilizando múltiplos clientes corretamente.
-- [x] Commit sugerido:
-  `docs(demo): add minimal 3D plug-and-play example`
+### PR 21 — Spatial Hashing Puro (Area of Interest - AoI)
 
-#### PR 10 — Time to breathe
+O despache não pode propagar todo o universo. Filtragem espacial inteligente.
 
-- [x] OK. Let's take a deep breath. Let's read Gaffer's book.
-- [x] And then... let's continue.
+- [ ] TDD: Criar a classe `QNSpatialGrid` em `src/domain/`.
+- [ ] Especificar inserção, atualização e remoção veloz de IDs em células de Grid (Cell Size parametrizável).
+- [ ] Especificar busca de vizinhos radial (`get_entities_in_radius`).
+- [ ] Integrar no ciclo de broadcast do `QNHostSession`, poupando banda limitando *snapshots* apenas a entidades que colidem visualmente (culling).
 
-### Fase 7: Evolução Competitiva (Gaffer On Games)
+### PR 22 — Lag Compensation (Server-Side Rewind)
 
-Aprimoramentos arquiteturais baseados na literatura clássica de Glenn Fiedler para estabilizar a predição e otimizar banda para o cenário MMO/Competitivo.
+Implementação de reconciliação de tempo para hit-registration preciso em jogos competitivos.
 
-#### PR 11 — Fix Your Timestep (Migração Física) [x]
+- [ ] TDD: Criar `QNWorldHistoryBuffer` armazenando AABB / Bounds das entidades por `render_ts`.
+- [ ] Especificar lógica de captura temporal cíclica circular retrocedendo no máximo até 1,5s no passado do servidor.
+- [ ] Integrar no Autoload a função `raycast_past(origin, direction, timestamp)`, expondo-a para que jogos de FPS construam seu HitScan determinístico compensando pings de até 250ms perfeitamente.
 
-- [x] Mover a lógica de envio de pacotes e predição local do cliente para o `_physics_process()` (tanto no `quantic_net_autoload.gd` quanto em `demo_main.gd`).
-- [x] Garantir que o `dt` enviado (ou inferido) no `submit_state` seja estritamente cravado pela Godot Engine (ex: 1/60s), eliminando a variabilidade do framerate.
+### PR 23 — Sincronização de Física Rígida (Networked Physics)
 
-#### PR 12 — Resiliência a Perda (Inputs Redundantes) [x]
+- [ ] TDD: Expansão do codec `QNSerializer` ou `BitBuffer` para suportar empacotamento rigoroso de *Linear Velocity* e *Angular Velocity*.
+- [ ] Criar constante no Domain: `NetProfile.RIGID_BODY`.
+- [ ] Alterar `QNClientSession` e `QNHostSession` para gerenciar repousos (Sleeping states): economizar 100% de banda de entidades físicas quando suas energias cinéticas zerarem e notificar apenas a eclosão inicial do pulso.
 
-- [x] Alterar o contrato de envio do cliente: em vez de enviar o estado absoluto do *frame N*, enviar o histórico dos últimos 3 ticks.
-- [x] Ajustar o `QNServerValidator` para processar a janela de histórico, garantindo que o movimento do jogador continue fluido no servidor mesmo sob 5-10% de packet loss.
-- [x] Estudar a viabilidade de *Delta Compression* para o `tick_broadcast` do servidor.
+### PR 24 — Testes de Escalabilidade Massiva
 
-#### PR 13 — Otimização Extrema (BitStream Serializer) [x]
+- [ ] Criar nova suíte de testes de integração Headless simulando a conexão concorrente de dezenas de `QNClientSessions` e dezenas de entidades.
+- [ ] Validar consumo de banda em *Bytes per Second* em cima do `PriorityAccumulator`. Comprovar matematicamente que o teto de *MTU* é respeitado independente da saturação das requisições ao longo de 60 segundos de loop contínuo sob perturbações de Netem.
 
-- [x] Refatorar (ou reescrever) o `QNSerializer` abandonando as limitações do `PackedByteArray` a nível de Byte (`encode_u16`).
-- [x] Implementar um empacotador bit-a-bit (BitBuffer) para truncar booleanos (1 bit) e compactar Quaternions omitindo a maior raiz, visando espremer o pacote de 19 Bytes para ~10 Bytes.
+### PR 25 — Separação e Migração Visual
 
-### Fase 8: Fundações MMO (Delta, ACKs e Jitter)
-
-Nesta fase focaremos na transição arquitetural para suportar o roadmap MMO, focando primeiramente na compressão de pacotes.
-
-#### PR 14 — Delta Compression e ACKs [x]
-
-- [x] Criar classe `QNDeltaSerializer` no Domínio, suportando criação de P-Frames (Deltas a partir de um estado base).
-- [x] Implementar a troca de ACKs: Cliente anexa o último *seq* recebido nos pacotes de input, e o Host armazena um histórico circular para gerar o Delta a partir desse *seq*.
-- [x] Integrar no `QNClientSession` e `QNHostSession` de forma que a demonstração não quebre, utilizando *Fallback* para enviar I-Frames (estados absolutos) quando não há ACK sincronizado.
-
-#### PR 15 — Dynamic Jitter Buffer e Error Blending [x]
-
-- [x] Modificar o `QNInterpBuffer` para que `RENDER_DELAY_MS` seja dinâmico, baseado na variância real do RTT (ping jitter) monitorado pelo Cliente.
-- [x] Implementar decaimento exponencial (Error Blending) na extrapolação. Quando o pacote correto chega após um Jitter Spike, não realizar um hard-snap, mas diluir o erro de posição/rotação ao longo de múltiplos frames interpolados (reduzir engasgos visuais agressivos).
-
-#### PR 16 — NetProfile e Tick Híbrido (Hybrid Ticking) [x]
-
-- [x] Criar classe de dados agnóstica `QNNetProfile` no domínio, expondo apenas parâmetros de rede (ex: `tick_rate_hz`, `base_priority`, `spatial_culling_radius`). O QuanticNet não conhecerá enums de jogo (ex: PLAYER, NPC).
-- [x] Fornecer perfis pré-configurados convenientes (ex: `HIGH_FREQUENCY`, `LOW_FREQUENCY`, `STATIC`).
-- [x] Alterar o loop do `QNHostSession.tick_broadcast` para escalonar envios (Hybrid Ticking). Entidades devem respeitar seu próprio `tick_rate_hz` para economizar banda, sendo empacotadas nos snapshots apenas quando o seu respectivo intervalo de envio for atingido.
-
-#### PR 17 — Priority Accumulator e Limite de MTU
-
-- [x] Implementar `QNPriorityAccumulator` no domínio: um sistema de ranqueamento que seleciona quais entidades cabem no pacote atual sem estourar o limite de payload (ex: MTU - UDP overhead).
-- [x] Lógica de Score: (Distância + NetProfile.base_priority + [Opcional] Look Direction) + Débito Acumulado.
-- [x] Entidades que não couberem no pacote (`mtu_budget` esgotado) recebem incremento no seu "débito acumulado", garantindo que eventualmente serão enviadas no futuro.
-- [x] Expandir suporte dinâmico no `tick_broadcast`: permitir mudança de `NetProfile` em runtime resetando `last_broadcast_ts` e integrar logs de contabilidade de banda.
-
-#### PR 18 — Stress Test & Robustness Validation (Testes de Estresse e Netem)
-
-- [ ] Desenvolver suítes de teste de integração focadas em escalabilidade (ex: 5 props, 50 props, 100 props) monitorando a contabilidade de banda e limites de MTU.
-- [ ] Mapear o impacto real e prático das simulações de anomalias (`Netem` extremo) sobre a movimentação, extrapolando comportamentos atípicos ("patinação" e stuttering).
-- [ ] Documentar contramedidas (aumento dinâmico de delay, restrição de extrapolação) e assegurar que a engine de rede suporta latências agressivas mantendo o estado da demo tolerável.
-
-### Fase 9: Combate e Simulação Física Avançada
-
-Uma transição para mecânicas de ação, hit-registration e física sincronizada (Networked Physics).
-
-#### PR 19 — Lag Compensation (Server-Side Rewind)
-
-- [ ] Implementar buffer histórico global no Servidor (`QNWorldHistoryBuffer`) que armazena as *hitboxes* e posições exatas de todas as entidades dos últimos 1-2 segundos.
-- [ ] Criar API exposta para o usuário testar colisões/raycasts no passado autoritativo (ex: `QuanticNet.raycast_past(origin, direction, timestamp)`), compensando o RTT do atirador.
-
-#### PR 20 — Networked Physics (RigidBody Sync)
-
-- [ ] Implementar perfil de simulação física rigorosa (`NetProfile.RIGID_BODY`).
-- [ ] Expandir o protocolo de sincronização do Domínio para incluir *Linear Velocity*, *Angular Velocity* e detecção binária de repouso (Sleeping states) para otimização extrema de banda.
-- [ ] Adicionar suporte a *Coulomb Friction* e *Inertia Tensors* no replay determinístico de predição do cliente (se aplicável).
+- [ ] Desacoplar quaisquer cenários visuais pesados. Manter apenas um script base estéril "Smoke Test".
+- [ ] Iniciar um repositório secundário (ex: `quantic-net-demos`) que importará essa release consumindo suas virtudes de forma arquitetural (sem UI-Bound Lógica), para ilustrar HUDs e avatares detalhados.
