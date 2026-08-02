@@ -37,12 +37,13 @@ var auto_move := true
 var auto_time := 0.0
 var _last_rx := {}
 var _netem_active := false
+var _can_send_state := false
 
 var _profiles = [
-	QuanticNet.NetProfile.new(20.0, 5.0, 50.0),  # 1: Padrão (20Hz)
-	QuanticNet.NetProfile.new(10.0, 3.0, 30.0),  # 2: Intermediário (10Hz)
-	QuanticNet.NetProfile.new(5.0, 1.0, 10.0),   # 3: Prop (5Hz)
-	QuanticNet.NetProfile.new(1.0, 0.5, 5.0),    # 4: Muito Lento (1Hz)
+	QuanticNet.NetProfile.new(20.0, 5.0, 50.0), # 1: Padrão (20Hz)
+	QuanticNet.NetProfile.new(10.0, 3.0, 30.0), # 2: Intermediário (10Hz)
+	QuanticNet.NetProfile.new(5.0, 1.0, 10.0), # 3: Prop (5Hz)
+	QuanticNet.NetProfile.new(1.0, 0.5, 5.0), # 4: Muito Lento (1Hz)
 	QuanticNet.NetProfile.new(60.0, 10.0, 100.0) # 5: Extremo (60Hz)
 ]
 var _current_profile_idx = 0
@@ -66,6 +67,13 @@ func _ready() -> void:
 		_setup_server_props()
 	else:
 		_netem_active = "--netem" in args
+		# Registra callback de peer join para autorizar envio de estado com pequeno delay
+		QuanticNet.peer_joined.connect(func(id: int):
+			if id == QuanticNet.get_unique_id():
+				# Delay para SceneMultiplayer assentar o peer internamente
+				get_tree().create_timer(0.1).timeout.connect(func(): _can_send_state = true)
+		)
+		
 		QuanticNet.join("127.0.0.1", PORT, SECRET, _netem_active)
 		QuanticNet.set_netem_config(0.10, 150, 50) # 10% perda, 150ms atraso, 50ms jitter
 		print("[DEMO] Cliente conectando (netem=%s) [Pressione 'N' para alternar]" % ("true" if _netem_active else "false"))
@@ -80,6 +88,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_N:
 			QuanticNet.toggle_netem()
 			_netem_active = not _netem_active
+		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
+			auto_move = not auto_move
+			print("[DEMO] Auto-move: ", auto_move)
 		elif event.keycode == KEY_L:
 			if Engine.max_fps == 0:
 				Engine.max_fps = 60
@@ -94,16 +105,18 @@ func _unhandled_input(event: InputEvent) -> void:
 				_apply_profile.rpc_id(1, QuanticNet.get_unique_id(), _current_profile_idx)
 			else:
 				_apply_profile.rpc_id(1, QuanticNet.get_unique_id(), _current_profile_idx)
+		elif event.keycode == KEY_SPACE:
+			_request_spawn_props.rpc_id(1, 100, true) # 'SPACE' reseta para 100
 		elif event.keycode == KEY_0:
-			_request_spawn_props.rpc_id(1, 100, true) # '0' reseta para 100
-		elif event.keycode == KEY_EQUAL:
-			_request_spawn_props.rpc_id(1, 5, false) # '+' (ou '=') adiciona 5
-		elif event.keycode == KEY_MINUS:
-			_request_remove_props.rpc_id(1, 5) # '-' remove 5
-		elif event.keycode == KEY_KP_ADD:
-			_request_spawn_props.rpc_id(1, 5, false) # numpad '+' adiciona 5
-		elif event.keycode == KEY_KP_SUBTRACT:
-			_request_remove_props.rpc_id(1, 5) # numpad '-' remove 5
+			_request_spawn_props.rpc_id(1, 0, true) # '0' zera todos
+		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
+			_request_spawn_props.rpc_id(1, 10, false) # '+' adiciona 10
+		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
+			_request_remove_props.rpc_id(1, 10) # '-' remove 10
+		elif event.keycode == KEY_ASTERISK or event.keycode == KEY_KP_MULTIPLY:
+			_request_scale_props.rpc_id(1, 2.0) # '*' multiplica por 2
+		elif event.keycode == KEY_SLASH or event.keycode == KEY_KP_DIVIDE:
+			_request_scale_props.rpc_id(1, 0.5) # '/' divide por 2
 
 @rpc("any_peer", "call_local")
 func _apply_profile(peer_id: int, profile_idx: int) -> void:
@@ -161,6 +174,16 @@ func _request_remove_props(count: int) -> void:
 		_next_prop_id -= removed
 		if _next_prop_id < 1000: _next_prop_id = 1000
 
+@rpc("any_peer", "call_local")
+func _request_scale_props(factor: float) -> void:
+	if not QuanticNet.is_server(): return
+	var current = maxi(0, _next_prop_id - 1000)
+	var target = int(current * factor)
+	if target > current:
+		_request_spawn_props(target - current, false)
+	elif target < current:
+		_request_remove_props(current - target)
+
 func _setup_server_props() -> void:
 	# Inicia com 5 props
 	_request_spawn_props(5, true)
@@ -184,6 +207,37 @@ func _setup_client_scene() -> void:
 	plane.material = mat
 	floor_mesh.mesh = plane
 	add_child(floor_mesh)
+	
+	var hud = CanvasLayer.new()
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_top", 20)
+	var vbox = VBoxContainer.new()
+	
+	var shortcuts = [
+		"CONTROLES IN-GAME:",
+		"Setas      : Mover",
+		"Enter      : Auto-Move On/Off",
+		"L          : Destravar FPS / V-Sync",
+		"N          : Ativar/Desativar NETEM",
+		"1 a 5      : Mudar Perfil de Rede (Tick Rate)",
+		"SPACE      : Spawna 100 Props (reseta)",
+		"+ / -      : Adiciona/Remove 10 Props",
+		"* / /      : Multiplica/Divide total por 2",
+		"0          : Remove todos os Props"
+	]
+	
+	for s in shortcuts:
+		var lbl = Label.new()
+		lbl.text = s
+		lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
+		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+		lbl.add_theme_constant_override("outline_size", 4)
+		vbox.add_child(lbl)
+		
+	margin.add_child(vbox)
+	hud.add_child(margin)
+	add_child(hud)
 
 func _on_peer_joined(id: int) -> void:
 	# Cada peer vira um cubo. O servidor ve todos; o cliente ve todos
@@ -244,9 +298,6 @@ func _on_peer_left(id: int) -> void:
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
 		get_tree().quit()
-	if Input.is_action_just_pressed("ui_accept"):
-		auto_move = not auto_move
-		print("[DEMO] Auto-move: ", auto_move)
 		
 	# Servidor: Atualiza fisicamente todos os props (bots) em movimento contínuo
 	if QuanticNet.is_server():
@@ -283,8 +334,8 @@ func _physics_process(delta: float) -> void:
 		cube.position.x += move.x * SPEED * delta
 		cube.position.z += move.y * SPEED * delta
 		
-		# Envia estado para o servidor se estivermos conectados.
-		if QuanticNet._state == QuanticNet.ConnectionState.CONNECTED:
+		# Envia estado para o servidor se estivermos autorizados.
+		if _can_send_state and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 			QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
 
 func _process(delta: float) -> void:
