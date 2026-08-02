@@ -1,4 +1,4 @@
-## @file test_quantic_net_api.gd
+﻿## @file test_quantic_net_api.gd
 ## @path res://tests/integration/test_quantic_net_api.gd
 ##
 ## @description
@@ -6,10 +6,10 @@
 ## e sinais. Sockets reais, testes headless sem UI. TDD rigoroso.
 ##
 ## @created 2026-07-30
-## @updated 2026-07-30
+## @updated 2026-07-31
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

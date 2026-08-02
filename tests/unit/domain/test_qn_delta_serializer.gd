@@ -1,4 +1,4 @@
-## @file test_qn_delta_serializer.gd
+﻿## @file test_qn_delta_serializer.gd
 ## @path res://tests/unit/domain/test_qn_delta_serializer.gd
 ##
 ## @description

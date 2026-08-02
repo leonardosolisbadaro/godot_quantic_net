@@ -1,4 +1,4 @@
-## @file qn_wire_peer.gd
+﻿## @file qn_wire_peer.gd
 ## @path res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd
 ##
 ## @description
@@ -7,10 +7,10 @@
 ## Camada: Infrastructure
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-07-31
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

@@ -1,4 +1,4 @@
-## @file test_qn_loss_tracker.gd
+﻿## @file test_qn_loss_tracker.gd
 ## @path res://tests/unit/domain/test_qn_loss_tracker.gd
 ##
 ## @description

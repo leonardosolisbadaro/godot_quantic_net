@@ -1,4 +1,4 @@
-## @file test_qn_clock_sync.gd
+﻿## @file test_qn_clock_sync.gd
 ## @path res://tests/unit/domain/test_qn_clock_sync.gd
 ##
 ## @description
@@ -7,10 +7,10 @@
 ## de RTT (Round Trip Time) através de janelas móveis (EMA), isolado da engine.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

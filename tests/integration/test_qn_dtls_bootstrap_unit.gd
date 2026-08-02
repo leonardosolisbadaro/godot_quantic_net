@@ -1,4 +1,4 @@
-## @file test_qn_dtls_bootstrap_unit.gd
+﻿## @file test_qn_dtls_bootstrap_unit.gd
 ## @path res://tests/integration/test_qn_dtls_bootstrap_unit.gd
 ##
 ## @description
@@ -10,10 +10,10 @@
 ## e await de frames; deadline generoso para evitar flakiness em CI.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-07-30
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.2.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

@@ -1,4 +1,4 @@
-## @file test_qn_net_profile.gd
+﻿## @file test_qn_net_profile.gd
 ## @path res://addons/quantic_net/tests/domain/test_qn_net_profile.gd
 ##
 ## @description
@@ -9,7 +9,7 @@
 ## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

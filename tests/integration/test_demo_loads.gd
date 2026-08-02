@@ -1,4 +1,4 @@
-## @file test_demo_loads.gd
+﻿## @file test_demo_loads.gd
 ## @path res://tests/integration/test_demo_loads.gd
 ##
 ## @description
@@ -8,10 +8,10 @@
 ## a cena demo carrega e promove o autoload sem crash.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-07-31
 ##
 ## @since 0.2.0
-## @lastModifiedIn 0.2.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

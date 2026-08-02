@@ -1,4 +1,4 @@
-## @file qn_interp_buffer.gd
+﻿## @file qn_interp_buffer.gd
 ## @path res://addons/quantic_net/src/domain/qn_interp_buffer.gd
 ##
 ## @description
@@ -8,10 +8,10 @@
 ## Camada: Domain (regra pura — não conhece ENet, MultiplayerPeer nem SceneTree).
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

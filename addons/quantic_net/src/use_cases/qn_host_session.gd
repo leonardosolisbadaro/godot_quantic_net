@@ -1,4 +1,4 @@
-## @file qn_host_session.gd
+﻿## @file qn_host_session.gd
 ## @path res://addons/quantic_net/src/use_cases/qn_host_session.gd
 ##
 ## @description
@@ -6,10 +6,10 @@
 ## validação de movimento, propagação e registro de entidades.
 ##
 ## @created 2026-07-30
-## @updated 2026-07-30
+## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

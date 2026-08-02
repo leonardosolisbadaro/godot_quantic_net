@@ -1,4 +1,4 @@
-## @file qn_dtls_bootstrap.gd
+﻿## @file qn_dtls_bootstrap.gd
 ## @path res://addons/quantic_net/src/infrastructure/qn_dtls_bootstrap.gd
 ##
 ## @description
@@ -8,10 +8,10 @@
 ## Camada: Infrastructure (acoplamento direto a APIs Godot permitido apenas aqui).
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-07-30
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.2.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

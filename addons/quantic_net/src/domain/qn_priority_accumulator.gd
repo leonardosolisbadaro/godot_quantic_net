@@ -1,4 +1,4 @@
-## @file qn_priority_accumulator.gd
+﻿## @file qn_priority_accumulator.gd
 ## @path res://addons/quantic_net/src/domain/qn_priority_accumulator.gd
 ##
 ## @description
@@ -10,7 +10,7 @@
 ## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

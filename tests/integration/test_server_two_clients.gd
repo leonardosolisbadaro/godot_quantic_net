@@ -1,4 +1,4 @@
-## @file test_server_two_clients.gd
+﻿## @file test_server_two_clients.gd
 ## @path res://tests/integration/test_server_two_clients.gd
 ##
 ## @description

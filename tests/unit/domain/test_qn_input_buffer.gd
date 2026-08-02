@@ -1,4 +1,4 @@
-## @file test_qn_input_buffer.gd
+﻿## @file test_qn_input_buffer.gd
 ## @path res://tests/unit/domain/test_qn_input_buffer.gd
 ##
 ## @description

@@ -1,4 +1,4 @@
-## @file qn_bit_buffer.gd
+﻿## @file qn_bit_buffer.gd
 ## @path res://addons/quantic_net/src/domain/qn_bit_buffer.gd
 ##
 ## @description

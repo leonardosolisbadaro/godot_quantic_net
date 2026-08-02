@@ -1,4 +1,4 @@
-## @file qn_integration_base.gd
+﻿## @file qn_integration_base.gd
 ## @path res://tests/integration/helpers/qn_integration_base.gd
 ##
 ## @description

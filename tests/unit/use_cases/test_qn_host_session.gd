@@ -1,14 +1,14 @@
-## @file test_qn_host_session.gd
+﻿## @file test_qn_host_session.gd
 ## @path res://tests/unit/use_cases/test_qn_host_session.gd
 ##
 ## @description
 ## Testes unitários para QNHostSession, responsável pela orquestração autoritativa.
 ##
 ## @created 2026-07-30
-## @updated 2026-07-30
+## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

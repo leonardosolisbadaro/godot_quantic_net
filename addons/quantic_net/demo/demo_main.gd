@@ -1,4 +1,4 @@
-## @file demo_main.gd
+﻿## @file demo_main.gd
 ## @path res://addons/quantic_net/demo/demo_main.gd
 ##
 ## @description
@@ -7,10 +7,10 @@
 ## publicos do autoload. Nao conhece internals do plugin.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-08-02
 ##
 ## @since 0.2.0
-## @lastModifiedIn 0.2.0
+## @lastModifiedIn 0.3.0-rc.1
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

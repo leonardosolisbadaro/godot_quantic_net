@@ -1,4 +1,4 @@
-## @file test_qn_wire_peer_codec.gd
+﻿## @file test_qn_wire_peer_codec.gd
 ## @path res://tests/unit/infrastructure/test_qn_wire_peer_codec.gd
 ##
 ## @description
@@ -6,10 +6,10 @@
 ## XOR e rejeicao de framing invalido.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-07-30
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.2.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

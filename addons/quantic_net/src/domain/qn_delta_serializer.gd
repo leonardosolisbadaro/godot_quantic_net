@@ -1,4 +1,4 @@
-## @file qn_delta_serializer.gd
+﻿## @file qn_delta_serializer.gd
 ## @path res://addons/quantic_net/src/domain/qn_delta_serializer.gd
 ##
 ## @description

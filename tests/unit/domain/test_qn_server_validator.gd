@@ -1,4 +1,4 @@
-## @file test_qn_server_validator.gd
+﻿## @file test_qn_server_validator.gd
 ## @path res://tests/unit/domain/test_qn_server_validator.gd
 ##
 ## @description

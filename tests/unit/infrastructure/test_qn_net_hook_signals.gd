@@ -1,4 +1,4 @@
-## @file test_qn_net_hook_signals.gd
+﻿## @file test_qn_net_hook_signals.gd
 ## @path res://tests/unit/infrastructure/test_qn_net_hook_signals.gd
 ##
 ## @description
@@ -7,10 +7,10 @@
 ## Metodologia AAA sobre bitwes/Gut; classe carregada via preload (sem class_name).
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-08-02
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.3.0-rc.1
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
