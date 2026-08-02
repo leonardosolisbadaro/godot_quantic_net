@@ -18,9 +18,21 @@ extends GutTest
 
 const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
 
+var _test_hooks: Array = []
+func create_hook() -> QNNetHook:
+	var h = QNNetHook.new()
+	_test_hooks.append(h)
+	return h
+
+func after_each() -> void:
+	for h in _test_hooks:
+		if h and h.has_method("close"):
+			h.close()
+	_test_hooks.clear()
+
 func test_sinais_de_conexao_sao_reemitidos() -> void:
 	# Arrange: hook e coletores de sinais
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var fired := []
 	hook.connected_to_server.connect(func() -> void: fired.append("connected"))
 	hook.connection_failed.connect(func() -> void: fired.append("failed"))
@@ -35,7 +47,7 @@ func test_sinais_de_conexao_sao_reemitidos() -> void:
 
 func test_sinais_de_peer_sao_reemitidos_com_id() -> void:
 	# Arrange
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var joined := []
 	var left := []
 	hook.peer_connected.connect(func(id: int) -> void: joined.append(id))
@@ -49,7 +61,7 @@ func test_sinais_de_peer_sao_reemitidos_com_id() -> void:
 
 func test_sinal_peer_authenticating_reemitido() -> void:
 	# Arrange
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var auth := []
 	hook.peer_authenticating.connect(func(id: int) -> void: auth.append(id))
 	# Act
@@ -59,5 +71,6 @@ func test_sinal_peer_authenticating_reemitido() -> void:
 
 func test_hook_e_multiplayer_api_valida_sem_peer() -> void:
 	# Arrange + Act + Assert: sem peer configurado, estado consistente
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	assert_eq(hook.get_peers().size(), 0, "nenhum peer antes de conectar")
+

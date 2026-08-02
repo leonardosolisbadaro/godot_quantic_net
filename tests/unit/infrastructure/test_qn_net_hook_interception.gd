@@ -18,13 +18,25 @@ extends GutTest
 
 const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
 
+var _test_hooks: Array = []
+func create_hook() -> QNNetHook:
+	var h = QNNetHook.new()
+	_test_hooks.append(h)
+	return h
+
+func after_each() -> void:
+	for h in _test_hooks:
+		if h and h.has_method("close"):
+			h.close()
+	_test_hooks.clear()
+
 @rpc("any_peer") func metodo_teste(_a, _b) -> void: pass
 @rpc("any_peer") func vetado() -> void: pass
 @rpc("any_peer") func qualquer() -> void: pass
 
 func test_gancho_rpc_permite_quando_retorna_true() -> void:
 	# Arrange: gancho observador que aprova
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var seen := []
 	hook.on_outgoing_rpc = func(peer: int, obj: Object, method: StringName, args: Array) -> bool:
 		seen.append(method)
@@ -36,7 +48,7 @@ func test_gancho_rpc_permite_quando_retorna_true() -> void:
 
 func test_gancho_rpc_veta_quando_retorna_false() -> void:
 	# Arrange: gancho que bloqueia
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	hook.on_outgoing_rpc = func(peer: int, obj: Object, method: StringName, args: Array) -> bool:
 		return false
 	# Act
@@ -46,14 +58,14 @@ func test_gancho_rpc_veta_quando_retorna_false() -> void:
 
 func test_sem_gancho_rpc_delega_direto() -> void:
 	# Arrange: sem gancho registrado
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	# Act + Assert: nao deve travar nem exigir Callable valido
 	hook._rpc(0, self, &"qualquer", [])
 	pass_test("delegacao direta sem gancho nao quebra")
 
 func test_filtro_entrada_descarta_quando_retorna_null() -> void:
 	# Arrange: consumidor de custom_packet + filtro que descarta
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var received := []
 	hook.custom_packet.connect(func(from_peer: int, data: PackedByteArray, ch: int) -> void:
 		received.append(data))
@@ -69,7 +81,7 @@ func test_filtro_entrada_descarta_quando_retorna_null() -> void:
 
 func test_filtro_entrada_pode_transformar_payload() -> void:
 	# Arrange: filtro que acrescenta um byte
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var received := []
 	hook.custom_packet.connect(func(from_peer: int, data: PackedByteArray, ch: int) -> void:
 		received.append(data))
@@ -87,7 +99,7 @@ func test_filtro_entrada_pode_transformar_payload() -> void:
 
 func test_filtro_saida_descarta_quando_retorna_null() -> void:
 	# Arrange
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	hook.on_outgoing_packet = func(to: int, data: PackedByteArray) -> Variant:
 		return null
 	# Act
@@ -97,7 +109,7 @@ func test_filtro_saida_descarta_quando_retorna_null() -> void:
 
 func test_observador_config_add_chamado() -> void:
 	# Arrange
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var seen := []
 	hook.on_config_add = func(obj: Object, config: Variant) -> void:
 		seen.append(obj)
@@ -105,3 +117,4 @@ func test_observador_config_add_chamado() -> void:
 	hook._object_configuration_add(hook, null)
 	# Assert
 	assert_eq(seen.size(), 1, "observador notificado no spawn config")
+

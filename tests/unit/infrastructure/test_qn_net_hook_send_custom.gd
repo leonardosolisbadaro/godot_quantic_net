@@ -18,6 +18,18 @@ extends GutTest
 
 const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
 
+var _test_hooks: Array = []
+func create_hook() -> QNNetHook:
+	var h = QNNetHook.new()
+	_test_hooks.append(h)
+	return h
+
+func after_each() -> void:
+	for h in _test_hooks:
+		if h and h.has_method("close"):
+			h.close()
+	_test_hooks.clear()
+
 class FakeBase extends MultiplayerAPIExtension:
 	var sent := []
 	var last_channel := -1
@@ -33,7 +45,7 @@ class FakeBase extends MultiplayerAPIExtension:
 	
 
 func _hook_com_fake() -> Array:
-	var hook := autofree(QNNetHook.new()) as QNNetHook
+	var hook := create_hook() as QNNetHook
 	var fake_base = autofree(FakeBase.new())
 	
 	# Desconecta do base original
@@ -90,3 +102,4 @@ func test_send_custom_filtro_transforma_antes_do_envio() -> void:
 	hook.send_custom(1, PackedByteArray([1]))
 	# Assert
 	assert_eq(fake_base.sent[0], PackedByteArray([1, 0xFF]), "filtro aplicado antes do fio")
+

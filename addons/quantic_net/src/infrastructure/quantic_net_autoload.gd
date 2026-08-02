@@ -66,7 +66,24 @@ func _set_state(s: int) -> void:
 		_state = s
 		connection_state_changed.emit(s)
 
+func disconnect_net(is_exiting: bool = false) -> void:
+	if _hook and _hook.has_method("close"):
+		_hook.close()
+	if _wire and _wire.has_method("close"):
+		_wire.close()
+	if not is_exiting and is_inside_tree() and get_tree().has_method("get_multiplayer") and get_tree().get_multiplayer(self.get_path()) == _hook:
+		get_tree().set_multiplayer(SceneMultiplayer.new(), self.get_path())
+	_wire = null
+	_enet = null
+	_hook = null
+	_host_session = null
+	_client_session = null
+	_is_server = false
+	_secret = ""
+	_set_state(ConnectionState.DISCONNECTED)
+
 func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32) -> int:
+	disconnect_net()
 	_is_server = true
 	_secret = secret
 	var err_out := [OK]
@@ -118,6 +135,7 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 	return OK
 
 func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
+	disconnect_net()
 	_is_server = false
 	_secret = secret
 	_set_state(ConnectionState.CONNECTING)
@@ -280,7 +298,4 @@ func set_netem_config(loss_pct: float, latency_ms: int, jitter_ms: int, dup_pct:
 		_wire.netem_dup_pct = dup_pct
 
 func _exit_tree() -> void:
-	if get_tree().has_method("get_multiplayer") and get_tree().get_multiplayer(self.get_path()) == _hook:
-		get_tree().set_multiplayer(SceneMultiplayer.new(), self.get_path())
-	if _wire and _wire.has_method("close"):
-		_wire.close()
+	disconnect_net(true)

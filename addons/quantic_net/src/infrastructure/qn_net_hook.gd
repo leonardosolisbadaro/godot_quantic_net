@@ -45,6 +45,23 @@ func _init() -> void:
 	base.peer_authenticating.connect(_on_peer_authenticating)
 	base.peer_packet.connect(_on_peer_packet)
 
+func close() -> void:
+	if base != null:
+		var sigs = [
+			["connected_to_server", _on_connected_to_server],
+			["connection_failed", _on_connection_failed],
+			["server_disconnected", _on_server_disconnected],
+			["peer_connected", _on_peer_connected],
+			["peer_disconnected", _on_peer_disconnected],
+			["peer_authenticating", _on_peer_authenticating],
+			["peer_packet", _on_peer_packet]
+		]
+		for s in sigs:
+			if base.has_signal(s[0]) and base.is_connected(s[0], s[1]):
+				base.disconnect(s[0], s[1])
+		base.multiplayer_peer = null
+		base = null
+
 func _on_connected_to_server() -> void:
 	print("QNNETHOOK: _on_connected_to_server called!")
 	connected_to_server.emit()
@@ -62,27 +79,32 @@ func _on_peer_packet(id: int, data: PackedByteArray) -> void:
 
 # Dummies/Wrappers obrigatorios da MultiplayerAPIExtension
 func _poll() -> Error:
+	if base == null: return ERR_UNCONFIGURED
 	var err: Error = base.poll()
 
 	return err
 
 func _rpc(peer: int, object: Object, method: StringName, args: Array) -> Error:
+	if base == null: return ERR_UNCONFIGURED
 	if on_outgoing_rpc.is_valid() and not bool(on_outgoing_rpc.call(peer, object, method, args)):
 		return OK
 	return base.rpc(peer, object, method, args)
 
 func _object_configuration_add(object: Object, config: Variant) -> Error:
+	if base == null: return ERR_UNCONFIGURED
 	if on_config_add.is_valid():
 		on_config_add.call(object, config)
 	return base.object_configuration_add(object, config)
 
 func _object_configuration_remove(object: Object, config: Variant) -> Error:
+	if base == null: return ERR_UNCONFIGURED
 	return base.object_configuration_remove(object, config)
 
 ## Envia pacote customizado fora do pipeline RPC (apos codec do WirePeer).
 ## to_peer: id alvo (0 = broadcast). channel: canal virtual. mode: transfer.
 func send_custom(to_peer: int, data: PackedByteArray, channel: int = 1,
 		mode: int = MultiplayerPeer.TRANSFER_MODE_UNRELIABLE) -> Error:
+	if base == null: return ERR_UNCONFIGURED
 	if on_outgoing_packet.is_valid():
 		var filtered: Variant = on_outgoing_packet.call(to_peer, data)
 		if filtered == null:
@@ -91,16 +113,16 @@ func send_custom(to_peer: int, data: PackedByteArray, channel: int = 1,
 	return base.send_bytes(data, to_peer, mode, channel)
 
 func _set_multiplayer_peer(p_peer: MultiplayerPeer) -> void:
-	base.multiplayer_peer = p_peer
+	if base != null: base.multiplayer_peer = p_peer
 
 func _get_multiplayer_peer() -> MultiplayerPeer:
-	return base.multiplayer_peer
+	return base.multiplayer_peer if base != null else null
 
 func _get_unique_id() -> int:
-	return base.get_unique_id()
+	return base.get_unique_id() if base != null else 0
 
 func _get_remote_sender_id() -> int:
-	return base.get_remote_sender_id()
+	return base.get_remote_sender_id() if base != null else 0
 
 func _get_peer_ids() -> PackedInt32Array:
-	return base.get_peers()
+	return base.get_peers() if base != null else PackedInt32Array()
