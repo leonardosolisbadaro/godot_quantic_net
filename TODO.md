@@ -55,9 +55,9 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 
 ### PR 23: Sessão C — "Atmosfera e Estado"
 
-- [ ] Implementar Aura Netem (tecla `N`): Adicionar um `ColorRect` na borda da tela que pulsa em laranja, com opacidade e frequência proporcionais ao `jitter_ms` e `delay_ms`.
-- [ ] Implementar Barra de Estado de Conexão no topo da tela, reagindo aos sinais de rede (🔴 FAILED, 🟡 CONNECTING, 🟠 AUTHENTICATING, 🟢 CONNECTED).
-- [ ] Adicionar botão de reconexão na interface em caso de falha (`connection_failed_reason`).
+- [x] Implementar atalho de simulação Netem (tecla `N`): Ativa/desativa delay, jitter e packet loss. (Efeito visual de pulsação removido a pedido do usuário).
+- [x] Implementar Barra de Estado de Conexão no topo da tela, reagindo aos sinais de rede (🔴 FAILED, 🟡 CONNECTING, 🟠 AUTHENTICATING, 🟢 CONNECTED).
+- [x] Adicionar botão de reconexão na interface em caso de falha (`connection_failed_reason`).
 
 ### PR 24: Sessão D — "Monitoramento e Logs"
 

@@ -53,6 +53,9 @@ var _diag_lbl_loss: Label
 var _diag_lbl_offset: Label
 var _diag_lbl_peers: Label
 
+var _conn_status_lbl: Label
+var _reconnect_btn: Button
+
 var auto_move := true
 var auto_time := 0.0
 var _last_rx := {}
@@ -117,6 +120,8 @@ func _ready() -> void:
 		QuanticNet.pong_received.connect(func(rtt: float, off: float) -> void:
 			_current_offset = off
 		)
+		QuanticNet.connection_state_changed.connect(_on_connection_state_changed)
+		QuanticNet.connection_failed_reason.connect(_on_connection_failed)
 		
 		# [3] INICIAR CLIENTE
 		# O parâmetro _netem_active injeta problemas crônicos na rede se for `true`,
@@ -138,12 +143,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_N:
 			_netem_active = not _netem_active
-			if _netem_active:
-				QuanticNet.set_netem_config(0.10, 150, 50)
-			else:
-				QuanticNet.set_netem_config(0.0, 0, 0)
-			
-			QuanticNet.toggle_netem()
+			QuanticNet.set_netem_config(0.10 if _netem_active else 0.0, 150 if _netem_active else 0, 50 if _netem_active else 0)
+			var status = "ON (10% Loss, 150ms Delay, 50ms Jitter)" if _netem_active else "OFF"
+			print("[DEMO] NETEM: %s" % status)
 		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			auto_move = not auto_move
 			print("[DEMO] Auto-move: ", auto_move)
@@ -276,6 +278,28 @@ func _setup_client_scene() -> void:
 	add_child(floor_mesh)
 	
 	var hud = CanvasLayer.new()
+	
+	var top_panel = PanelContainer.new()
+	top_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_conn_status_lbl = Label.new()
+	_conn_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_conn_status_lbl.text = "🟡 CONNECTING"
+	_conn_status_lbl.add_theme_color_override("font_color", Color.YELLOW)
+	top_panel.add_child(_conn_status_lbl)
+	hud.add_child(top_panel)
+	
+	_reconnect_btn = Button.new()
+	_reconnect_btn.text = "Reconectar"
+	_reconnect_btn.visible = false
+	_reconnect_btn.pressed.connect(_on_reconnect_pressed)
+	var btn_margin = MarginContainer.new()
+	btn_margin.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	btn_margin.add_theme_constant_override("margin_top", 40)
+	var center_btn = CenterContainer.new()
+	center_btn.add_child(_reconnect_btn)
+	btn_margin.add_child(center_btn)
+	hud.add_child(btn_margin)
+	
 	var margin = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 20)
 	margin.add_theme_constant_override("margin_top", 20)
@@ -481,8 +505,10 @@ func _physics_process(delta: float) -> void:
 			QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
 
 func _process(_delta: float) -> void:
-	# [DIAGNOSTIC PROFILER ATUALIZAÇÃO]
 	var now_ms = Time.get_ticks_msec()
+	var my_id = QuanticNet.get_unique_id()
+
+	# [DIAGNOSTIC PROFILER ATUALIZAÇÃO]
 	var current_fps = Engine.get_frames_per_second()
 	
 	_fps_total_sum += current_fps
@@ -508,16 +534,15 @@ func _process(_delta: float) -> void:
 			else: c_peers += 1
 		_diag_lbl_peers.text = "Total Peers: %d | Props: %d" % [c_peers, c_props]
 		
-		var my_id = QuanticNet.get_unique_id()
-		var t = QuanticNet.get_telemetry(my_id)
-		if t:
-			var curr_rtt = t.get_avg_rtt()
-			var curr_loss = t.get_avg_loss()
-			var min_rtt = t.get_min_rtt() if t.get_min_rtt() != INF else 0.0
-			var max_rtt = t.get_max_rtt() if t.get_max_rtt() != -INF else 0.0
-			var max_loss = t.get_max_loss() if t.get_max_loss() != -INF else 0.0
-			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f | Max: %.0f]" % [curr_rtt, t.get_avg_rtt(), min_rtt, max_rtt]
-			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%% | Max: %.1f%%]" % [curr_loss, t.get_avg_loss(), max_loss]
+		var t2 = QuanticNet.get_telemetry(my_id)
+		if t2:
+			var curr_rtt = t2.get_avg_rtt()
+			var curr_loss = t2.get_avg_loss()
+			var min_rtt = t2.get_min_rtt() if t2.get_min_rtt() != INF else 0.0
+			var max_rtt = t2.get_max_rtt() if t2.get_max_rtt() != -INF else 0.0
+			var max_loss = t2.get_max_loss() if t2.get_max_loss() != -INF else 0.0
+			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f | Max: %.0f]" % [curr_rtt, t2.get_avg_rtt(), min_rtt, max_rtt]
+			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%% | Max: %.1f%%]" % [curr_loss, t2.get_avg_loss(), max_loss]
 			_diag_lbl_offset.text = "Clock Offset: %.1f ms" % [_current_offset]
 		else:
 			_diag_lbl_rtt.text = "RTT (ms): N/A"
@@ -530,7 +555,6 @@ func _process(_delta: float) -> void:
 		return
 		
 	var fps := Engine.get_frames_per_second()
-	var my_id = QuanticNet.get_unique_id()
 	
 	var prof = _profiles[_current_profile_idx]
 	var prof_str = "%.0f HZ" % prof.tick_rate_hz
@@ -595,6 +619,51 @@ func _process(_delta: float) -> void:
 		if not s.is_empty():
 			cubes[id].position = s["pos"]
 			cubes[id].rotation = s["rot"]
+			
+func _on_connection_state_changed(new_state: int) -> void:
+	if _conn_status_lbl == null: return
+	
+	match new_state:
+		QuanticNet.ConnectionState.DISCONNECTED:
+			_conn_status_lbl.text = "⚪ DISCONNECTED"
+			_conn_status_lbl.add_theme_color_override("font_color", Color.GRAY)
+			if _reconnect_btn: _reconnect_btn.visible = true
+		QuanticNet.ConnectionState.CONNECTING:
+			_conn_status_lbl.text = "🟡 CONNECTING"
+			_conn_status_lbl.add_theme_color_override("font_color", Color.YELLOW)
+			if _reconnect_btn: _reconnect_btn.visible = false
+		QuanticNet.ConnectionState.AUTHENTICATING:
+			_conn_status_lbl.text = "🟠 AUTHENTICATING"
+			_conn_status_lbl.add_theme_color_override("font_color", Color.ORANGE)
+		QuanticNet.ConnectionState.CONNECTED:
+			_conn_status_lbl.text = "🟢 CONNECTED"
+			_conn_status_lbl.add_theme_color_override("font_color", Color.GREEN)
+		QuanticNet.ConnectionState.FAILED:
+			_conn_status_lbl.text = "🔴 FAILED"
+			_conn_status_lbl.add_theme_color_override("font_color", Color.RED)
+			if _reconnect_btn: _reconnect_btn.visible = true
+
+func _on_connection_failed(reason: int) -> void:
+	if _conn_status_lbl:
+		_conn_status_lbl.text = "🔴 FAILED (ERR: %d)" % reason
+		_conn_status_lbl.add_theme_color_override("font_color", Color.RED)
+	if _reconnect_btn:
+		_reconnect_btn.visible = true
+
+func _on_reconnect_pressed() -> void:
+	if _reconnect_btn: _reconnect_btn.visible = false
+	print("[DEMO] Reconectando...")
+	_current_offset = 0.0
+	_fps_total_sum = 0
+	_fps_total_samples = 0
+	
+	# Limpar cubes antigos para reset visual
+	for id in cubes.keys():
+		if is_instance_valid(cubes[id]):
+			cubes[id].queue_free()
+	cubes.clear()
+	
+	QuanticNet.join("127.0.0.1", PORT, SECRET, _netem_active)
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, _custom: int) -> void:
 	# Sinal bruto disparado assim que o pacote desembarca no cliente
