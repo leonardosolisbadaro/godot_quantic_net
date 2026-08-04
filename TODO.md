@@ -20,11 +20,55 @@ O projeto base estabilizou na versão **0.3.0**. Os seguintes épicos estão **1
 
 ---
 
-## 🚀 FASE 9: A FRONTEIRA MMO E FÍSICA
+## 📊 FASE 9: QuanticNet Demo (Visual & Telemetry Update)
+
+Este documento rastreia as tarefas de implementação da nova interface e telemetria da demo, garantindo o alinhamento de longo prazo com o `ROADMAP_MMO.md` e as restrições de arquitetura descritas no `GEMINI.md`.
+
+### PR 21: Sessão A — "Zero Bugs" e Fundações
+- [ ] Implementar `_notification` para capturar `NOTIFICATION_WM_CLOSE_REQUEST` e executar `QuanticNet.disconnect_net(true)` antes de sair.
+- [ ] Limpar o input `Escape` do `_physics_process` (agora tratado de forma limpa pelo `_notification`).
+- [ ] Corrigir o bug do Netem: mover a chamada `set_netem_config(0.10, 150, 50)` para dentro do bloco `if _netem_active`.
+- [ ] Refatorar atalhos: Migrar toggle de FPS/VSync da tecla `L` para `F` (liberando `L` para os logs).
+
+### PR 22: Sessão B — "Dados Vivos e Infraestrutura"
+- [ ] Criar classe de dados `PeerTelemetrics` (Struct interna) para armazenar telemetria (RTT, Loss, Offset, etc.) com tipagem forte.
+- [ ] Inicializar métricas de mínimo (`rtt_min`, `loss_min`) com valores sentinela lógicos (`INF`) para garantir registro correto da primeira amostra.
+- [ ] Implementar Buffer Circular (ex: 30 amostras) para suavização de `loss_avg` e `rtt_avg`.
+- [ ] Implementar sistema de *Staggered Polling* (Round-robin) no `_process` para a chamada de `loss_of(id)`, distribuindo a carga de 100+ entidades ao longo dos frames.
+- [ ] Implementar troca de cor de emissão dos materiais dos cubos (teclas `1-5`) via `Tween` vinculado ao callback `_apply_profile()`.
+
+### PR 23: Sessão C — "Atmosfera e Estado"
+- [ ] Implementar Aura Netem (tecla `N`): Adicionar um `ColorRect` na borda da tela que pulsa em laranja, com opacidade e frequência proporcionais ao `jitter_ms` e `delay_ms`.
+- [ ] Implementar Barra de Estado de Conexão no topo da tela, reagindo aos sinais de rede (🔴 FAILED, 🟡 CONNECTING, 🟠 AUTHENTICATING, 🟢 CONNECTED).
+- [ ] Adicionar botão de reconexão na interface em caso de falha (`connection_failed_reason`).
+
+### PR 24: Sessão D — "Monitoramento e Logs"
+- [ ] Criar o "HUD Global Monitor" (tecla `M`): Painel fixo no canto superior direito com contagem de peers/props, RTT médio, Offset de Clock-Sync e status do Netem.
+- [ ] Criar "Log de Eventos Rolante" (tecla `L`): `RichTextLabel` no canto inferior esquerdo para exibir os últimos 10 eventos (joins, mudança de perfil, snaps) com código de cores e timestamps.
+
+### PR 25: Sessão E — "Telemetria por Entidade"
+- [ ] Criar sistema de HUD Flutuante (tecla `H`) em ambiente 2D (CanvasLayer) projetado no 3D usando `camera.unproject_position()` (com checagem `is_position_behind` para evitar espelhamento).
+- [ ] Adicionar `VisibleOnScreenNotifier3D` aos cubos para desativar o cálculo do HUD 2D quando o objeto estiver fora do frustum.
+- [ ] Implementar lógica condicional no HUD flutuante: Players exibem RTT; Props exibem `ΔT Srv: Xms` (baseado no `last_rx_gap` comparado ao tick rate ideal).
+- [ ] Adicionar indicador visual de degradação ("Last seen: X.Xs ago") mudando de branco para vermelho antes do objeto entrar em culling forçado.
+- [ ] HUD Local: Separar o campo `confirmed_pos` do transform local durante o `_on_state()`, calculando o *Prediction Drift* apenas quando houver posição confirmada pelo servidor.
+
+### PR 26: Sessão F — "Drama" (Feedback de Netcode)
+- [ ] Implementar Snapback Visual: Disparar um `Tween` de 0.4s na emissão vermelha do material quando `snapback_received` for chamado.
+- [ ] Adicionar banner de texto temporário na tela (2.5s) informando os dados do snapback (sequência e total de inputs refeitos).
+- [ ] Implementar tecla `B` (Burst): Salvar a configuração atual de Netem e aplicar um caos temporal extremo por 4 segundos, restaurando automaticamente depois (com *guard* para ignorar no servidor).
+
+### PR 27: Sessão G — "Extras de Arquitetura"
+- [ ] Implementar Modo Spectator (tecla `V`): Forçar `_can_send_state = false`, trocar material do cubo local para branco translúcido, e atualizar rótulo do HUD para `[SPECTATOR]`.
+- [ ] Implementar Minimap 2D (tecla `Tab`): Criar painel customizado usando `_draw()` para renderizar pontos de entidades, vetores de velocidade (baseados no delta posicional) e raio do culling de rede.
+
+---
+
+## 🚀 FASE 10: A FRONTEIRA MMO E FÍSICA
 
 Esta etapa abraçará mecânicas massivas. A arquitetura de base não será tocada, em vez disso, módulos puristas em GDScript serão anexados ao Domínio visando expandir as capacidades simulativas do servidor. O ciclo TDD será estrito.
 
-### PR 21 — Spatial Hashing Puro (Area of Interest - AoI)
+### PR 28 — Spatial Hashing Puro (Area of Interest - AoI)
 
 O despache não pode propagar todo o universo. Filtragem espacial inteligente.
 
@@ -33,7 +77,7 @@ O despache não pode propagar todo o universo. Filtragem espacial inteligente.
 - [ ] Especificar busca de vizinhos radial (`get_entities_in_radius`).
 - [ ] Integrar no ciclo de broadcast do `QNHostSession`, poupando banda limitando *snapshots* apenas a entidades que colidem visualmente (culling).
 
-### PR 22 — Lag Compensation (Server-Side Rewind)
+### PR 29 — Lag Compensation (Server-Side Rewind)
 
 Implementação de reconciliação de tempo para hit-registration preciso em jogos competitivos.
 
@@ -41,18 +85,18 @@ Implementação de reconciliação de tempo para hit-registration preciso em jog
 - [ ] Especificar lógica de captura temporal cíclica circular retrocedendo no máximo até 1,5s no passado do servidor.
 - [ ] Integrar no Autoload a função `raycast_past(origin, direction, timestamp)`, expondo-a para que jogos de FPS construam seu HitScan determinístico compensando pings de até 250ms perfeitamente.
 
-### PR 23 — Sincronização de Física Rígida (Networked Physics)
+### PR 30 — Sincronização de Física Rígida (Networked Physics)
 
 - [ ] TDD: Expansão do codec `QNSerializer` ou `BitBuffer` para suportar empacotamento rigoroso de *Linear Velocity* e *Angular Velocity*.
 - [ ] Criar constante no Domain: `NetProfile.RIGID_BODY`.
 - [ ] Alterar `QNClientSession` e `QNHostSession` para gerenciar repousos (Sleeping states): economizar 100% de banda de entidades físicas quando suas energias cinéticas zerarem e notificar apenas a eclosão inicial do pulso.
 
-### PR 24 — Testes de Escalabilidade Massiva
+### PR 31 — Testes de Escalabilidade Massiva
 
 - [ ] Criar nova suíte de testes de integração Headless simulando a conexão concorrente de dezenas de `QNClientSessions` e dezenas de entidades.
 - [ ] Validar consumo de banda em *Bytes per Second* em cima do `PriorityAccumulator`. Comprovar matematicamente que o teto de *MTU* é respeitado independente da saturação das requisições ao longo de 60 segundos de loop contínuo sob perturbações de Netem.
 
-### PR 25 — Separação e Migração Visual
+### PR 32 — Separação e Migração Visual
 
 - [ ] Desacoplar quaisquer cenários visuais pesados. Manter apenas um script base estéril "Smoke Test".
 - [ ] Iniciar um repositório secundário (ex: `quantic-net-demos`) que importará essa release consumindo suas virtudes de forma arquitetural (sem UI-Bound Lógica), para ilustrar HUDs e avatares detalhados.
