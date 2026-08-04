@@ -10,13 +10,13 @@
 ## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0
+## @lastModifiedIn 0.4.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends RefCounted
 
-const QNNetProfile = preload("res://addons/quantic_net/src/domain/qn_net_profile.gd")
+const QNEntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
 
 # Dicionário de débito: _debt[peer_id][entity_id] = float
 var _debt := {}

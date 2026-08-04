@@ -1,4 +1,4 @@
-﻿## @file test_qn_priority_accumulator.gd
+## @file test_qn_priority_accumulator.gd
 ## @path res://addons/quantic_net/tests/domain/test_qn_priority_accumulator.gd
 ##
 ## @description
@@ -9,14 +9,14 @@
 ## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0
+## @lastModifiedIn 0.4.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
 const QNPriorityAccumulator = preload("res://addons/quantic_net/src/domain/qn_priority_accumulator.gd")
-const QNNetProfile = preload("res://addons/quantic_net/src/domain/qn_net_profile.gd")
+const QNEntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
 
 func test_must_prioritize_closest_entities():
 	var acc = QNPriorityAccumulator.new()
@@ -25,14 +25,14 @@ func test_must_prioritize_closest_entities():
 	
 	var candidates = {
 		2: {"pos": Vector3(10, 0, 0)}, # Entidade Longe
-		3: {"pos": Vector3(2, 0, 0)},  # Entidade Perto
-		4: {"pos": Vector3(5, 0, 0)}   # Entidade Intermediária
+		3: {"pos": Vector3(2, 0, 0)}, # Entidade Perto
+		4: {"pos": Vector3(5, 0, 0)} # Entidade Intermediária
 	}
 	
 	var profiles = {
-		2: QNNetProfile.preset_standard(),
-		3: QNNetProfile.preset_standard(),
-		4: QNNetProfile.preset_standard()
+		2: QNEntityProfile.preset_standard(),
+		3: QNEntityProfile.preset_standard(),
+		4: QNEntityProfile.preset_standard()
 	}
 	
 	var selected = acc.select_entities(1, candidates, profiles, observer_pos, mtu_budget, 19)
@@ -50,12 +50,12 @@ func test_must_accumulate_debt_and_prevent_starvation():
 	
 	var candidates = {
 		2: {"pos": Vector3(10, 0, 0)}, # Longe
-		3: {"pos": Vector3(2, 0, 0)},  # Perto
+		3: {"pos": Vector3(2, 0, 0)}, # Perto
 	}
 	
 	var profiles = {
-		2: QNNetProfile.preset_standard(),
-		3: QNNetProfile.preset_standard()
+		2: QNEntityProfile.preset_standard(),
+		3: QNEntityProfile.preset_standard()
 	}
 	
 	# Tick 1: A entidade 3 ganha pois está mais perto
@@ -89,8 +89,8 @@ func test_must_cull_entities_outside_radius():
 	}
 	
 	var profiles = {
-		2: QNNetProfile.preset_standard(), # cull_radius = 50.0
-		3: QNNetProfile.preset_standard()
+		2: QNEntityProfile.preset_standard(), # cull_radius = 50.0
+		3: QNEntityProfile.preset_standard()
 	}
 	
 	var selected = acc.select_entities(1, candidates, profiles, observer_pos, mtu_budget, 19)

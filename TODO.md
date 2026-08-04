@@ -25,12 +25,14 @@ O projeto base estabilizou na versão **0.3.0**. Os seguintes épicos estão **1
 Este documento rastreia as tarefas de implementação da nova interface e telemetria da demo, garantindo o alinhamento de longo prazo com o `ROADMAP_MMO.md` e as restrições de arquitetura descritas no `GEMINI.md`.
 
 ### PR 21: Sessão A — "Zero Bugs" e Fundações
+
 - [x] Implementar `_notification` para capturar `NOTIFICATION_WM_CLOSE_REQUEST` e executar `QuanticNet.disconnect_net(true)` antes de sair.
 - [x] Limpar o input `Escape` do `_physics_process` (agora tratado de forma limpa pelo `_notification`).
 - [x] Corrigir o bug do Netem: mover a chamada `set_netem_config(0.10, 150, 50)` para dentro do bloco `if _netem_active`.
 - [x] Refatorar atalhos: Migrar toggle de FPS/VSync da tecla `L` para `F` (liberando `L` para os logs).
 
 ### PR 22: Sessão B — "Dados Vivos e Infraestrutura"
+
 - [x] Criar classe de dados `PeerTelemetrics` (Struct interna) para armazenar telemetria (RTT, Loss, Offset, etc.) com tipagem forte.
 - [x] Inicializar métricas de mínimo (`rtt_min`, `loss_min`) com valores sentinela lógicos (`INF`) para garantir registro correto da primeira amostra.
 - [x] Implementar Buffer Circular (ex: 30 amostras) para suavização de `loss_avg` e `rtt_avg`.
@@ -38,17 +40,31 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 - [x] Implementar troca de cor de emissão dos materiais dos cubos (teclas `1-5`) via `Tween` vinculado ao callback `_apply_profile()`.
 
 ### PR 22.5: Sessão B.5 — "Network Profiler Avançado"
-- [ ] Ampliar o painel de Profiler para incluir dados de rede (RTT, Loss, Offset) extraídos da struct `PeerTelemetrics`.
+
+- [x] Ampliar o painel de Profiler para incluir dados de rede (RTT, Loss, Offset) extraídos da struct `PeerTelemetrics`.
+
+### PR 22.8: Sessão B.8 — "Extração Agnóstica (Domínio e Value Objects)"
+
+- [x] TDD: Criar testes `test_qn_telemetry_aggregator.gd` com simulações de janela deslizante para RTT e Loss, incluindo cold start e limite de buffer.
+- [x] Implementar classe pura `QNTelemetryAggregator` no `src/domain/` sem dependências do Godot.
+- [x] Integrar agregação no `quantic_net_autoload.gd` mapeando por peer_id, expondo `get_telemetry(peer_id)`.
+- [x] Refatorar a Demo substituindo o uso da struct interna `PeerTelemetrics` pela API nativa do `QuanticNet`.
+- [x] TDD: Criar `test_qn_entity_profile.gd` validando o contrato estrito (invariantes via `assert`) das propriedades do perfil.
+- [x] Implementar o Value Object imutável `QNEntityProfile` no `src/domain/` englobando `tick_rate_hz`, `priority_weight`, etc.
+- [x] Refatorar o HostSession e a Demo para utilizar o `QNEntityProfile` com tipagem forte (abandonando Dictionaries crus).
 
 ### PR 23: Sessão C — "Atmosfera e Estado"
+
 - [ ] Implementar Aura Netem (tecla `N`): Adicionar um `ColorRect` na borda da tela que pulsa em laranja, com opacidade e frequência proporcionais ao `jitter_ms` e `delay_ms`.
 - [ ] Implementar Barra de Estado de Conexão no topo da tela, reagindo aos sinais de rede (🔴 FAILED, 🟡 CONNECTING, 🟠 AUTHENTICATING, 🟢 CONNECTED).
 - [ ] Adicionar botão de reconexão na interface em caso de falha (`connection_failed_reason`).
 
 ### PR 24: Sessão D — "Monitoramento e Logs"
+
 - [ ] Criar "Log de Eventos Rolante" (tecla `L`): `RichTextLabel` no canto inferior esquerdo para exibir os últimos 10 eventos (joins, mudança de perfil, snaps) com código de cores e timestamps.
 
 ### PR 25: Sessão E — "Telemetria por Entidade"
+
 - [ ] Criar sistema de HUD Flutuante (tecla `H`) em ambiente 2D (CanvasLayer) projetado no 3D usando `camera.unproject_position()` (com checagem `is_position_behind` para evitar espelhamento).
 - [ ] Adicionar `VisibleOnScreenNotifier3D` aos cubos para desativar o cálculo do HUD 2D quando o objeto estiver fora do frustum.
 - [ ] Implementar lógica condicional no HUD flutuante: Players exibem RTT; Props exibem `ΔT Srv: Xms` (baseado no `last_rx_gap` comparado ao tick rate ideal).
@@ -56,11 +72,13 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 - [ ] HUD Local: Separar o campo `confirmed_pos` do transform local durante o `_on_state()`, calculando o *Prediction Drift* apenas quando houver posição confirmada pelo servidor.
 
 ### PR 26: Sessão F — "Drama" (Feedback de Netcode)
+
 - [ ] Implementar Snapback Visual: Disparar um `Tween` de 0.4s na emissão vermelha do material quando `snapback_received` for chamado.
 - [ ] Adicionar banner de texto temporário na tela (2.5s) informando os dados do snapback (sequência e total de inputs refeitos).
 - [ ] Implementar tecla `B` (Burst): Salvar a configuração atual de Netem e aplicar um caos temporal extremo por 4 segundos, restaurando automaticamente depois (com *guard* para ignorar no servidor).
 
 ### PR 27: Sessão G — "Extras de Arquitetura"
+
 - [ ] Implementar Modo Spectator (tecla `V`): Forçar `_can_send_state = false`, trocar material do cubo local para branco translúcido, e atualizar rótulo do HUD para `[SPECTATOR]`.
 - [ ] Implementar Minimap 2D (tecla `Tab`): Criar painel customizado usando `_draw()` para renderizar pontos de entidades, vetores de velocidade (baseados no delta posicional) e raio do culling de rede.
 

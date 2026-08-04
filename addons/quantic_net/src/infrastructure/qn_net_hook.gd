@@ -1,4 +1,4 @@
-﻿## @file qn_net_hook.gd
+## @file qn_net_hook.gd
 ## @path res://addons/quantic_net/src/infrastructure/qn_net_hook.gd
 ##
 ## @description
@@ -61,6 +61,10 @@ func close() -> void:
 				base.disconnect(s[0], s[1])
 		base.multiplayer_peer = null
 		base = null
+	on_outgoing_rpc = Callable()
+	on_incoming_packet = Callable()
+	on_outgoing_packet = Callable()
+	on_config_add = Callable()
 
 func _on_connected_to_server() -> void:
 	print("QNNETHOOK: _on_connected_to_server called!")

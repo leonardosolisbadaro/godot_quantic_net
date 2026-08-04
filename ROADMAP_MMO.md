@@ -1,6 +1,6 @@
 # ROADMAP MMO & COMPETITIVO: O Destino do QuanticNet
 
-Este documento decreta a visão arquitetural de longo prazo para a evolução do **QuanticNet**. Estando com a fundação arquitetural cimentada sob a versão `0.3.0` (Client-Side Prediction seguro, DTLS e Memória controlada sem ObjectDB Leaks), o projeto engatilha oficialmente a **Fase 9**, que transicionará a engine para um **netcode híbrido (MMO + instâncias competitivas integradas)**.
+Este documento decreta a visão arquitetural de longo prazo para a evolução do **QuanticNet**. Estando com a fundação arquitetural cimentada sob a versão `0.4.0` (Client-Side Prediction seguro, DTLS e Memória controlada sem ObjectDB Leaks), o projeto engatilha oficialmente a **Fase 9**, que transicionará a engine para um **netcode híbrido (MMO + instâncias competitivas integradas)**.
 
 > **Regra de Ouro:** Este roadmap dita *o que* vamos construir, de forma que as *decisões de interface do presente* jamais criem amarras ou custos prematuros. O código permanecerá brutalmente simples, mas moldado para a expansão matemática severa que o futuro exige.
 

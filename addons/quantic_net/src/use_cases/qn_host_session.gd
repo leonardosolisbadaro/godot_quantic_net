@@ -9,8 +9,7 @@
 ## @updated 2026-08-01
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0
-##
+## @lastModifiedIn 0.4.0
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends RefCounted
@@ -27,7 +26,7 @@ var _registry := {}
 const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
 const QNDeltaSerializer = preload("res://addons/quantic_net/src/domain/qn_delta_serializer.gd")
 const QNBitBuffer = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd")
-const QNNetProfile = preload("res://addons/quantic_net/src/domain/qn_net_profile.gd")
+const QNEntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
 const QNPriorityAccumulator = preload("res://addons/quantic_net/src/domain/qn_priority_accumulator.gd")
 
 var _server_seq: int = 0
@@ -54,7 +53,7 @@ func _on_validator_peer_rejected(id: int, reason: String, strikes: int) -> void:
 
 func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, profile: RefCounted = null) -> void:
 	if profile == null:
-		profile = QNNetProfile.preset_standard()
+		profile = QNEntityProfile.preset_standard()
 		
 	_registry[entity_id] = {
 		"id": entity_id,

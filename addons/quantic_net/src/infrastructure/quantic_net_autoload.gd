@@ -10,7 +10,7 @@
 ## @updated 2026-08-02
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0-rc.1
+## @lastModifiedIn 0.4.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
@@ -34,7 +34,8 @@ const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_ho
 const QNHostSession = preload("res://addons/quantic_net/src/use_cases/qn_host_session.gd")
 const QNClientSession = preload("res://addons/quantic_net/src/use_cases/qn_client_session.gd")
 const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
-const NetProfile = preload("res://addons/quantic_net/src/domain/qn_net_profile.gd")
+const EntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
+const QNTelemetryAggregator = preload("res://addons/quantic_net/src/domain/qn_telemetry_aggregator.gd")
 
 const CH_STATE := 1
 const SERVER_PEER_ID := 1
@@ -48,6 +49,11 @@ var _host_session: RefCounted = null # QNHostSession
 var _client_session: RefCounted = null # QNClientSession
 var _secret: String = ""
 var _is_server: bool = false
+
+var _telemetry_map: Dictionary = {}
+
+func get_telemetry(peer_id: int) -> RefCounted:
+	return _telemetry_map.get(peer_id)
 
 func get_state() -> int:
 	return _state
@@ -154,7 +160,12 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	_hook.base.multiplayer_peer = _wire
 	
 	_client_session = QNClientSession.new(Callable(self, "_on_client_submit_packet"))
-	_client_session.pong_received.connect(func(rtt: float, off: float) -> void: pong_received.emit(rtt, off))
+	_client_session.pong_received.connect(func(rtt: float, off: float) -> void:
+		var my_id = _hook.base.get_unique_id()
+		if _telemetry_map.has(my_id):
+			_telemetry_map[my_id].push_rtt(rtt)
+		pong_received.emit(rtt, off)
+	)
 	_client_session.remote_state_received.connect(func(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 		state_received.emit(owner, pos, rot, custom))
 	_client_session.snapback_received.connect(func(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
@@ -166,12 +177,17 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	_hook.connected_to_server.connect(func() -> void:
 		var my_id: int = _hook.base.get_unique_id()
 		_client_session.set_local_id(my_id)
+		_telemetry_map[my_id] = QNTelemetryAggregator.new()
 		_set_state(ConnectionState.CONNECTED)
 		peer_joined.emit(my_id))
 	_hook.peer_connected.connect(func(id: int) -> void:
+		_telemetry_map[id] = QNTelemetryAggregator.new()
 		if id != SERVER_PEER_ID:
 			peer_joined.emit(id))
 	_hook.peer_disconnected.connect(func(id: int) -> void:
+		_telemetry_map.erase(id)
+		if _client_session:
+			_client_session.cleanup_entity(id)
 		peer_left.emit(id)
 		if id == SERVER_PEER_ID:
 			_set_state(ConnectionState.DISCONNECTED))
@@ -230,9 +246,15 @@ func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -
 		if data.size() >= 1:
 			if data[0] == QNSerializer.TYPE_PEER_LEFT and data.size() >= 5:
 				var left_id = data.decode_u32(1)
+				if _client_session:
+					_client_session.cleanup_entity(left_id)
 				peer_left.emit(left_id)
 			else:
 				_client_session.handle_packet(data, Time.get_ticks_msec())
+				if data[0] == 4: # TYPE_SNAPSHOT
+					var my_id = _hook.base.get_unique_id()
+					if _telemetry_map.has(my_id):
+						_telemetry_map[my_id].push_loss(_client_session.loss_of(SERVER_PEER_ID))
 
 func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
 	var body := PackedByteArray([QNSerializer.TYPE_SNAPBACK])

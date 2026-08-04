@@ -25,6 +25,19 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - ...
 
+## [0.4.0] - 2026-08-04
+
+### Adicionado
+
+- **Extração Agnóstica (PR 22.8):** Criação da classe purista de domínio `QNTelemetryAggregator` com suporte para janelas deslizantes (Sliding Window), garantindo o rastreio dinâmico de médias, picos e fundos (min/max) de métricas de rede com 100% de separação da Engine.
+- **Value Object para Perfis de Rede (PR 22.8):** Implementação de `QNEntityProfile` para substituição de dicionários cruos por uma classe imutável de forte tipagem com mecanismo de `fail-fast` via `assert()` integrado.
+
+### Modificado
+
+- **Integração de Telemetria (PR 22.8):** A `demo_main.gd` não precisa mais implementar lógica matemática de amostras; consome métricas puras através da API pública `QuanticNet.get_telemetry()`.
+- **Hospedagem de Agregadores (PR 22.8):** O `quantic_net_autoload.gd` passou a gerenciar instâncias de agregadores por peer-id (`_telemetry_map`), os quais são preenchidos por via de eventos nativos (`pong_received`, recebimento de `TYPE_SNAPSHOT`).
+- O sistema de despache `QNPriorityAccumulator` abandonou a tipagem genérica para consumir exclusivamente o contrato imutável `QNEntityProfile`.
+
 ## [0.3.0-rc.2] - 2026-08-04
 
 ### Adicionado
@@ -37,7 +50,7 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Corrigido
 
 - **Correção de Ativação do Netem (PR 21):** Mover a rotina `set_netem_config(0.10, 150, 50)` restritivamente para dentro da cláusula `if _netem_active`.
-- **[LINT] Correção de Private-Access em `demo_main.gd`:** Refatoração da struct interna `PeerTelemetrics` para utilizar métodos _getter_ (`get_last_rtt()`, `get_last_loss()`), resolvendo avisos do analisador estático sobre violação de encapsulamento.
+- **[LINT] Correção de Private-Access em `demo_main.gd`:** Refatoração da struct interna `PeerTelemetrics` para utilizar métodos *getter* (`get_last_rtt()`, `get_last_loss()`), resolvendo avisos do analisador estático sobre violação de encapsulamento.
 
 ### Modificado
 

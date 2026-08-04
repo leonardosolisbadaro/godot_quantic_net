@@ -1,4 +1,4 @@
-﻿## @file test_qn_host_session.gd
+## @file test_qn_host_session.gd
 ## @path res://tests/unit/use_cases/test_qn_host_session.gd
 ##
 ## @description
@@ -17,6 +17,7 @@ extends GutTest
 const QNHostSession = preload("res://addons/quantic_net/src/use_cases/qn_host_session.gd")
 const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
 const QNServerValidator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd")
+const QNEntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
 
 func test_peer_autenticado_aloca_entidade_com_perfil_mmo() -> void:
 	# Arrange

@@ -162,6 +162,12 @@ func remote_state(owner: int, now: int) -> Dictionary:
 func loss_of(owner: int) -> float:
 	return _loss_tracker.loss_pct()
 
+func cleanup_entity(owner: int) -> void:
+	if _interp.has(owner):
+		_interp.erase(owner)
+	# O _loss_tracker atualmente é global para a conexão, não rastreia por peer_id.
+	# Portanto, basta limpar o interpolador.
+
 func _handle_snapback(body: PackedByteArray) -> void:
 	var d: Dictionary = _serializer.decode_state_seq(body)
 	if d.is_empty():

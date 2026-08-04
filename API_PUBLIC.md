@@ -40,19 +40,19 @@ Retorna `true` se a instância atual assumiu a autoridade de host.
 
 ---
 
-## ⏱️ NetProfiles (Tick Híbrido)
+## ⏱️ EntityProfiles (Tick Híbrido)
 
 O motor do QuanticNet não envia snapshots unificados. Diferentes entidades são atualizadas em frequências assimétricas para comprimir o uso da banda (Hybrid Ticking).
-A classe constante `QuanticNet.NetProfile` (exposta diretamente pelo Autoload) rege a cadência.
+A classe imutável `QuanticNet.EntityProfile` (exposta diretamente pelo Autoload) rege a cadência, definindo `tick_rate_hz`, `priority_weight` e `culling_radius`.
 
 ### Presets de Fábrica
 
-Você deve repassar o profile durante a vida útil das entidades. Embora você possa criar perfis dinâmicos, recomendamos:
+Você deve repassar o profile durante a vida útil das entidades.
 
-* `QuanticNet.NetProfile.preset_high_frequency()`: 60Hz. Uso obrigatório para jogadores e projéteis rápidos.
-* `QuanticNet.NetProfile.preset_standard()`: 20Hz. Padrão MMO para monstros e NPCs comuns.
-* `QuanticNet.NetProfile.preset_low_frequency()`: 5Hz. Para Props móveis de baixo impacto (plataformas).
-* `QuanticNet.NetProfile.preset_static()`: Event-Driven. Só transmite a banda ao sofrer mutação.
+* `QuanticNet.EntityProfile.preset_high_frequency()`: 60Hz. Uso obrigatório para jogadores e projéteis rápidos.
+* `QuanticNet.EntityProfile.preset_standard()`: 20Hz. Padrão MMO para monstros e NPCs comuns.
+* `QuanticNet.EntityProfile.preset_low_frequency()`: 5Hz. Para Props móveis de baixo impacto (plataformas).
+* `QuanticNet.EntityProfile.preset_static()`: Event-Driven. Só transmite a banda ao sofrer mutação.
 
 ---
 
@@ -84,14 +84,23 @@ Recupera o estado matematicamente interpolado no passado (com mitigação do Jit
 
 * **Retorna:** `{"pos": Vector3, "rot": Vector3, "custom": int}` ou dicionário vazio se aguardando dados.
 
+### `register_entity(id: int, is_player: bool, is_local: bool, profile: QNEntityProfile = null) -> void`
+
+Registra manualmente uma entidade no registro autoritativo da sessão (ex: Props criados no servidor). No cliente, o QuanticNet registra os peers remotos automaticamente.
+
+### `unregister_entity(id: int) -> void`
+
+Remove a entidade do registro, parando o broadcast e liberando o acumulador de prioridade.
+
+### `get_telemetry(peer_id: int) -> QNTelemetryAggregator`
+
+Obtém o objeto matemático de telemetria da conexão para a extração de Packet Loss, RTT Max/Avg, etc. (Usado no painel da demo).
+No cliente, `peer_id` costuma ser `1` (Servidor).
+
 ### `disconnect_net(is_exiting: bool = false) -> void`
 
 Expurga a máquina de estados, rompe o cache de referências nativas do `MultiplayerAPIExtension` e desativa o interceptador com total higiene de memória. Use sempre que quiser fechar o jogo para o Menu Principal.
 *Nota:* Se o jogo estiver fechando pelo OS, passe `is_exiting = true` para que ele não tente sobrepor a `SceneTree` do motor em pleno colapso.
-
-### `loss_of(owner_id: int) -> float`
-
-Monitoramento analítico da severidade de perdas percentuais (Packet Loss) de uma rota.
 
 ### `toggle_netem() -> void`
 
@@ -122,6 +131,10 @@ Broadcast do servidor. Muito consumido em arquitecturas reativas em vez do tradi
 ### `snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array)`
 
 A correção autoritativa final. Se este sinal apitar no cliente local, a sua simulação foi cassada pelo Host. O seu avatar deverá ser "teletransportado" imediatamente para `pos` e `rot` confirmados, e os inputs do array reaplicados massivamente para mascarar a percepção do atraso.
+
+### `pong_received(rtt_ms: float, offset_ms: float)`
+
+Emitido toda vez que o QuanticNet sincroniza seu relógio NTP com o servidor. Fornece dados crus de Ping e descasamento de tempo.
 
 ---
 

@@ -1,4 +1,4 @@
-﻿## @file test_qn_client_session_remote.gd
+## @file test_qn_client_session_remote.gd
 ## @path res://tests/unit/use_cases/test_qn_client_session_remote.gd
 ##
 ## @description
@@ -34,6 +34,16 @@ func _state_from(owner: int, seq: int, pos: Vector3, ts: int) -> PackedByteArray
 	pkt.resize(5)
 	pkt.encode_u32(1, owner)
 	pkt.append_array(QNSerializer.encode_state_seq(seq, pos, Vector3.ZERO, ts, 0))
+	return pkt
+
+func _snapshot_from(seq: int) -> PackedByteArray:
+	var buf = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd").new()
+	buf.write_bits(seq, 16)
+	buf.write_bits(0, 16) # ack
+	buf.write_bits(1000, 32) # server_now
+	buf.write_bits(0, 8) # num_entities
+	var pkt = PackedByteArray([4]) # TYPE_SNAPSHOT
+	pkt.append_array(buf.get_buffer())
 	return pkt
 
 func test_estado_remoto_alimenta_interp_e_sinal() -> void:
@@ -73,8 +83,8 @@ func test_loss_tracker_conta_gap_do_peer() -> void:
 	# Arrange
 	var sess := _new_session()
 	# Act: seq 1, depois seq 5 (3 perdidos)
-	sess.handle_packet(_state_from(3, 1, Vector3.ZERO, 1000), 1000)
-	sess.handle_packet(_state_from(3, 5, Vector3.ZERO, 1200), 1200)
+	sess.handle_packet(_snapshot_from(1), 1000)
+	sess.handle_packet(_snapshot_from(5), 1200)
 	# Assert: 3 perdidos em 5 => 60%
 	assert_almost_eq(sess.loss_of(3), 60.0, 0.1, "gaps de seq viram perda")
 

@@ -10,7 +10,7 @@
 ## @updated 2026-08-04
 ##
 ## @since 0.2.0
-## @lastModifiedIn 0.3.0-rc.2
+## @lastModifiedIn 0.4.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
@@ -40,44 +40,6 @@ const SPEED := 2.0
 # Dicionário que mapeia o ID do Peer para a malha visual 3D (o "Avatar")
 var cubes := {} # peer_id -> MeshInstance3D
 
-class PeerTelemetrics:
-	var rtt_avg: float = 0.0
-	var rtt_min: float = INF
-	var rtt_max: float = -INF
-	var loss_avg: float = 0.0
-	var loss_min: float = INF
-	var loss_max: float = -INF
-	var offset: float = 0.0
-	
-	var _rtt_samples: Array[float] = []
-	var _loss_samples: Array[float] = []
-	const MAX_SAMPLES = 30
-	
-	func push_rtt(val: float) -> void:
-		_rtt_samples.append(val)
-		if _rtt_samples.size() > MAX_SAMPLES: _rtt_samples.pop_front()
-		rtt_min = min(rtt_min, val)
-		rtt_max = max(rtt_max, val)
-		var sum = 0.0
-		for v in _rtt_samples: sum += v
-		rtt_avg = sum / max(1, _rtt_samples.size())
-		
-	func push_loss(val: float) -> void:
-		_loss_samples.append(val)
-		if _loss_samples.size() > MAX_SAMPLES: _loss_samples.pop_front()
-		loss_min = min(loss_min, val)
-		loss_max = max(loss_max, val)
-		var sum = 0.0
-		for v in _loss_samples: sum += v
-		loss_avg = sum / max(1, _loss_samples.size())
-
-	func get_last_rtt() -> float:
-		return _rtt_samples.back() if _rtt_samples.size() > 0 else 0.0
-		
-	func get_last_loss() -> float:
-		return _loss_samples.back() if _loss_samples.size() > 0 else 0.0
-
-var telemetrics := {} # peer_id -> PeerTelemetrics
 var _poll_index: int = 0
 
 var _diag_lbl_fps: Label
@@ -96,16 +58,18 @@ var auto_time := 0.0
 var _last_rx := {}
 var _netem_active := false
 var _can_send_state := false
+var _current_offset := 0.0
+var _last_ui_update_ms := 0
 
 # Array contendo instâncias de perfis de rede (Tick Rates e Culling).
 # Isso demonstra o "Hybrid Ticking" do QuanticNet, onde cada entidade
 # pode ser atualizada em frequências distintas, priorizando a banda.
 var _profiles = [
-	QuanticNet.NetProfile.new(20.0, 5.0, 50.0), # 1: Padrão (20Hz)
-	QuanticNet.NetProfile.new(10.0, 3.0, 30.0), # 2: Intermediário (10Hz)
-	QuanticNet.NetProfile.new(5.0, 1.0, 10.0), # 3: Prop (5Hz) - Economiza muita banda
-	QuanticNet.NetProfile.new(1.0, 0.5, 5.0), # 4: Muito Lento (1Hz) - Props inertes
-	QuanticNet.NetProfile.new(60.0, 10.0, 100.0) # 5: Extremo (60Hz) - Para combate rápido
+	QuanticNet.EntityProfile.new(20.0, 5.0, 50.0), # 1: Padrão (20Hz)
+	QuanticNet.EntityProfile.new(10.0, 3.0, 30.0), # 2: Intermediário (10Hz)
+	QuanticNet.EntityProfile.new(5.0, 1.0, 10.0), # 3: Prop (5Hz) - Economiza muita banda
+	QuanticNet.EntityProfile.new(1.0, 0.5, 5.0), # 4: Muito Lento (1Hz) - Props inertes
+	QuanticNet.EntityProfile.new(60.0, 10.0, 100.0) # 5: Extremo (60Hz) - Para combate rápido
 ]
 var _current_profile_idx = 0
 var _next_prop_id = 1000
@@ -126,13 +90,6 @@ func _ready() -> void:
 	QuanticNet.peer_left.connect(_on_peer_left)
 	QuanticNet.state_received.connect(_on_state)
 	QuanticNet.snapback_received.connect(_on_snapback)
-	QuanticNet.pong_received.connect(func(rtt: float, off: float) -> void:
-		print("[DEMO] RTT=%.0fms offset=%.1fms" % [rtt, off])
-		var my_id = QuanticNet.get_unique_id()
-		if not telemetrics.has(my_id): telemetrics[my_id] = PeerTelemetrics.new()
-		telemetrics[my_id].push_rtt(rtt)
-		telemetrics[my_id].offset = off
-	)
 		
 	# Decide o papel desta instância baseado nos argumentos do terminal
 	var args := OS.get_cmdline_user_args()
@@ -152,6 +109,9 @@ func _ready() -> void:
 		QuanticNet.peer_joined.connect(func(id: int):
 			if id == QuanticNet.get_unique_id():
 				get_tree().create_timer(0.1).timeout.connect(func(): _can_send_state = true)
+		)
+		QuanticNet.pong_received.connect(func(rtt: float, off: float) -> void:
+			_current_offset = off
 		)
 		
 		# [3] INICIAR CLIENTE
@@ -173,8 +133,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Recebe comandos manuais do teclado para alterar configurações em tempo real
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_N:
-			QuanticNet.toggle_netem()
 			_netem_active = not _netem_active
+			if _netem_active:
+				QuanticNet.set_netem_config(0.10, 150, 50)
+			else:
+				QuanticNet.set_netem_config(0.0, 0, 0)
+			
+			QuanticNet.toggle_netem()
 		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			auto_move = not auto_move
 			print("[DEMO] Auto-move: ", auto_move)
@@ -236,7 +201,6 @@ func _request_spawn_props(count: int, clear_previous: bool) -> void:
 			QuanticNet.unregister_entity(id)
 			cubes[id].queue_free()
 			cubes.erase(id)
-			if telemetrics.has(id): telemetrics.erase(id)
 		_next_prop_id = 1000
 		print("[SERVER] Limpando props anteriores...")
 		
@@ -263,7 +227,6 @@ func _request_remove_props(count: int) -> void:
 			QuanticNet.unregister_entity(id)
 			cubes[id].queue_free()
 			cubes.erase(id)
-			if telemetrics.has(id): telemetrics.erase(id)
 			removed += 1
 			if removed >= count:
 				break
@@ -414,8 +377,6 @@ func _on_peer_joined(id: int) -> void:
 	mesh.material = mat
 	cube.mesh = mesh
 	
-	if not telemetrics.has(id): telemetrics[id] = PeerTelemetrics.new()
-	
 	if id == QuanticNet.get_unique_id():
 		# O próprio jogador inicia em zero e será movido localmente.
 		cube.position = Vector3(0, 0.5, 0)
@@ -462,8 +423,6 @@ func _on_peer_left(id: int) -> void:
 	if cubes.has(id):
 		cubes[id].queue_free()
 		cubes.erase(id)
-	if telemetrics.has(id):
-		telemetrics.erase(id)
 
 func _physics_process(delta: float) -> void:
 	# ======================================================================
@@ -519,7 +478,9 @@ func _physics_process(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	# [DIAGNOSTIC PROFILER ATUALIZAÇÃO]
-	if _diag_lbl_fps != null and is_instance_valid(_diag_lbl_fps):
+	var now_ms = Time.get_ticks_msec()
+	if _diag_lbl_fps != null and is_instance_valid(_diag_lbl_fps) and now_ms - _last_ui_update_ms > 250:
+		_last_ui_update_ms = now_ms
 		_diag_lbl_fps.text = "FPS: %d" % Engine.get_frames_per_second()
 		_diag_lbl_phys.text = "Physics Time (sec): %.4f" % Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)
 		_diag_lbl_mem.text = "Static Mem: %.2f MB" % (Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)
@@ -534,16 +495,16 @@ func _process(_delta: float) -> void:
 		_diag_lbl_peers.text = "Total Peers: %d | Props: %d" % [c_peers, c_props]
 		
 		var my_id = QuanticNet.get_unique_id()
-		if telemetrics.has(my_id):
-			var t = telemetrics[my_id]
-			var curr_rtt = t.get_last_rtt()
-			var curr_loss = t.get_last_loss()
-			var min_rtt = t.rtt_min if t.rtt_min != INF else 0.0
-			var max_rtt = t.rtt_max if t.rtt_max != -INF else 0.0
-			var max_loss = t.loss_max if t.loss_max != -INF else 0.0
-			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f | Max: %.0f]" % [curr_rtt, t.rtt_avg, min_rtt, max_rtt]
-			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%% | Max: %.1f%%]" % [curr_loss, t.loss_avg, max_loss]
-			_diag_lbl_offset.text = "Clock Offset: %.1f ms" % [t.offset]
+		var t = QuanticNet.get_telemetry(my_id)
+		if t:
+			var curr_rtt = t.get_avg_rtt()
+			var curr_loss = t.get_avg_loss()
+			var min_rtt = t.get_min_rtt() if t.get_min_rtt() != INF else 0.0
+			var max_rtt = t.get_max_rtt() if t.get_max_rtt() != -INF else 0.0
+			var max_loss = t.get_max_loss() if t.get_max_loss() != -INF else 0.0
+			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f | Max: %.0f]" % [curr_rtt, t.get_avg_rtt(), min_rtt, max_rtt]
+			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%% | Max: %.1f%%]" % [curr_loss, t.get_avg_loss(), max_loss]
+			_diag_lbl_offset.text = "Clock Offset: %.1f ms" % [_current_offset]
 		else:
 			_diag_lbl_rtt.text = "RTT (ms): N/A"
 			_diag_lbl_loss.text = "Packet Loss: N/A"
@@ -560,18 +521,10 @@ func _process(_delta: float) -> void:
 	var prof = _profiles[_current_profile_idx]
 	var prof_str = "%.0f HZ" % prof.tick_rate_hz
 	
-	var netem_str = "NETEM - LOSS 10%%, DELAY 150ms, JITTER 50ms" if _netem_active else "NETEM - OFF"
+	var netem_str = "NETEM - LOSS 10%, DELAY 150ms, JITTER 50ms" if _netem_active else "NETEM - OFF"
 	DisplayServer.window_set_title("#%d | FPS %d | %s | %s" % [my_id, fps, prof_str, netem_str])
 	
-	# Staggered Polling para telemetria pesada (Loss)
-	var keys = cubes.keys()
-	if keys.size() > 0:
-		var process_per_frame = maxi(1, keys.size() / 10) # Atualiza ~10% por frame
-		for i in range(process_per_frame):
-			_poll_index = (_poll_index + 1) % keys.size()
-			var p_id = keys[_poll_index]
-			if telemetrics.has(p_id):
-				telemetrics[p_id].push_loss(QuanticNet.loss_of(p_id))
+	# (O Staggered Polling original foi removido pois a telemetria agora é centralizada)
 
 	if "--test-cycle" in OS.get_cmdline_user_args():
 		var cycle = int(Time.get_ticks_msec() / 5000.0) % 6

@@ -1,4 +1,4 @@
-﻿## @file test_qn_net_hook_interception.gd
+## @file test_qn_net_hook_interception.gd
 ## @path res://tests/unit/infrastructure/test_qn_net_hook_interception.gd
 ##
 ## @description
@@ -110,11 +110,13 @@ func test_filtro_saida_descarta_quando_retorna_null() -> void:
 func test_observador_config_add_chamado() -> void:
 	# Arrange
 	var hook := create_hook() as QNNetHook
+	var dummy := Object.new()
 	var seen := []
 	hook.on_config_add = func(obj: Object, config: Variant) -> void:
 		seen.append(obj)
 	# Act
-	hook._object_configuration_add(hook, null)
+	hook._object_configuration_add(dummy, null)
 	# Assert
 	assert_eq(seen.size(), 1, "observador notificado no spawn config")
+	dummy.free()
 
