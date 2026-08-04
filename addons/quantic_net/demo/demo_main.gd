@@ -67,6 +67,12 @@ class PeerTelemetrics:
 		for v in _loss_samples: sum += v
 		loss_avg = sum / max(1, _loss_samples.size())
 
+	func get_last_rtt() -> float:
+		return _rtt_samples.back() if _rtt_samples.size() > 0 else 0.0
+		
+	func get_last_loss() -> float:
+		return _loss_samples.back() if _loss_samples.size() > 0 else 0.0
+
 var telemetrics := {} # peer_id -> PeerTelemetrics
 var _poll_index: int = 0
 
@@ -75,6 +81,11 @@ var _diag_lbl_phys: Label
 var _diag_lbl_mem: Label
 var _diag_lbl_nodes: Label
 var _diag_lbl_orphan: Label
+
+var _diag_lbl_rtt: Label
+var _diag_lbl_loss: Label
+var _diag_lbl_offset: Label
+var _diag_lbl_peers: Label
 
 var auto_move := true
 var auto_time := 0.0
@@ -325,13 +336,14 @@ func _setup_client_scene() -> void:
 	
 	# [DIAGNOSTIC PROFILER UI]
 	var diag_margin = MarginContainer.new()
-	diag_margin.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	diag_margin.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	diag_margin.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	diag_margin.add_theme_constant_override("margin_left", 20)
-	diag_margin.add_theme_constant_override("margin_top", 350)
+	diag_margin.add_theme_constant_override("margin_bottom", 20)
 	var diag_vbox = VBoxContainer.new()
 	
 	var diag_title = Label.new()
-	diag_title.text = "ENGINE PROFILER"
+	diag_title.text = "[ SYSTEM PROFILER ]"
 	diag_title.add_theme_color_override("font_color", Color.YELLOW)
 	diag_vbox.add_child(diag_title)
 	
@@ -341,8 +353,29 @@ func _setup_client_scene() -> void:
 	_diag_lbl_nodes = Label.new()
 	_diag_lbl_orphan = Label.new()
 	
-	var labels = [_diag_lbl_fps, _diag_lbl_phys, _diag_lbl_mem, _diag_lbl_nodes, _diag_lbl_orphan]
-	for l in labels:
+	var labels_sys = [_diag_lbl_fps, _diag_lbl_phys, _diag_lbl_mem, _diag_lbl_nodes, _diag_lbl_orphan]
+	for l in labels_sys:
+		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 3)
+		diag_vbox.add_child(l)
+		
+	var diag_spacer = Control.new()
+	diag_spacer.custom_minimum_size = Vector2(0, 15)
+	diag_vbox.add_child(diag_spacer)
+	
+	var net_title = Label.new()
+	net_title.text = "[ NETWORK PROFILER ]"
+	net_title.add_theme_color_override("font_color", Color.CYAN)
+	diag_vbox.add_child(net_title)
+	
+	_diag_lbl_rtt = Label.new()
+	_diag_lbl_loss = Label.new()
+	_diag_lbl_offset = Label.new()
+	_diag_lbl_peers = Label.new()
+	
+	var labels_net = [_diag_lbl_rtt, _diag_lbl_loss, _diag_lbl_offset, _diag_lbl_peers]
+	for l in labels_net:
 		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
 		l.add_theme_color_override("font_outline_color", Color.BLACK)
 		l.add_theme_constant_override("outline_size", 3)
@@ -488,6 +521,28 @@ func _process(delta: float) -> void:
 		_diag_lbl_mem.text = "Static Mem: %.2f MB" % (Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)
 		_diag_lbl_nodes.text = "Active Nodes: %d" % Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
 		_diag_lbl_orphan.text = "Orphan Nodes: %d" % Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+		
+		var reg = QuanticNet.get_registry()
+		var c_peers = 0
+		var c_props = 0
+		for k in reg.keys():
+			if k >= 1000: c_props += 1
+			else: c_peers += 1
+		_diag_lbl_peers.text = "Total Peers: %d | Props: %d" % [c_peers, c_props]
+		
+		var my_id = QuanticNet.get_unique_id()
+		if telemetrics.has(my_id):
+			var t = telemetrics[my_id]
+			var curr_rtt = t.get_last_rtt()
+			var curr_loss = t.get_last_loss()
+			var min_rtt = t.rtt_min if t.rtt_min != INF else 0.0
+			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f]" % [curr_rtt, t.rtt_avg, min_rtt]
+			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%%]" % [curr_loss, t.loss_avg]
+			_diag_lbl_offset.text = "Clock Offset: %.1f ms" % [t.offset]
+		else:
+			_diag_lbl_rtt.text = "RTT (ms): N/A"
+			_diag_lbl_loss.text = "Packet Loss: N/A"
+			_diag_lbl_offset.text = "Clock Offset: N/A"
 
 	# O Loop visual roda fora de `_physics_process` para maximizar a fluidez, 
 	# independentemente da taxa estrita de física do servidor (geralmente 60fps constantes).
@@ -511,8 +566,29 @@ func _process(delta: float) -> void:
 			_poll_index = (_poll_index + 1) % keys.size()
 			var p_id = keys[_poll_index]
 			if telemetrics.has(p_id):
-				var loss = QuanticNet.loss_of(p_id)
-				telemetrics[p_id].push_loss(loss)
+				telemetrics[p_id].push_loss(QuanticNet.loss_of(p_id))
+
+	if "--test-cycle" in OS.get_cmdline_user_args():
+		var cycle = int(Time.get_ticks_msec() / 5000.0) % 6
+		if cycle == 0:
+			_current_profile_idx = 0
+			_netem_active = false
+			QuanticNet.set_netem_config(0.0, 0, 0)
+		elif cycle == 1:
+			_current_profile_idx = 1
+		elif cycle == 2:
+			_current_profile_idx = 4
+		elif cycle == 3:
+			_netem_active = true
+			QuanticNet.set_netem_config(0.1, 150, 50)
+			_current_profile_idx = 0
+		elif cycle == 4:
+			_current_profile_idx = 1
+		elif cycle == 5:
+			_current_profile_idx = 4
+			
+		if Engine.get_process_frames() % 60 == 0:
+			print("[TEST-LOG] Client ", my_id, " | ", prof_str, " | ", netem_str, " | Loss: ", _diag_lbl_loss.text)
 	
 	# Desabilita/Oculta cubos que não recebem atualizações há mais de 0.5 segundo (saíram do AoI)
 	var now = Time.get_ticks_msec()

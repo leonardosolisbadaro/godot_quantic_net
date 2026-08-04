@@ -37,13 +37,15 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 - [x] Implementar sistema de *Staggered Polling* (Round-robin) no `_process` para a chamada de `loss_of(id)`, distribuindo a carga de 100+ entidades ao longo dos frames.
 - [x] Implementar troca de cor de emissão dos materiais dos cubos (teclas `1-5`) via `Tween` vinculado ao callback `_apply_profile()`.
 
+### PR 22.5: Sessão B.5 — "Network Profiler Avançado"
+- [ ] Ampliar o painel de Profiler para incluir dados de rede (RTT, Loss, Offset) extraídos da struct `PeerTelemetrics`.
+
 ### PR 23: Sessão C — "Atmosfera e Estado"
 - [ ] Implementar Aura Netem (tecla `N`): Adicionar um `ColorRect` na borda da tela que pulsa em laranja, com opacidade e frequência proporcionais ao `jitter_ms` e `delay_ms`.
 - [ ] Implementar Barra de Estado de Conexão no topo da tela, reagindo aos sinais de rede (🔴 FAILED, 🟡 CONNECTING, 🟠 AUTHENTICATING, 🟢 CONNECTED).
 - [ ] Adicionar botão de reconexão na interface em caso de falha (`connection_failed_reason`).
 
 ### PR 24: Sessão D — "Monitoramento e Logs"
-- [ ] Criar o "HUD Global Monitor" (tecla `M`): Painel fixo no canto superior direito com contagem de peers/props, RTT médio, Offset de Clock-Sync e status do Netem.
 - [ ] Criar "Log de Eventos Rolante" (tecla `L`): `RichTextLabel` no canto inferior esquerdo para exibir os últimos 10 eventos (joins, mudança de perfil, snaps) com código de cores e timestamps.
 
 ### PR 25: Sessão E — "Telemetria por Entidade"

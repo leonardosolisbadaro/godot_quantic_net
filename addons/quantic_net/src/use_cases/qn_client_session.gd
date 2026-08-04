@@ -1,4 +1,4 @@
-﻿## @file qn_client_session.gd
+## @file qn_client_session.gd
 ## @path res://addons/quantic_net/src/use_cases/qn_client_session.gd
 ##
 ## @description
@@ -40,7 +40,7 @@ var _serializer # QNSerializer (static)
 var _clock # QNClockSync
 var _input_buf # QNInputBuffer
 var _interp := {} # owner -> QNInterpBuffer
-var _trackers := {} # owner -> QNLossTracker
+var _loss_tracker := preload("res://addons/quantic_net/src/domain/qn_loss_tracker.gd").new()
 var _state_history := []
 var _world_history := [] # {seq: int, states: Dictionary}
 var _last_server_seq := 0
@@ -133,10 +133,9 @@ func handle_packet(data: PackedByteArray, now: int) -> void:
 	var d: Dictionary = _serializer.decode_state_seq(data.slice(5))
 	if d.is_empty():
 		return
-	if not _trackers.has(owner):
-		_trackers[owner] = preload("res://addons/quantic_net/src/domain/qn_loss_tracker.gd").new()
+	if not _interp.has(owner):
 		_interp[owner] = preload("res://addons/quantic_net/src/domain/qn_interp_buffer.gd").new()
-	_trackers[owner].on_packet(d["seq"])
+
 	if owner == _my_id:
 		# Echo do proprio estado: clock-sync NTP de 3 argumentos.
 		# client_sent = sent_ts registrado por seq; server_time = ts recarimbado.
@@ -161,7 +160,7 @@ func remote_state(owner: int, now: int) -> Dictionary:
 
 ## Perda percentual recente de um peer (janela do tracker).
 func loss_of(owner: int) -> float:
-	return _trackers[owner].loss_pct() if _trackers.has(owner) else 0.0
+	return _loss_tracker.loss_pct()
 
 func _handle_snapback(body: PackedByteArray) -> void:
 	var d: Dictionary = _serializer.decode_state_seq(body)
@@ -175,6 +174,8 @@ func _handle_snapback(body: PackedByteArray) -> void:
 func _handle_snapshot(body: PackedByteArray, now: int) -> void:
 	var buf = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd").new(body)
 	var server_seq = buf.read_bits(16)
+	
+	_loss_tracker.on_packet(server_seq)
 	
 	var diff = server_seq - _last_server_seq
 	if diff < -32768: diff += 65536
@@ -207,10 +208,8 @@ func _handle_snapshot(body: PackedByteArray, now: int) -> void:
 		var owner = entity_id
 		var d = st
 		
-		if not _trackers.has(owner):
-			_trackers[owner] = preload("res://addons/quantic_net/src/domain/qn_loss_tracker.gd").new()
+		if not _interp.has(owner):
 			_interp[owner] = preload("res://addons/quantic_net/src/domain/qn_interp_buffer.gd").new()
-		_trackers[owner].on_packet(d["seq"])
 		
 		if owner == _my_id:
 			var sent_ts: int = _input_buf.get_sent_ts(d["seq"])
