@@ -7,10 +7,10 @@
 ## publicos do autoload. Nao conhece internals do plugin.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-02
+## @updated 2026-08-04
 ##
 ## @since 0.2.0
-## @lastModifiedIn 0.3.0-rc.1
+## @lastModifiedIn 0.3.0-rc.2
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
@@ -43,8 +43,10 @@ var cubes := {} # peer_id -> MeshInstance3D
 class PeerTelemetrics:
 	var rtt_avg: float = 0.0
 	var rtt_min: float = INF
+	var rtt_max: float = -INF
 	var loss_avg: float = 0.0
 	var loss_min: float = INF
+	var loss_max: float = -INF
 	var offset: float = 0.0
 	
 	var _rtt_samples: Array[float] = []
@@ -55,6 +57,7 @@ class PeerTelemetrics:
 		_rtt_samples.append(val)
 		if _rtt_samples.size() > MAX_SAMPLES: _rtt_samples.pop_front()
 		rtt_min = min(rtt_min, val)
+		rtt_max = max(rtt_max, val)
 		var sum = 0.0
 		for v in _rtt_samples: sum += v
 		rtt_avg = sum / max(1, _rtt_samples.size())
@@ -63,6 +66,7 @@ class PeerTelemetrics:
 		_loss_samples.append(val)
 		if _loss_samples.size() > MAX_SAMPLES: _loss_samples.pop_front()
 		loss_min = min(loss_min, val)
+		loss_max = max(loss_max, val)
 		var sum = 0.0
 		for v in _loss_samples: sum += v
 		loss_avg = sum / max(1, _loss_samples.size())
@@ -513,7 +517,7 @@ func _physics_process(delta: float) -> void:
 		if _can_send_state and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 			QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	# [DIAGNOSTIC PROFILER ATUALIZAÇÃO]
 	if _diag_lbl_fps != null and is_instance_valid(_diag_lbl_fps):
 		_diag_lbl_fps.text = "FPS: %d" % Engine.get_frames_per_second()
@@ -522,10 +526,9 @@ func _process(delta: float) -> void:
 		_diag_lbl_nodes.text = "Active Nodes: %d" % Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
 		_diag_lbl_orphan.text = "Orphan Nodes: %d" % Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
 		
-		var reg = QuanticNet.get_registry()
 		var c_peers = 0
 		var c_props = 0
-		for k in reg.keys():
+		for k in cubes.keys():
 			if k >= 1000: c_props += 1
 			else: c_peers += 1
 		_diag_lbl_peers.text = "Total Peers: %d | Props: %d" % [c_peers, c_props]
@@ -536,8 +539,10 @@ func _process(delta: float) -> void:
 			var curr_rtt = t.get_last_rtt()
 			var curr_loss = t.get_last_loss()
 			var min_rtt = t.rtt_min if t.rtt_min != INF else 0.0
-			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f]" % [curr_rtt, t.rtt_avg, min_rtt]
-			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%%]" % [curr_loss, t.loss_avg]
+			var max_rtt = t.rtt_max if t.rtt_max != -INF else 0.0
+			var max_loss = t.loss_max if t.loss_max != -INF else 0.0
+			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f | Max: %.0f]" % [curr_rtt, t.rtt_avg, min_rtt, max_rtt]
+			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%% | Max: %.1f%%]" % [curr_loss, t.loss_avg, max_loss]
 			_diag_lbl_offset.text = "Clock Offset: %.1f ms" % [t.offset]
 		else:
 			_diag_lbl_rtt.text = "RTT (ms): N/A"
@@ -662,7 +667,7 @@ func _calc_prop_pos(offset: int, time: float) -> Vector3:
 	var radius = 5.0 + (offset % 10) * 2.0 + sin(time * 0.5 + offset) * 2.0
 	return Vector3(cos(angle) * radius, 0.5, sin(angle) * radius)
 
-func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
+func _on_snapback(seq: int, _pos: Vector3, _rot: Vector3, reason: int, replay: Array) -> void:
 	# [RECONCILIAÇÃO DO SERVIDOR]
 	# O servidor cassou a nossa predição por irregularidade grave! 
 	# Ex: andamos por dentro de uma parede, fomos empurrados, ou speedhack.

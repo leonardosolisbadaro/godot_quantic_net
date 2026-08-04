@@ -25,7 +25,26 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - ...
 
-## [0.3.0-rc.1] - 2026-08-02 (Atual)
+## [0.3.0-rc.2] - 2026-08-04
+
+### Adicionado
+
+- **Telemetria Avançada (PR 22):** Implementação da struct `PeerTelemetrics` para armazenamento tipado de RTT, Perda de Pacotes e Offset, com buffers circulares (30 amostras) para cálculo dinâmico de médias.
+- **Staggered Polling:** Adicionado sistema de *round-robin* no `_process` da demo para requisição diluída de `loss_of(id)`, evitando travamentos na UI com dezenas de entidades.
+- **Feedback Visual (PR 22):** Troca suave da cor de emissão dos avatares/props (teclas `1-5`) utilizando `Tween` sincronizado com os perfis de rede.
+- **Encerramento Limpo (PR 21):** Implementação de `_notification` para interceptar `NOTIFICATION_WM_CLOSE_REQUEST` e forçar o `disconnect_net(true)` ao fechar a janela, prevenindo leaks.
+
+### Corrigido
+
+- **Correção de Ativação do Netem (PR 21):** Mover a rotina `set_netem_config(0.10, 150, 50)` restritivamente para dentro da cláusula `if _netem_active`.
+- **[LINT] Correção de Private-Access em `demo_main.gd`:** Refatoração da struct interna `PeerTelemetrics` para utilizar métodos _getter_ (`get_last_rtt()`, `get_last_loss()`), resolvendo avisos do analisador estático sobre violação de encapsulamento.
+
+### Modificado
+
+- **Atalhos da UI (PR 21):** O bloqueio do FPS/VSync migrou da tecla `L` para `F`, além da remoção do tratamento da tecla `Escape` no `_physics_process`.
+- **Silenciamento de Variáveis Não Utilizadas:** Ajuste no styleguide dos parâmetros `delta`, `pos` e `rot` no `_process` e `_on_snapback` (prefixados com `_`) em `demo_main.gd` para limpeza dos alertas do compilador.
+
+## [0.3.0-rc.1] - 2026-08-02
 
 ### Corrigido
 
