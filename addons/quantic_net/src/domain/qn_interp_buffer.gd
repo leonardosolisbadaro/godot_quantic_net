@@ -1,4 +1,4 @@
-﻿## @file qn_interp_buffer.gd
+## @file qn_interp_buffer.gd
 ## @path res://addons/quantic_net/src/domain/qn_interp_buffer.gd
 ##
 ## @description
@@ -24,6 +24,8 @@ const ERROR_BLEND_SPEED := 5.0 # Fator de decaimento por segundo
 
 var render_delay_ms: int = 60
 var snaps: Array[Dictionary] = []
+var _cached_state := {"pos": Vector3.ZERO, "rot": Vector3.ZERO}
+var _empty_state := {}
 
 var _last_sample_now: int = 0
 var _last_sample_pos: Vector3 = Vector3.ZERO
@@ -57,7 +59,7 @@ func push(ts: int, pos: Vector3, rot: Vector3) -> void:
 
 func sample(now: int) -> Dictionary:
 	if snaps.is_empty():
-		return {}
+		return _empty_state
 		
 	var dt: float = 0.0 if _last_sample_now == 0 else float(now - _last_sample_now) / 1000.0
 	_last_sample_now = now
@@ -135,7 +137,9 @@ func sample(now: int) -> Dictionary:
 	_last_sample_pos = out_pos
 	_last_sample_rot = out_rot
 	
-	return {"pos": out_pos, "rot": out_rot}
+	_cached_state.pos = out_pos
+	_cached_state.rot = out_rot
+	return _cached_state
 
 static func _lerp_angle_vec(a: Vector3, b: Vector3, t: float) -> Vector3:
 	return Vector3(

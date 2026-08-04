@@ -60,6 +60,10 @@ var _netem_active := false
 var _can_send_state := false
 var _current_offset := 0.0
 var _last_ui_update_ms := 0
+var _fps_total_sum: int = 0
+var _fps_total_samples: int = 0
+var _fps_min := 9999
+var _fps_max := 0
 
 # Array contendo instâncias de perfis de rede (Tick Rates e Culling).
 # Isso demonstra o "Hybrid Ticking" do QuanticNet, onde cada entidade
@@ -479,9 +483,19 @@ func _physics_process(delta: float) -> void:
 func _process(_delta: float) -> void:
 	# [DIAGNOSTIC PROFILER ATUALIZAÇÃO]
 	var now_ms = Time.get_ticks_msec()
+	var current_fps = Engine.get_frames_per_second()
+	
+	_fps_total_sum += current_fps
+	_fps_total_samples += 1
+	
+	if current_fps < _fps_min and current_fps > 0: _fps_min = current_fps
+	if current_fps > _fps_max: _fps_max = current_fps
+	
 	if _diag_lbl_fps != null and is_instance_valid(_diag_lbl_fps) and now_ms - _last_ui_update_ms > 250:
 		_last_ui_update_ms = now_ms
-		_diag_lbl_fps.text = "FPS: %d" % Engine.get_frames_per_second()
+		var avg_fps = _fps_total_sum / max(1, _fps_total_samples)
+		
+		_diag_lbl_fps.text = "FPS: %d [Avg: %d | Min: %d | Max: %d]" % [current_fps, avg_fps, _fps_min, _fps_max]
 		_diag_lbl_phys.text = "Physics Time (sec): %.4f" % Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)
 		_diag_lbl_mem.text = "Static Mem: %.2f MB" % (Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)
 		_diag_lbl_nodes.text = "Active Nodes: %d" % Performance.get_monitor(Performance.OBJECT_NODE_COUNT)

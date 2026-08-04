@@ -202,7 +202,7 @@ func _handle_snapshot(body: PackedByteArray, now: int) -> void:
 	var parsed_states = {}
 	if not _world_history.is_empty():
 		for id in _world_history[0].states:
-			parsed_states[id] = _world_history[0].states[id].duplicate()
+			parsed_states[id] = _world_history[0].states[id]
 			
 	for i in range(num_entities):
 		var entity_id = buf.read_bits(32)
