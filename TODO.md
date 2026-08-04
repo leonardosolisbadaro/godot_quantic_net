@@ -25,10 +25,10 @@ O projeto base estabilizou na versão **0.3.0**. Os seguintes épicos estão **1
 Este documento rastreia as tarefas de implementação da nova interface e telemetria da demo, garantindo o alinhamento de longo prazo com o `ROADMAP_MMO.md` e as restrições de arquitetura descritas no `GEMINI.md`.
 
 ### PR 21: Sessão A — "Zero Bugs" e Fundações
-- [ ] Implementar `_notification` para capturar `NOTIFICATION_WM_CLOSE_REQUEST` e executar `QuanticNet.disconnect_net(true)` antes de sair.
-- [ ] Limpar o input `Escape` do `_physics_process` (agora tratado de forma limpa pelo `_notification`).
-- [ ] Corrigir o bug do Netem: mover a chamada `set_netem_config(0.10, 150, 50)` para dentro do bloco `if _netem_active`.
-- [ ] Refatorar atalhos: Migrar toggle de FPS/VSync da tecla `L` para `F` (liberando `L` para os logs).
+- [x] Implementar `_notification` para capturar `NOTIFICATION_WM_CLOSE_REQUEST` e executar `QuanticNet.disconnect_net(true)` antes de sair.
+- [x] Limpar o input `Escape` do `_physics_process` (agora tratado de forma limpa pelo `_notification`).
+- [x] Corrigir o bug do Netem: mover a chamada `set_netem_config(0.10, 150, 50)` para dentro do bloco `if _netem_active`.
+- [x] Refatorar atalhos: Migrar toggle de FPS/VSync da tecla `L` para `F` (liberando `L` para os logs).
 
 ### PR 22: Sessão B — "Dados Vivos e Infraestrutura"
 - [ ] Criar classe de dados `PeerTelemetrics` (Struct interna) para armazenar telemetria (RTT, Loss, Offset, etc.) com tipagem forte.

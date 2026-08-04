@@ -59,6 +59,11 @@ var _profiles = [
 var _current_profile_idx = 0
 var _next_prop_id = 1000
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		QuanticNet.disconnect_net(true)
+		get_tree().quit()
+
 func _ready() -> void:
 	Engine.max_fps = 60
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
@@ -97,7 +102,8 @@ func _ready() -> void:
 		# O parâmetro _netem_active injeta problemas crônicos na rede se for `true`,
 		# para testarmos se a nossa Extrapolação e Jitter Buffer funcionam!
 		QuanticNet.join("127.0.0.1", PORT, SECRET, _netem_active)
-		QuanticNet.set_netem_config(0.10, 150, 50) # 10% perda, 150ms atraso, 50ms jitter
+		if _netem_active:
+			QuanticNet.set_netem_config(0.10, 150, 50) # 10% perda, 150ms atraso, 50ms jitter
 		print("[DEMO] Cliente conectando (netem=%s) [Pressione 'N' para alternar]" % ("true" if _netem_active else "false"))
 		_setup_client_scene()
 		
@@ -116,7 +122,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			auto_move = not auto_move
 			print("[DEMO] Auto-move: ", auto_move)
-		elif event.keycode == KEY_L:
+		elif event.keycode == KEY_F:
 			if Engine.max_fps == 0:
 				Engine.max_fps = 60
 				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
@@ -246,7 +252,7 @@ func _setup_client_scene() -> void:
 		"CONTROLES IN-GAME:",
 		"Setas      : Mover",
 		"Enter      : Auto-Move On/Off",
-		"L          : Destravar FPS / V-Sync",
+		"F          : Destravar FPS / V-Sync",
 		"N          : Ativar/Desativar NETEM",
 		"1 a 5      : Mudar Perfil de Rede (Tick Rate)",
 		"SPACE      : Spawna 100 Props (reseta)",
@@ -331,9 +337,6 @@ func _on_peer_left(id: int) -> void:
 		cubes.erase(id)
 
 func _physics_process(delta: float) -> void:
-	if Input.is_action_just_pressed("ui_cancel"):
-		get_tree().quit()
-		
 	# ======================================================================
 	# FLUXO DO SERVIDOR (AUTORITATIVO)
 	# ======================================================================
