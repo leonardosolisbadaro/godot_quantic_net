@@ -1,4 +1,4 @@
-﻿## @file qn_host_session.gd
+## @file qn_host_session.gd
 ## @path res://addons/quantic_net/src/use_cases/qn_host_session.gd
 ##
 ## @description
@@ -71,6 +71,11 @@ func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, pro
 
 func on_peer_authenticated(peer_id: int, profile: RefCounted = null) -> void:
 	register_entity(peer_id, true, false, profile)
+
+func unregister_entity(entity_id: int) -> void:
+	if _registry.has(entity_id):
+		_registry.erase(entity_id)
+	_accumulator.cleanup_entity(entity_id)
 
 func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 	if _registry.has(entity_id):

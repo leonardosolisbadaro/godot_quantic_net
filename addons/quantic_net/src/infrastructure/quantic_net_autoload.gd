@@ -1,4 +1,4 @@
-﻿## @file quantic_net_autoload.gd
+## @file quantic_net_autoload.gd
 ## @path res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd
 ##
 ## @description
@@ -276,6 +276,21 @@ func get_registry() -> Dictionary:
 func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, profile: RefCounted = null) -> void:
 	if _is_server and _host_session:
 		_host_session.register_entity(entity_id, is_peer, has_initial_state, profile)
+
+func unregister_entity(entity_id: int) -> void:
+	if _is_server and _host_session:
+		_host_session.unregister_entity(entity_id)
+		
+		# Dispara TYPE_PEER_LEFT para todos os clientes
+		var pkt := PackedByteArray([QNSerializer.TYPE_PEER_LEFT])
+		var id_bytes := PackedByteArray()
+		id_bytes.resize(4)
+		id_bytes.encode_u32(0, entity_id)
+		pkt.append_array(id_bytes)
+		
+		for peer_id in _hook.base.get_peers():
+			if peer_id != 1:
+				_hook.send_custom(peer_id, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
 
 func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 	if _is_server and _host_session:

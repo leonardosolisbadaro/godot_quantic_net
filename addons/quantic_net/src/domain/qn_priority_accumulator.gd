@@ -1,4 +1,4 @@
-﻿## @file qn_priority_accumulator.gd
+## @file qn_priority_accumulator.gd
 ## @path res://addons/quantic_net/src/domain/qn_priority_accumulator.gd
 ##
 ## @description
@@ -35,6 +35,11 @@ func _add_debt(peer_id: int, entity_id: int, amount: float) -> void:
 func _clear_debt(peer_id: int, entity_id: int) -> void:
 	if _debt.has(peer_id) and _debt[peer_id].has(entity_id):
 		_debt[peer_id].erase(entity_id)
+
+func cleanup_entity(entity_id: int) -> void:
+	for peer_id in _debt:
+		if _debt[peer_id].has(entity_id):
+			_debt[peer_id].erase(entity_id)
 
 func _cleanup_peer(peer_id: int) -> void:
 	if _debt.has(peer_id):

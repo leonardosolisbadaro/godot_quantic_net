@@ -40,6 +40,42 @@ const SPEED := 2.0
 # Dicionário que mapeia o ID do Peer para a malha visual 3D (o "Avatar")
 var cubes := {} # peer_id -> MeshInstance3D
 
+class PeerTelemetrics:
+	var rtt_avg: float = 0.0
+	var rtt_min: float = INF
+	var loss_avg: float = 0.0
+	var loss_min: float = INF
+	var offset: float = 0.0
+	
+	var _rtt_samples: Array[float] = []
+	var _loss_samples: Array[float] = []
+	const MAX_SAMPLES = 30
+	
+	func push_rtt(val: float) -> void:
+		_rtt_samples.append(val)
+		if _rtt_samples.size() > MAX_SAMPLES: _rtt_samples.pop_front()
+		rtt_min = min(rtt_min, val)
+		var sum = 0.0
+		for v in _rtt_samples: sum += v
+		rtt_avg = sum / max(1, _rtt_samples.size())
+		
+	func push_loss(val: float) -> void:
+		_loss_samples.append(val)
+		if _loss_samples.size() > MAX_SAMPLES: _loss_samples.pop_front()
+		loss_min = min(loss_min, val)
+		var sum = 0.0
+		for v in _loss_samples: sum += v
+		loss_avg = sum / max(1, _loss_samples.size())
+
+var telemetrics := {} # peer_id -> PeerTelemetrics
+var _poll_index: int = 0
+
+var _diag_lbl_fps: Label
+var _diag_lbl_phys: Label
+var _diag_lbl_mem: Label
+var _diag_lbl_nodes: Label
+var _diag_lbl_orphan: Label
+
 var auto_move := true
 var auto_time := 0.0
 var _last_rx := {}
@@ -76,7 +112,12 @@ func _ready() -> void:
 	QuanticNet.state_received.connect(_on_state)
 	QuanticNet.snapback_received.connect(_on_snapback)
 	QuanticNet.pong_received.connect(func(rtt: float, off: float) -> void:
-		print("[DEMO] RTT=%.0fms offset=%.1fms" % [rtt, off]))
+		print("[DEMO] RTT=%.0fms offset=%.1fms" % [rtt, off])
+		var my_id = QuanticNet.get_unique_id()
+		if not telemetrics.has(my_id): telemetrics[my_id] = PeerTelemetrics.new()
+		telemetrics[my_id].push_rtt(rtt)
+		telemetrics[my_id].offset = off
+	)
 		
 	# Decide o papel desta instância baseado nos argumentos do terminal
 	var args := OS.get_cmdline_user_args()
@@ -154,9 +195,19 @@ func _unhandled_input(event: InputEvent) -> void:
 @rpc("any_peer", "call_local")
 func _apply_profile(peer_id: int, profile_idx: int) -> void:
 	if QuanticNet.is_server():
+		# Servidor valida a mudanca de perfil daquele peer_id
 		if profile_idx >= 0 and profile_idx < _profiles.size():
 			QuanticNet.change_entity_profile(peer_id, _profiles[profile_idx])
 			print("[SERVER] Perfil alterado para o Peer %d -> Index: %d (%.0f HZ)" % [peer_id, profile_idx, _profiles[profile_idx].tick_rate_hz])
+		
+	if cubes.has(peer_id):
+		var cube: MeshInstance3D = cubes[peer_id]
+		var mat: StandardMaterial3D = cube.mesh.material
+		if mat:
+			var colors = [Color(0.2, 1.0, 0.2), Color(1.0, 1.0, 0.2), Color(1.0, 0.5, 0.2), Color(1.0, 0.2, 0.2), Color(0.5, 0.2, 1.0)]
+			var target_color = colors[profile_idx % colors.size()]
+			var tw = get_tree().create_tween()
+			tw.tween_property(mat, "emission", target_color, 0.5)
 
 @rpc("any_peer", "call_local")
 func _request_spawn_props(count: int, clear_previous: bool) -> void:
@@ -167,10 +218,10 @@ func _request_spawn_props(count: int, clear_previous: bool) -> void:
 		for id in cubes.keys():
 			if id >= 1000: to_remove.append(id)
 		for id in to_remove:
-			if QuanticNet.get_registry().has(id):
-				QuanticNet.get_registry().erase(id)
+			QuanticNet.unregister_entity(id)
 			cubes[id].queue_free()
 			cubes.erase(id)
+			if telemetrics.has(id): telemetrics.erase(id)
 		_next_prop_id = 1000
 		print("[SERVER] Limpando props anteriores...")
 		
@@ -194,10 +245,10 @@ func _request_remove_props(count: int) -> void:
 	keys.reverse() # Remove os últimos criados primeiro
 	for id in keys:
 		if id >= 1000:
-			if QuanticNet.is_server() and QuanticNet.get_registry().has(id):
-				QuanticNet.get_registry().erase(id)
+			QuanticNet.unregister_entity(id)
 			cubes[id].queue_free()
 			cubes.erase(id)
+			if telemetrics.has(id): telemetrics.erase(id)
 			removed += 1
 			if removed >= count:
 				break
@@ -271,6 +322,35 @@ func _setup_client_scene() -> void:
 		
 	margin.add_child(vbox)
 	hud.add_child(margin)
+	
+	# [DIAGNOSTIC PROFILER UI]
+	var diag_margin = MarginContainer.new()
+	diag_margin.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	diag_margin.add_theme_constant_override("margin_left", 20)
+	diag_margin.add_theme_constant_override("margin_top", 350)
+	var diag_vbox = VBoxContainer.new()
+	
+	var diag_title = Label.new()
+	diag_title.text = "ENGINE PROFILER"
+	diag_title.add_theme_color_override("font_color", Color.YELLOW)
+	diag_vbox.add_child(diag_title)
+	
+	_diag_lbl_fps = Label.new()
+	_diag_lbl_phys = Label.new()
+	_diag_lbl_mem = Label.new()
+	_diag_lbl_nodes = Label.new()
+	_diag_lbl_orphan = Label.new()
+	
+	var labels = [_diag_lbl_fps, _diag_lbl_phys, _diag_lbl_mem, _diag_lbl_nodes, _diag_lbl_orphan]
+	for l in labels:
+		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 3)
+		diag_vbox.add_child(l)
+		
+	diag_margin.add_child(diag_vbox)
+	hud.add_child(diag_margin)
+	
 	add_child(hud)
 
 func _on_peer_joined(id: int) -> void:
@@ -290,15 +370,25 @@ func _on_peer_joined(id: int) -> void:
 	else:
 		mat.albedo_color = Color.CYAN # Outros Clientes Reais
 		
+	mat.emission_enabled = true
+	mat.emission = Color.BLACK
+	mat.emission_energy_multiplier = 2.0
+		
 	mesh.material = mat
 	cube.mesh = mesh
+	
+	if not telemetrics.has(id): telemetrics[id] = PeerTelemetrics.new()
 	
 	if id == QuanticNet.get_unique_id():
 		# O próprio jogador inicia em zero e será movido localmente.
 		cube.position = Vector3(0, 0.5, 0)
 	elif QuanticNet.is_server():
-		# O servidor mantém os props em posições determinísticas calculadas depois.
-		cube.position = Vector3(0, 0.5, 0)
+		# O servidor deve posicionar os props em suas posições corretas imediatamente
+		# para que o snapshot inicial já leve a posição exata, evitando teleportes.
+		if id >= 1000:
+			cube.position = _calc_prop_pos(id - 1000, auto_time)
+		else:
+			cube.position = Vector3(0, 0.5, 0)
 	else:
 		# Avatares remotos começam invisíveis até que o 1º pacote contendo 
 		# a sua posição real interpolada chegue.
@@ -335,6 +425,8 @@ func _on_peer_left(id: int) -> void:
 	if cubes.has(id):
 		cubes[id].queue_free()
 		cubes.erase(id)
+	if telemetrics.has(id):
+		telemetrics.erase(id)
 
 func _physics_process(delta: float) -> void:
 	# ======================================================================
@@ -389,6 +481,14 @@ func _physics_process(delta: float) -> void:
 			QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
 
 func _process(delta: float) -> void:
+	# [DIAGNOSTIC PROFILER ATUALIZAÇÃO]
+	if _diag_lbl_fps != null and is_instance_valid(_diag_lbl_fps):
+		_diag_lbl_fps.text = "FPS: %d" % Engine.get_frames_per_second()
+		_diag_lbl_phys.text = "Physics Time (sec): %.4f" % Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)
+		_diag_lbl_mem.text = "Static Mem: %.2f MB" % (Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)
+		_diag_lbl_nodes.text = "Active Nodes: %d" % Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
+		_diag_lbl_orphan.text = "Orphan Nodes: %d" % Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+
 	# O Loop visual roda fora de `_physics_process` para maximizar a fluidez, 
 	# independentemente da taxa estrita de física do servidor (geralmente 60fps constantes).
 	if QuanticNet.is_server():
@@ -403,6 +503,18 @@ func _process(delta: float) -> void:
 	var netem_str = "NETEM - LOSS 10%%, DELAY 150ms, JITTER 50ms" if _netem_active else "NETEM - OFF"
 	DisplayServer.window_set_title("#%d | FPS %d | %s | %s" % [my_id, fps, prof_str, netem_str])
 	
+	# Staggered Polling para telemetria pesada (Loss)
+	var keys = cubes.keys()
+	if keys.size() > 0:
+		var process_per_frame = maxi(1, keys.size() / 10) # Atualiza ~10% por frame
+		for i in range(process_per_frame):
+			_poll_index = (_poll_index + 1) % keys.size()
+			var p_id = keys[_poll_index]
+			if telemetrics.has(p_id):
+				var loss = QuanticNet.loss_of(p_id)
+				telemetrics[p_id].push_loss(loss)
+	
+	# Desabilita/Oculta cubos que não recebem atualizações há mais de 0.5 segundo (saíram do AoI)
 	var now = Time.get_ticks_msec()
 	var my_pos = cubes[my_id].position if cubes.has(my_id) else Vector3.ZERO
 	

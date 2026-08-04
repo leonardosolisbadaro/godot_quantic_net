@@ -1,4 +1,4 @@
-﻿## @file test_qn_host_session.gd
+## @file test_qn_host_session.gd
 ## @path res://addons/quantic_net/tests/use_cases/test_qn_host_session.gd
 ##
 ## @description

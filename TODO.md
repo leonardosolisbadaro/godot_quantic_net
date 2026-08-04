@@ -31,11 +31,11 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 - [x] Refatorar atalhos: Migrar toggle de FPS/VSync da tecla `L` para `F` (liberando `L` para os logs).
 
 ### PR 22: Sessão B — "Dados Vivos e Infraestrutura"
-- [ ] Criar classe de dados `PeerTelemetrics` (Struct interna) para armazenar telemetria (RTT, Loss, Offset, etc.) com tipagem forte.
-- [ ] Inicializar métricas de mínimo (`rtt_min`, `loss_min`) com valores sentinela lógicos (`INF`) para garantir registro correto da primeira amostra.
-- [ ] Implementar Buffer Circular (ex: 30 amostras) para suavização de `loss_avg` e `rtt_avg`.
-- [ ] Implementar sistema de *Staggered Polling* (Round-robin) no `_process` para a chamada de `loss_of(id)`, distribuindo a carga de 100+ entidades ao longo dos frames.
-- [ ] Implementar troca de cor de emissão dos materiais dos cubos (teclas `1-5`) via `Tween` vinculado ao callback `_apply_profile()`.
+- [x] Criar classe de dados `PeerTelemetrics` (Struct interna) para armazenar telemetria (RTT, Loss, Offset, etc.) com tipagem forte.
+- [x] Inicializar métricas de mínimo (`rtt_min`, `loss_min`) com valores sentinela lógicos (`INF`) para garantir registro correto da primeira amostra.
+- [x] Implementar Buffer Circular (ex: 30 amostras) para suavização de `loss_avg` e `rtt_avg`.
+- [x] Implementar sistema de *Staggered Polling* (Round-robin) no `_process` para a chamada de `loss_of(id)`, distribuindo a carga de 100+ entidades ao longo dos frames.
+- [x] Implementar troca de cor de emissão dos materiais dos cubos (teclas `1-5`) via `Tween` vinculado ao callback `_apply_profile()`.
 
 ### PR 23: Sessão C — "Atmosfera e Estado"
 - [ ] Implementar Aura Netem (tecla `N`): Adicionar um `ColorRect` na borda da tela que pulsa em laranja, com opacidade e frequência proporcionais ao `jitter_ms` e `delay_ms`.
