@@ -30,6 +30,8 @@ var cubes := {}
 var active_bullets := {}
 var auto_move := false
 var auto_time := 0.0
+var _current_rtt := 0.0
+var _last_rx := {}
 
 # Server State
 var prev_inputs := {}
@@ -71,21 +73,6 @@ func _ready() -> void:
 		
 	if is_client:
 		DisplayServer.window_set_title("QuanticNet - CLIENT" + (" (NETEM)" if use_netem else ""))
-	
-	if not is_server and not is_client:
-		print("Iniciando topologia automática: 1 Servidor, 2 Clientes...")
-		is_server = true
-		
-		# Inicia Cliente 1 (Normal)
-		OS.create_instance(["--client"])
-		
-		# Inicia Cliente 2 (Com Netem)
-		OS.create_instance(["--client", "--netem"])
-		
-		DisplayServer.window_set_title("QuanticNet - SERVER")
-		
-	if is_client:
-		DisplayServer.window_set_title("QuanticNet - CLIENT" + (" (NETEM)" if use_netem else ""))
 		
 	_setup_materials()
 	_setup_ui()
@@ -100,6 +87,8 @@ func _ready() -> void:
 	QuanticNet.connection_state_changed.connect(_on_conn_state)
 	QuanticNet.peer_joined.connect(_on_peer_joined)
 	QuanticNet.peer_left.connect(_on_peer_left)
+	QuanticNet.pong_received.connect(func(rtt: float, off: float): _current_rtt = rtt)
+	QuanticNet.state_received.connect(_on_state)
 	
 	if is_server:
 		print("Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
@@ -110,7 +99,7 @@ func _ready() -> void:
 		QuanticNet.join("127.0.0.1", PORT, SECRET)
 		
 		if use_netem:
-			QuanticNet.set_network_simulation(true, 100.0, 20.0, 0.10) # 100ms, 20ms jitter, 10% loss
+			QuanticNet.set_netem_config(10.0, 100, 20) # 10% loss, 100ms latency, 20ms jitter
 
 func _setup_materials() -> void:
 	mat_player_local = StandardMaterial3D.new()
@@ -141,6 +130,15 @@ func _setup_scene() -> void:
 	light.rotation_degrees = Vector3(-45, 45, 0)
 	light.shadow_enabled = true
 	add_child(light)
+	
+	var floor_mesh := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(40, 40)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.2, 0.2, 0.25)
+	plane.material = mat
+	floor_mesh.mesh = plane
+	add_child(floor_mesh)
 
 func _setup_ui() -> void:
 	var vbox = VBoxContainer.new()
@@ -198,6 +196,12 @@ func _on_peer_left(peer_id: int) -> void:
 		cubes[peer_id].queue_free()
 		cubes.erase(peer_id)
 
+func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
+	if not QuanticNet.is_server():
+		_last_rx[owner] = Time.get_ticks_msec()
+		if not cubes.has(owner) and owner != QuanticNet.get_unique_id():
+			_on_peer_joined(owner)
+
 func _server_spawn_props() -> void:
 	for i in range(10):
 		var prop_id = 1000 + i
@@ -225,7 +229,7 @@ func _update_ui() -> void:
 	if _diag_lbl_fps:
 		_diag_lbl_fps.text = "FPS: %d" % Engine.get_frames_per_second()
 		if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-			_diag_lbl_rtt.text = "RTT: %dms" % QuanticNet.get_rtt()
+			_diag_lbl_rtt.text = "RTT: %dms" % _current_rtt
 			_diag_lbl_loss.text = "Loss: %.1f%%" % (QuanticNet.loss_of(1) * 100.0)
 
 # ==============================================================
@@ -365,6 +369,7 @@ func _server_execute_projectile(p_id: int, p_state: Dictionary) -> void:
 # ==============================================================
 func _apply_visuals() -> void:
 	var my_id = QuanticNet.get_unique_id()
+	var now = Time.get_ticks_msec()
 	
 	for id in cubes.keys():
 		if id == my_id: continue
@@ -384,15 +389,20 @@ func _apply_visuals() -> void:
 					cubes[id].material_override = mat_prop
 			
 			cubes[id].visible = true
+			
+		# Visual Culling (oculta entidades que não recebem pacote há 2s)
+		if _last_rx.has(id) and now - _last_rx[id] > 2000:
+			cubes[id].visible = false
 
-	# Desenha Balas dinâmicas recebidas da rede
-	var reg = QuanticNet.get_registry()
-	for id in reg.keys():
-		if id >= 20000:
-			if not cubes.has(id):
-				_on_peer_joined(id)
-				var mesh = SphereMesh.new()
-				mesh.radius = 0.5
-				mesh.height = 1.0
-				cubes[id].mesh = mesh
-				cubes[id].material_override = mat_bullet
+	# Desenha Balas dinâmicas recebidas da rede no Servidor
+	if QuanticNet.is_server():
+		var reg = QuanticNet.get_registry()
+		for id in reg.keys():
+			if id >= 20000:
+				if not cubes.has(id):
+					_on_peer_joined(id)
+					var mesh = SphereMesh.new()
+					mesh.radius = 0.5
+					mesh.height = 1.0
+					cubes[id].mesh = mesh
+					cubes[id].material_override = mat_bullet
