@@ -47,7 +47,7 @@ const GAME_VARS = {
 	"bullet_radius": 0.5,
 	"bullet_height": 1.0,
 	"hit_sphere_radius": 1.0,
-	"spawn_offset": 2.0
+	"spawn_offset": 1.0
 }
 
 var _last_ui_update_ms := 0
@@ -63,6 +63,7 @@ var _fps_min := 9999
 var _fps_max := 0
 var _my_id := 0
 var _is_server := false
+var _culling_disk: MeshInstance3D
 var auto_move := false
 var auto_time := 0.0
 var _current_rtt := 0.0
@@ -146,7 +147,7 @@ func _ready() -> void:
 	QuanticNet.state_received.connect(_on_state)
 	QuanticNet.snapback_received.connect(_on_snapback)
 	
-	if is_server:
+	if _is_server:
 		print("Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
 		QuanticNet.host(PORT, SECRET, "127.0.0.1", 32, _network_config)
 		_server_spawn_props()
@@ -195,6 +196,21 @@ func _setup_scene() -> void:
 	floor_mesh.mesh = plane
 	add_child(floor_mesh)
 
+	# Disco de Culling (Visual Interest Area)
+	if not _is_server:
+		var torus = TorusMesh.new()
+		torus.inner_radius = 49.5
+		torus.outer_radius = 50.0
+		torus.rings = 64
+		var d_mat = StandardMaterial3D.new()
+		d_mat.albedo_color = Color(1.0, 1.0, 1.0, 0.3)
+		d_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		d_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		torus.material = d_mat
+		_culling_disk = MeshInstance3D.new()
+		_culling_disk.mesh = torus
+		add_child(_culling_disk)
+		
 func _setup_ui() -> void:
 	var hud = CanvasLayer.new()
 	
@@ -202,7 +218,7 @@ func _setup_ui() -> void:
 	top_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_status_lbl = Label.new()
 	_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_lbl.text = "⚪ OFFLINE"
+	_status_lbl.text = "OFFLINE"
 	_status_lbl.add_theme_color_override("font_color", Color.GRAY)
 	top_panel.add_child(_status_lbl)
 	hud.add_child(top_panel)
@@ -304,10 +320,10 @@ func _setup_ui() -> void:
 func _on_conn_state(state: int) -> void:
 	match state:
 		QuanticNet.ConnectionState.DISCONNECTED:
-			_status_lbl.text = "⚪ DISCONNECTED"
+			_status_lbl.text = "DISCONNECTED"
 			_status_lbl.add_theme_color_override("font_color", Color.GRAY)
 		QuanticNet.ConnectionState.CONNECTED:
-			_status_lbl.text = "🟢 CONNECTED"
+			_status_lbl.text = "CONNECTED"
 			_status_lbl.add_theme_color_override("font_color", Color.GREEN)
 
 func _on_peer_joined(peer_id: int) -> void:
@@ -316,12 +332,19 @@ func _on_peer_joined(peer_id: int) -> void:
 	var cube = MeshInstance3D.new()
 	cube.mesh = mesh
 	
-	if peer_id == QuanticNet.get_unique_id():
+	var my_real_id = QuanticNet.get_unique_id()
+	if peer_id == my_real_id:
 		cube.material_override = mat_player_local
-	elif peer_id < GAME_VARS.prop_start:
-		cube.material_override = mat_player_remote
-	else:
+	elif peer_id >= GAME_VARS.bullet_start:
+		var s_mesh = SphereMesh.new()
+		s_mesh.radius = GAME_VARS.bullet_radius
+		s_mesh.height = GAME_VARS.bullet_height
+		cube.mesh = s_mesh
+		cube.material_override = mat_bullet
+	elif peer_id >= GAME_VARS.prop_start and peer_id < GAME_VARS.prop_end:
 		cube.material_override = mat_prop
+	else:
+		cube.material_override = mat_player_remote
 		
 	if peer_id == QuanticNet.get_unique_id():
 		cube.position = Vector3(0, 0.5, 0)
@@ -456,6 +479,13 @@ func _client_physics(delta: float) -> void:
 	cube.position.x += move.x * GAME_VARS.player_speed * delta
 	cube.position.z += move.y * GAME_VARS.player_speed * delta
 	
+	if _culling_disk != null:
+		_culling_disk.position = cube.position
+		
+	if move.length_squared() > 0.01:
+		var target_rot = atan2(-move.x, -move.y)
+		cube.rotation.y = lerp_angle(cube.rotation.y, target_rot, 15.0 * delta)
+	
 	# Input Polling empacotado em custom_id
 	var input_mask = 0
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -524,10 +554,10 @@ func _server_physics(delta: float) -> void:
 			bullets_to_remove.append(b_id)
 			continue
 			
-		var hits = QuanticNet.query_sphere(b.pos, GAME_VARS.hit_sphere_radius, now)
+		var hits = QuanticNet.query_sphere(b.pos, GAME_VARS.bullet_radius, now)
 		var hit_someone = false
 		for hit_id in hits:
-			if hit_id >= GAME_VARS.prop_start and hit_id < GAME_VARS.prop_end:
+			if hit_id < GAME_VARS.bullet_start and hit_id != b.owner_id and hit_id >= GAME_VARS.prop_start and hit_id < GAME_VARS.prop_end:
 				hit_timers[hit_id] = now + GAME_VARS.hit_blink_ms # Pisca por 150ms
 				bullets_to_remove.append(b_id)
 				hit_someone = true
@@ -569,7 +599,8 @@ func _server_execute_projectile(p_id: int, p_state: Dictionary) -> void:
 		"pos": origin + direction * GAME_VARS.spawn_offset,
 		"dir": direction,
 		"speed": GAME_VARS.bullet_speed,
-		"life": GAME_VARS.bullet_life
+		"life": GAME_VARS.bullet_life,
+		"owner_id": p_id
 	}
 	QuanticNet.register_entity(b_id, false, true, _profiles[4])
 
@@ -611,18 +642,6 @@ func _apply_visuals() -> void:
 				cubes.erase(cull_id)
 			_last_rx.erase(cull_id)
 
-	# Desenha Balas dinâmicas recebidas da rede no Servidor
-	if QuanticNet.is_server():
-		var reg = QuanticNet.get_registry()
-		for id in reg:
-			if id >= GAME_VARS.bullet_start:
-				if not cubes.has(id):
-					_on_peer_joined(id)
-					var mesh = SphereMesh.new()
-					mesh.radius = GAME_VARS.bullet_radius
-					mesh.height = GAME_VARS.bullet_height
-					cubes[id].mesh = mesh
-					cubes[id].material_override = mat_bullet
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
