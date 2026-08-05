@@ -511,11 +511,11 @@ func _physics_process(delta: float) -> void:
 		for prop_id in reg.keys():
 			if prop_id >= 1000:
 				var p = reg[prop_id]
-				p.pos = _calc_prop_pos(prop_id - 1000, auto_time)
-				p.ts = server_now
+				var new_pos = _calc_prop_pos(prop_id - 1000, auto_time)
 				# Força a inserção da nova posição no cache interno 
 				# para ser processado pelo ciclo de Broadcast nativo (Tick Híbrido).
-				_on_state(prop_id, p.pos, p.rot, 0)
+				QuanticNet.update_entity_state(prop_id, new_pos, p.rot)
+				_on_state(prop_id, new_pos, p.rot, 0)
 		return
 
 	# ======================================================================
