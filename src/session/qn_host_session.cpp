@@ -36,10 +36,12 @@ void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("on_peer_authenticated", "peer_id", "profile"), &QNHostSession::on_peer_authenticated, DEFVAL(nullptr));
 	ClassDB::bind_method(D_METHOD("unregister_entity", "entity_id"), &QNHostSession::unregister_entity);
 	ClassDB::bind_method(D_METHOD("change_entity_profile", "entity_id", "new_profile"), &QNHostSession::change_entity_profile);
-	ClassDB::bind_method(D_METHOD("update_entity_state", "entity_id", "pos", "rot"), &QNHostSession::update_entity_state);
+	ClassDB::bind_method(D_METHOD("update_entity_state", "entity_id", "pos", "rot", "ts"), &QNHostSession::update_entity_state);
 	ClassDB::bind_method(D_METHOD("on_peer_disconnected", "peer_id"), &QNHostSession::on_peer_disconnected);
 	
-	ClassDB::bind_method(D_METHOD("raycast_past", "origin", "direction", "timestamp"), &QNHostSession::raycast_past);
+	ClassDB::bind_method(D_METHOD("query_raycast", "origin", "direction", "max_dist", "timestamp"), &QNHostSession::query_raycast, DEFVAL(-1));
+	ClassDB::bind_method(D_METHOD("query_box", "center", "extents", "timestamp"), &QNHostSession::query_box, DEFVAL(-1));
+	ClassDB::bind_method(D_METHOD("query_sphere", "center", "radius", "timestamp"), &QNHostSession::query_sphere, DEFVAL(-1));
 
 	ClassDB::bind_method(D_METHOD("on_client_snapshot", "peer_id", "data", "now"), &QNHostSession::on_client_snapshot);
 	ClassDB::bind_method(D_METHOD("tick_broadcast", "now"), &QNHostSession::tick_broadcast);
@@ -110,11 +112,12 @@ void QNHostSession::change_entity_profile(int entity_id, Ref<QNEntityProfile> ne
 	}
 }
 
-void QNHostSession::update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot) {
+void QNHostSession::update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot, int ts) {
 	if (_registry.has(entity_id)) {
 		Dictionary st = _registry[entity_id];
 		st["pos"] = pos;
 		st["rot"] = rot;
+		st["ts"] = ts;
 		_registry[entity_id] = st;
 		_grid->update_entity(entity_id, pos);
 	}
@@ -207,6 +210,16 @@ void QNHostSession::tick_broadcast(int now) {
 			ws["rot"] = st["rot"];
 			ws["custom_id"] = 0;
 			ws["ts"] = st["ts"];
+			
+			Ref<QNEntityProfile> profile = st.get("profile", Variant());
+			if (profile.is_valid()) {
+				ws["hitbox_type"] = profile->get_hitbox_type();
+				ws["hitbox_extents"] = profile->get_hitbox_extents();
+			} else {
+				ws["hitbox_type"] = 0; // Sphere
+				ws["hitbox_extents"] = Vector3(1.0, 1.0, 1.0);
+			}
+			
 			world_snapshot[id] = ws;
 		}
 	}
@@ -340,8 +353,16 @@ void QNHostSession::tick_broadcast(int now) {
 	_rewind_buffer->push_state(now, current_states);
 }
 
-Dictionary QNHostSession::raycast_past(const Vector3 &origin, const Vector3 &direction, int timestamp) const {
-	return _rewind_buffer->raycast_past(origin, direction, timestamp);
+Dictionary QNHostSession::query_raycast(const Vector3 &origin, const Vector3 &direction, double max_dist, int timestamp) const {
+	return _rewind_buffer->query_raycast(origin, direction, max_dist, timestamp);
+}
+
+Array QNHostSession::query_box(const Vector3 &center, const Vector3 &extents, int timestamp) const {
+	return _rewind_buffer->query_box(center, extents, timestamp);
+}
+
+Array QNHostSession::query_sphere(const Vector3 &center, double radius, int timestamp) const {
+	return _rewind_buffer->query_sphere(center, radius, timestamp);
 }
 
 Dictionary QNHostSession::get_registry() {

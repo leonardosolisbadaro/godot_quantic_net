@@ -8,6 +8,8 @@ QNEntityProfile::QNEntityProfile() {
 	tick_rate_hz = 20.0;
 	base_priority = 1.0;
 	spatial_culling_radius = 50.0;
+	hitbox_type = HITBOX_SPHERE;
+	hitbox_extents = Vector3(1.0, 1.0, 1.0);
 }
 
 QNEntityProfile::~QNEntityProfile() {
@@ -25,9 +27,21 @@ void QNEntityProfile::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_base_priority"), &QNEntityProfile::get_base_priority);
 	ClassDB::bind_method(D_METHOD("get_spatial_culling_radius"), &QNEntityProfile::get_spatial_culling_radius);
 	
+	ClassDB::bind_method(D_METHOD("set_hitbox_type", "type"), &QNEntityProfile::set_hitbox_type);
+	ClassDB::bind_method(D_METHOD("get_hitbox_type"), &QNEntityProfile::get_hitbox_type);
+	
+	ClassDB::bind_method(D_METHOD("set_hitbox_extents", "extents"), &QNEntityProfile::set_hitbox_extents);
+	ClassDB::bind_method(D_METHOD("get_hitbox_extents"), &QNEntityProfile::get_hitbox_extents);
+	
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "tick_rate_hz"), "", "get_tick_rate_hz");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "base_priority"), "", "get_base_priority");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "spatial_culling_radius"), "", "get_spatial_culling_radius");
+	
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "hitbox_type"), "set_hitbox_type", "get_hitbox_type");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "hitbox_extents"), "set_hitbox_extents", "get_hitbox_extents");
+	
+	BIND_ENUM_CONSTANT(HITBOX_SPHERE);
+	BIND_ENUM_CONSTANT(HITBOX_AABB);
 }
 
 void QNEntityProfile::init(double p_tick_rate, double p_base_priority, double p_culling_radius) {

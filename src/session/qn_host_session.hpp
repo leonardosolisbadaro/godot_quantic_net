@@ -48,14 +48,16 @@ public:
 	void on_peer_authenticated(int peer_id, Ref<QNEntityProfile> profile = nullptr);
 	void unregister_entity(int entity_id);
 	void change_entity_profile(int entity_id, Ref<QNEntityProfile> new_profile);
-	void update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot);
+	void update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot, int ts);
 	
 	void on_peer_disconnected(int peer_id);
 	
 	void on_client_snapshot(int peer_id, const PackedByteArray &data, int now);
 	void tick_broadcast(int now);
 	
-	Dictionary raycast_past(const Vector3 &origin, const Vector3 &direction, int timestamp) const;
+	Dictionary query_raycast(const Vector3 &origin, const Vector3 &direction, double max_dist, int timestamp) const;
+	Array query_box(const Vector3 &center, const Vector3 &extents, int timestamp) const;
+	Array query_sphere(const Vector3 &center, double radius, int timestamp) const;
 
 	Dictionary get_registry();
 };

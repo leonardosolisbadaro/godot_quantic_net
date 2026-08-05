@@ -282,6 +282,26 @@ func submit_state(pos: Vector3, rot: Vector3, custom: int, dt: float) -> void:
 	if not _is_server and _client_session:
 		_client_session.submit_state(pos, rot, custom, dt, Time.get_ticks_msec())
 
+func get_remote_state(entity_id: int) -> Dictionary:
+	if not _is_server and _client_session:
+		return _client_session.remote_state(entity_id, Time.get_ticks_msec())
+	return {}
+
+func query_raycast(origin: Vector3, direction: Vector3, max_dist: float = -1.0, timestamp: int = -1) -> Dictionary:
+	if _is_server and _host_session:
+		return _host_session.query_raycast(origin, direction, max_dist, timestamp)
+	return {}
+
+func query_box(center: Vector3, extents: Vector3, timestamp: int = -1) -> Array:
+	if _is_server and _host_session:
+		return _host_session.query_box(center, extents, timestamp)
+	return []
+
+func query_sphere(center: Vector3, radius: float, timestamp: int = -1) -> Array:
+	if _is_server and _host_session:
+		return _host_session.query_sphere(center, radius, timestamp)
+	return []
+
 func remote_state(owner_id: int) -> Dictionary:
 	if not _is_server and _client_session:
 		return _client_session.remote_state(owner_id, Time.get_ticks_msec())
@@ -324,9 +344,9 @@ func unregister_entity(entity_id: int) -> void:
 				if peer != entity_id:
 					_hook.send_custom(peer, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
 
-func update_entity_state(entity_id: int, pos: Vector3, rot: Vector3) -> void:
+func update_entity_state(entity_id: int, pos: Vector3, rot: Vector3, ts: int) -> void:
 	if _is_server and _host_session:
-		_host_session.update_entity_state(entity_id, pos, rot)
+		_host_session.update_entity_state(entity_id, pos, rot, ts)
 
 func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 	if _is_server and _host_session:

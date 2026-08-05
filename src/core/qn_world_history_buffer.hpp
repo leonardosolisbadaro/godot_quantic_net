@@ -21,8 +21,11 @@ private:
 	// Max length of history in ticks. Assuming 60Hz, 90 ticks = 1.5 seconds.
 	int _max_history_ticks;
 
-	// Math logic for raycast vs sphere
+	// Math logic for raycast vs geometries
 	bool _ray_intersects_sphere(const Vector3 &origin, const Vector3 &dir, const Vector3 &center, double radius) const;
+	bool _ray_intersects_aabb(const Vector3 &origin, const Vector3 &dir, const Vector3 &center, const Vector3 &extents) const;
+	
+	Dictionary _get_interpolated_state(int timestamp) const;
 
 protected:
 	static void _bind_methods();
@@ -37,9 +40,10 @@ public:
 	void push_state(int timestamp, const Dictionary &world_snapshot);
 	void clear();
 	
-	// Performs a raycast at the exact timestamp.
-	// Returns a Dictionary: empty if no hit, or {"entity_id": int, "hit_point": Vector3} if hit.
-	Dictionary raycast_past(const Vector3 &origin, const Vector3 &direction, int timestamp) const;
+	// Agnostic Time-Travel Queries
+	Dictionary query_raycast(const Vector3 &origin, const Vector3 &direction, double max_dist, int timestamp) const;
+	Array query_box(const Vector3 &center, const Vector3 &extents, int timestamp) const;
+	Array query_sphere(const Vector3 &center, double radius, int timestamp) const;
 };
 
 } // namespace godot
