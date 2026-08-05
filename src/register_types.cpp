@@ -17,6 +17,8 @@
 #include "core/qn_clock_sync.hpp"
 #include "core/qn_entity_profile.hpp"
 #include "core/qn_priority_accumulator.hpp"
+#include "core/qn_spatial_grid.hpp"
+#include "core/qn_world_history_buffer.hpp"
 #include "session/qn_loss_tracker.hpp"
 #include "session/qn_host_session.hpp"
 #include "session/qn_client_session.hpp"
@@ -41,6 +43,8 @@ void initialize_quantic_net_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(QNClockSync);
 	GDREGISTER_CLASS(QNEntityProfile);
 	GDREGISTER_CLASS(QNPriorityAccumulator);
+	GDREGISTER_CLASS(QNSpatialGrid);
+	GDREGISTER_CLASS(QNWorldHistoryBuffer);
 	GDREGISTER_CLASS(QNLossTracker);
 	GDREGISTER_CLASS(QNHostSession);
 	GDREGISTER_CLASS(QNClientSession);

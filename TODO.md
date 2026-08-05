@@ -67,10 +67,6 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 - [x] Fase 4: Regras de Negócio e Ticking (Session Host/Client, Loss Tracker).
 - [x] Fase 5: Refatoração da API GDScript Pública (Plug and Play via Autoload).
 
-### PR 25: Monitoramento e Logs (Sessão D) - OPICIONAL / ADIADO
-
-- [ ] Criar "Log de Eventos Rolante" (tecla `L`): `RichTextLabel` no canto inferior esquerdo para exibir os últimos 10 eventos. (Nota: Adiado para a Fase de Separação Visual).
-
 ---
 
 ## 🚀 FASE 10: A FRONTEIRA MMO E FÍSICA
@@ -81,18 +77,18 @@ Esta etapa abraçará mecânicas massivas. A arquitetura de base não será toca
 
 O despache não pode propagar todo o universo. Filtragem espacial inteligente.
 
-- [ ] TDD: Criar a classe `QNSpatialGrid` em `src/domain/`.
-- [ ] Especificar inserção, atualização e remoção veloz de IDs em células de Grid (Cell Size parametrizável).
-- [ ] Especificar busca de vizinhos radial (`get_entities_in_radius`).
-- [ ] Integrar no ciclo de broadcast do `QNHostSession`, poupando banda limitando *snapshots* apenas a entidades que colidem visualmente (culling).
+- [x] TDD: Criar a classe `QNSpatialGrid` em `src/domain/`.
+- [x] Especificar inserção, atualização e remoção veloz de IDs em células de Grid (Cell Size parametrizável).
+- [x] Especificar busca de vizinhos radial (`get_entities_in_radius`).
+- [x] Integrar no ciclo de broadcast do `QNHostSession`, poupando banda limitando *snapshots* apenas a entidades que colidem visualmente (culling).
 
 ### PR 26 — Lag Compensation (Server-Side Rewind)
 
 Implementação de reconciliação de tempo para hit-registration preciso em jogos competitivos.
 
-- [ ] TDD: Criar `QNWorldHistoryBuffer` armazenando AABB / Bounds das entidades por `render_ts`.
-- [ ] Especificar lógica de captura temporal cíclica circular retrocedendo no máximo até 1,5s no passado do servidor.
-- [ ] Integrar no Autoload a função `raycast_past(origin, direction, timestamp)`, expondo-a para que jogos de FPS construam seu HitScan determinístico compensando pings de até 250ms perfeitamente.
+- [x] TDD: Criar `QNWorldHistoryBuffer` armazenando AABB / Bounds das entidades por `render_ts`.
+- [x] Especificar lógica de captura temporal cíclica circular retrocedendo no máximo até 1,5s no passado do servidor.
+- [x] Integrar no Autoload a função `raycast_past(origin, direction, timestamp)`, expondo-a para que jogos de FPS construam seu HitScan determinístico compensando pings de até 250ms perfeitamente.
 
 ### PR 27 — Sincronização de Física Rígida (Networked Physics)
 

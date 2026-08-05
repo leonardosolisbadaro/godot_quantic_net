@@ -10,6 +10,8 @@
 
 #include "core/qn_priority_accumulator.hpp"
 #include "core/qn_entity_profile.hpp"
+#include "core/qn_spatial_grid.hpp"
+#include "core/qn_world_history_buffer.hpp"
 
 namespace godot {
 
@@ -24,6 +26,8 @@ private:
 	int _server_seq;
 	std::deque<Dictionary> _world_history;
 	Ref<QNPriorityAccumulator> _accumulator;
+	Ref<QNSpatialGrid> _grid;
+	Ref<QNWorldHistoryBuffer> _rewind_buffer;
 	
 	Dictionary _stats;
 	Ref<RefCounted> validator;
@@ -44,11 +48,15 @@ public:
 	void on_peer_authenticated(int peer_id, Ref<QNEntityProfile> profile = nullptr);
 	void unregister_entity(int entity_id);
 	void change_entity_profile(int entity_id, Ref<QNEntityProfile> new_profile);
+	void update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot);
+	
 	void on_peer_disconnected(int peer_id);
 	
 	void on_client_snapshot(int peer_id, const PackedByteArray &data, int now);
 	void tick_broadcast(int now);
 	
+	Dictionary raycast_past(const Vector3 &origin, const Vector3 &direction, int timestamp) const;
+
 	Dictionary get_registry();
 };
 

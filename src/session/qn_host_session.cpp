@@ -15,6 +15,8 @@ using namespace godot;
 QNHostSession::QNHostSession() {
 	_server_seq = 0;
 	_accumulator.instantiate();
+	_grid.instantiate();
+	_rewind_buffer.instantiate();
 	_stats["entities_total"] = 0;
 	_stats["entities_sent_this_tick"] = 0;
 	_stats["bytes_saved_by_hybrid_ticking"] = 0;
@@ -34,7 +36,11 @@ void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("on_peer_authenticated", "peer_id", "profile"), &QNHostSession::on_peer_authenticated, DEFVAL(nullptr));
 	ClassDB::bind_method(D_METHOD("unregister_entity", "entity_id"), &QNHostSession::unregister_entity);
 	ClassDB::bind_method(D_METHOD("change_entity_profile", "entity_id", "new_profile"), &QNHostSession::change_entity_profile);
+	ClassDB::bind_method(D_METHOD("update_entity_state", "entity_id", "pos", "rot"), &QNHostSession::update_entity_state);
 	ClassDB::bind_method(D_METHOD("on_peer_disconnected", "peer_id"), &QNHostSession::on_peer_disconnected);
+	
+	ClassDB::bind_method(D_METHOD("raycast_past", "origin", "direction", "timestamp"), &QNHostSession::raycast_past);
+
 	ClassDB::bind_method(D_METHOD("on_client_snapshot", "peer_id", "data", "now"), &QNHostSession::on_client_snapshot);
 	ClassDB::bind_method(D_METHOD("tick_broadcast", "now"), &QNHostSession::tick_broadcast);
 	ClassDB::bind_method(D_METHOD("get_registry"), &QNHostSession::get_registry);
@@ -92,6 +98,7 @@ void QNHostSession::unregister_entity(int entity_id) {
 		_registry.erase(entity_id);
 	}
 	_accumulator->cleanup_entity(entity_id);
+	_grid->remove_entity(entity_id);
 }
 
 void QNHostSession::change_entity_profile(int entity_id, Ref<QNEntityProfile> new_profile) {
@@ -103,11 +110,22 @@ void QNHostSession::change_entity_profile(int entity_id, Ref<QNEntityProfile> ne
 	}
 }
 
+void QNHostSession::update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot) {
+	if (_registry.has(entity_id)) {
+		Dictionary st = _registry[entity_id];
+		st["pos"] = pos;
+		st["rot"] = rot;
+		_registry[entity_id] = st;
+		_grid->update_entity(entity_id, pos);
+	}
+}
+
 void QNHostSession::on_peer_disconnected(int peer_id) {
 	if (_registry.has(peer_id)) {
 		_registry.erase(peer_id);
 	}
 	_accumulator->_cleanup_peer(peer_id);
+	_grid->remove_entity(peer_id);
 	if (validator.is_valid() && validator->has_method("peer_left")) {
 		validator->call("peer_left", peer_id);
 	}
@@ -152,6 +170,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 			peer_st["ts"] = client_ts;
 			peer_st["has_state"] = true;
 			_registry[peer_id] = peer_st;
+			_grid->update_entity(peer_id, peer_st["pos"]);
 		} else if (action == "clamp") {
 			peer_st["pos"] = result["pos"];
 			peer_st["rot"] = result["rot"];
@@ -159,6 +178,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 			peer_st["ts"] = client_ts;
 			peer_st["has_state"] = true;
 			_registry[peer_id] = peer_st;
+			_grid->update_entity(peer_id, peer_st["pos"]);
 			
 			PackedByteArray snap = QNSerializer::encode_snapback(seq, result["pos"], result["rot"], client_ts, SNAPBACK_REASON_CLAMP);
 			emit_signal("snapback_requested", peer_id, snap);
@@ -240,15 +260,26 @@ void QNHostSession::tick_broadcast(int now) {
 			}
 		}
 		
+		Dictionary peer_current_states;
 		Dictionary profiles;
-		Array cs_keys = current_states.keys();
-		for (int j = 0; j < cs_keys.size(); j++) {
-			int cid = cs_keys[j];
-			Dictionary cid_st = _registry[cid];
-			profiles[cid] = cid_st.get("profile", Variant());
+		
+		// Use spatial grid to cull entities beyond 250m
+		PackedInt32Array nearby = _grid->get_entities_in_radius(st["pos"], 250.0);
+		for (int j = 0; j < nearby.size(); j++) {
+			int cid = nearby[j];
+			if (current_states.has(cid)) {
+				peer_current_states[cid] = current_states[cid];
+				profiles[cid] = ((Dictionary)_registry[cid]).get("profile", Variant());
+			}
 		}
 		
-		Dictionary selected_states = _accumulator->select_entities(id, current_states, profiles, st["pos"], 1200, 19);
+		// Ensure peer itself is included
+		if (current_states.has(id)) {
+			peer_current_states[id] = current_states[id];
+			profiles[id] = ((Dictionary)_registry[id]).get("profile", Variant());
+		}
+		
+		Dictionary selected_states = _accumulator->select_entities(id, peer_current_states, profiles, st["pos"], 1200, 19);
 		
 		Array sel_keys = selected_states.keys();
 		for (int j = 0; j < sel_keys.size(); j++) {
@@ -305,6 +336,12 @@ void QNHostSession::tick_broadcast(int now) {
 		
 		emit_signal("packet_ready", id, buf->get_buffer());
 	}
+	
+	_rewind_buffer->push_state(now, current_states);
+}
+
+Dictionary QNHostSession::raycast_past(const Vector3 &origin, const Vector3 &direction, int timestamp) const {
+	return _rewind_buffer->raycast_past(origin, direction, timestamp);
 }
 
 Dictionary QNHostSession::get_registry() {

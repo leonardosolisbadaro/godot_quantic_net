@@ -10,7 +10,7 @@
 ## @updated 2026-08-04
 ##
 ## @since 0.2.0
-## @lastModifiedIn 0.4.0
+## @lastModifiedIn 0.5.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
@@ -146,7 +146,6 @@ func _ready() -> void:
 	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Recebe comandos manuais do teclado para alterar configurações em tempo real
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_N:
 			_netem_active = not _netem_active
@@ -164,25 +163,36 @@ func _unhandled_input(event: InputEvent) -> void:
 				Engine.max_fps = 0
 				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 			print("[DEMO] FPS Limitado: ", "SIM (60)" if Engine.max_fps == 60 else "NAO (Unlimited)")
-		elif event.keycode >= KEY_1 and event.keycode <= KEY_5:
-			# Solicita a mudança do perfil (ex: forçar atualização a 60Hz em combate)
-			_current_profile_idx = event.keycode - KEY_1
-			if QuanticNet.is_server():
+			
+		if not QuanticNet.is_server():
+			# [CLIENT ADMIN BINDS (RPC TO SERVER)]
+			if event.keycode == KEY_SPACE:
+				_request_spawn_props.rpc_id(1, 100, true) # 'SPACE' reseta para 100
+			elif event.keycode == KEY_0:
+				_request_spawn_props.rpc_id(1, 0, true) # '0' zera todos
+			elif event.keycode == KEY_EQUAL or event.keycode == KEY_PLUS:
+				_request_spawn_props.rpc_id(1, 10, false) # '+' adiciona 10
+			elif event.keycode == KEY_MINUS:
+				_request_remove_props.rpc_id(1, 10) # '-' remove 10
+			elif event.keycode == KEY_ASTERISK or event.keycode == KEY_8:
+				_request_scale_props.rpc_id(1, 2.0) # '*' multiplica por 2
+			elif event.keycode == KEY_SLASH:
+				_request_scale_props.rpc_id(1, 0.5) # '/' divide por 2
+
+			# [CLIENT LOCAL BINDS]
+			if event.keycode == KEY_TAB:
+				_current_profile_idx = (_current_profile_idx + 1) % _profiles.size()
 				_apply_profile.rpc_id(1, QuanticNet.get_unique_id(), _current_profile_idx)
-			else:
-				_apply_profile.rpc_id(1, QuanticNet.get_unique_id(), _current_profile_idx)
-		elif event.keycode == KEY_SPACE:
-			_request_spawn_props.rpc_id(1, 100, true) # 'SPACE' reseta para 100
-		elif event.keycode == KEY_0:
-			_request_spawn_props.rpc_id(1, 0, true) # '0' zera todos
-		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
-			_request_spawn_props.rpc_id(1, 10, false) # '+' adiciona 10
-		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
-			_request_remove_props.rpc_id(1, 10) # '-' remove 10
-		elif event.keycode == KEY_ASTERISK or event.keycode == KEY_KP_MULTIPLY:
-			_request_scale_props.rpc_id(1, 2.0) # '*' multiplica por 2
-		elif event.keycode == KEY_SLASH or event.keycode == KEY_KP_DIVIDE:
-			_request_scale_props.rpc_id(1, 0.5) # '/' divide por 2
+					
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if not QuanticNet.is_server():
+			var my_id = QuanticNet.get_unique_id()
+			if cubes.has(my_id):
+				var origin = cubes[my_id].position
+				var dir = Vector3(0, 0, -1) # Sempre atira para frente no eixo Z negativo
+				var ts = QuanticNet.get_server_time()
+				print("[CLIENT] Disparou arma! Origem: ", origin, " ts: ", ts)
+				_client_shoot.rpc_id(1, origin, dir, ts)
 
 # Os @rpc abaixo despacham comandos para o Servidor modificar as entidades registradas
 @rpc("any_peer", "call_local")
@@ -225,7 +235,8 @@ func _request_spawn_props(count: int, clear_previous: bool) -> void:
 		
 		# Inicia exatamente na posição onde o physics_process vai atualizá-lo, 
 		# evitando que ele deslize artificialmente (drifting) ao nascer.
-		QuanticNet.get_registry()[prop_id].pos = _calc_prop_pos(prop_id - 1000, auto_time)
+		var initial_pos = _calc_prop_pos(prop_id - 1000, auto_time)
+		QuanticNet.update_entity_state(prop_id, initial_pos, Vector3.ZERO)
 		_on_peer_joined(prop_id)
 		
 	print("[SERVER] Spawnei %d props! Total atual de props: %d" % [count, _next_prop_id - 1000])
@@ -252,12 +263,38 @@ func _request_remove_props(count: int) -> void:
 @rpc("any_peer", "call_local")
 func _request_scale_props(factor: float) -> void:
 	if not QuanticNet.is_server(): return
-	var current = maxi(0, _next_prop_id - 1000)
-	var target = int(current * factor)
-	if target > current:
-		_request_spawn_props(target - current, false)
-	elif target < current:
-		_request_remove_props(current - target)
+	var p_id = multiplayer.get_remote_sender_id()
+	if p_id != 1: return
+	
+	var k = cubes.keys()
+	if factor > 1.0:
+		var extra = k.size() * (factor - 1.0)
+		_request_spawn_props(extra, false)
+	elif factor < 1.0:
+		var remove_cnt = k.size() * (1.0 - factor)
+		_request_remove_props(remove_cnt)
+
+@rpc("any_peer", "call_remote")
+func _client_shoot(origin: Vector3, direction: Vector3, timestamp: int) -> void:
+	if not QuanticNet.is_server(): return
+	var p_id = multiplayer.get_remote_sender_id()
+	
+	# O servidor invoca o raycast_past passando a posicao exata do ping do cliente
+	var hit = QuanticNet.raycast_past(origin, direction, timestamp)
+	if hit.has("entity_id"):
+		var entity_id = hit["entity_id"]
+		print("[SERVER] Peer %d acertou a entidade %d no passado (ts: %d)! Pos Atual: %s | Pos do Acerto: %s" % [p_id, entity_id, timestamp, str(cubes[entity_id].position), str(hit["hit_point"])])
+		_show_hit_marker.rpc(entity_id)
+
+@rpc("call_local")
+func _show_hit_marker(entity_id: int) -> void:
+	if cubes.has(entity_id):
+		# Pisca o cubo vermelho ao acertar
+		var mesh = cubes[entity_id] as MeshInstance3D
+		var material = StandardMaterial3D.new()
+		material.albedo_color = Color.RED
+		mesh.material_override = material
+		get_tree().create_timer(0.2).timeout.connect(func(): if is_instance_valid(mesh): mesh.material_override = null)
 
 func _setup_server_props() -> void:
 	# O servidor automaticamente spawna 5 props fictícios na inicialização.

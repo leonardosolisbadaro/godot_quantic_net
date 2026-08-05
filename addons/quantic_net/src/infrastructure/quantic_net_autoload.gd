@@ -258,6 +258,16 @@ func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
 	body.append_array(pkt)
 	_hook.send_custom(peer_id, body, CH_STATE, TRANSFER_UNRELIABLE)
 
+## Retorna o milissegundo atual da engine (Time.get_ticks_msec())
+func get_local_time() -> int:
+	return Time.get_ticks_msec()
+
+## Retorna a estimativa do tempo atual do Servidor (compensando RTT e Offset)
+func get_server_time() -> int:
+	if _client_session == null:
+		return get_local_time()
+	return _client_session.server_time(get_local_time())
+
 func _on_host_packet_ready(peer_id: int, data: PackedByteArray) -> void:
 	if not _hook.get_base().get_peers().has(peer_id):
 		return
@@ -310,9 +320,13 @@ func unregister_entity(entity_id: int) -> void:
 			id_bytes.encode_u32(0, entity_id)
 			pkt.append_array(id_bytes)
 			
-			for peer_id in _hook.get_base().get_peers():
-				if peer_id != 1:
-					_hook.send_custom(peer_id, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+			for peer in _hook.get_base().get_peers():
+				if peer != entity_id:
+					_hook.send_custom(peer, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+
+func update_entity_state(entity_id: int, pos: Vector3, rot: Vector3) -> void:
+	if _is_server and _host_session:
+		_host_session.update_entity_state(entity_id, pos, rot)
 
 func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 	if _is_server and _host_session:
