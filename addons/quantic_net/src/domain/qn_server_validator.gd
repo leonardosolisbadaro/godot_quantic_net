@@ -1,4 +1,4 @@
-﻿## @file qn_server_validator.gd
+## @file qn_server_validator.gd
 ## @path res://addons/quantic_net/src/domain/qn_server_validator.gd
 ##
 ## @description
@@ -18,10 +18,16 @@
 
 signal peer_rejected(id: int, reason: String, strikes: int)
 
-const MAX_SPEED := 6.0
-const HARD_CAP := 20.0
-const WORLD_BOUNDS := 60.0
-const MAX_STRIKES := 5
+var max_speed := 6.0
+var hard_cap := 20.0
+var world_bounds := 60.0
+var max_strikes := 5
+
+func configure(config: Dictionary) -> void:
+	max_speed = config.get("max_speed", 6.0)
+	hard_cap = config.get("hard_cap", 20.0)
+	world_bounds = config.get("world_bounds", 60.0)
+	max_strikes = config.get("max_strikes", 5)
 
 class PeerState:
 	var pos: Vector3
@@ -36,7 +42,7 @@ func peer_left(id: int) -> void:
 	peers.erase(id)
 
 func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
-	if absf(pos.x) > WORLD_BOUNDS or absf(pos.z) > WORLD_BOUNDS or pos.y < -2.0 or pos.y > 50.0:
+	if absf(pos.x) > world_bounds or absf(pos.z) > world_bounds or pos.y < -2.0 or pos.y > 50.0:
 		return _reject(id, peers.get(id), "fora do mundo")
 		
 	if not peers.has(id):
@@ -56,16 +62,16 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 	var effective_dt: float = maxf(dt, 0.05)
 	var speed: float = dist / effective_dt
 	
-	if speed <= MAX_SPEED:
+	if speed <= max_speed:
 		st.pos = pos
 		st.rot = rot
 		st.last_ts = now
 		st.strikes = maxi(0, st.strikes - 1)
 		return {"action": "accept", "pos": pos, "rot": rot}
 		
-	if speed <= HARD_CAP:
+	if speed <= hard_cap:
 		var dir: Vector3 = pos - st.pos
-		var clamped: Vector3 = st.pos + dir.normalized() * minf(dist, MAX_SPEED * dt)
+		var clamped: Vector3 = st.pos + dir.normalized() * minf(dist, max_speed * dt)
 		clamped.y = pos.y
 		st.pos = clamped
 		st.rot = rot
@@ -83,4 +89,4 @@ func _reject(id: int, st: PeerState, reason: String) -> Dictionary:
 	return {"action": "reject", "pos": Vector3.ZERO, "rot": Vector3.ZERO, "strikes": 0}
 
 func should_kick(id: int) -> bool:
-	return peers.has(id) and peers[id].strikes >= MAX_STRIKES
+	return peers.has(id) and peers[id].strikes >= max_strikes

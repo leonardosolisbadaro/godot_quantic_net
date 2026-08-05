@@ -82,7 +82,7 @@ func disconnect_net(is_exiting: bool = false) -> void:
 	_secret = ""
 	_set_state(ConnectionState.DISCONNECTED)
 
-func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32) -> int:
+func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32, config: Dictionary = {}) -> Error:
 	disconnect_net()
 	_is_server = true
 	_secret = secret
@@ -100,17 +100,19 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 	_hook.get_base().server_relay = true
 	
 	_host_session = QNHostSession.new()
-	_host_session.set_validator(preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new())
+	var validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
+	validator.configure(config)
+	_host_session.set_validator(validator)
 	_host_session.snapback_requested.connect(_on_host_snapback_requested)
 	_host_session.packet_ready.connect(_on_host_packet_ready)
 	_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
 		print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
-		if s >= 5:
+		if s >= config.get("max_strikes", 5):
 			_hook.get_base().disconnect_peer(id)
 	)
 		
 	_hook.custom_packet.connect(_on_custom_packet)
-	_hook.get_base().auth_timeout = 3.0
+	_hook.get_base().auth_timeout = config.get("auth_timeout", 3.0)
 	_hook.get_base().allow_object_decoding = false
 	_hook.get_base().auth_callback = Callable(self, "_on_auth_callback")
 	_hook.peer_connected.connect(func(id: int) -> void:
@@ -135,7 +137,7 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 	_set_state(ConnectionState.CONNECTED)
 	return OK
 
-func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
+func join(ip: String, port: int, secret: String, netem: bool = false, config: Dictionary = {}) -> int:
 	disconnect_net()
 	_is_server = false
 	_secret = secret
@@ -150,10 +152,16 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	_wire = QNWirePeer.new()
 	_wire.initialize(_enet, false)
 	if netem:
-		_wire.set_netem_config(true, 0.1, 150, 50, 0.0)
+		var loss = config.get("netem_loss", 10.0)
+		var lat = config.get("netem_latency", 150)
+		var jit = config.get("netem_jitter", 50)
+		var dup = config.get("netem_dup", 0.0)
+		_wire.set_netem_config(true, loss / 100.0 if loss > 1.0 else loss, lat, jit, dup)
 		
 	_hook = QNNetHook.new()
 	_hook.get_base().multiplayer_peer = _wire
+	_hook.get_base().auth_timeout = config.get("auth_timeout", 3.0)
+	_hook.get_base().allow_object_decoding = false
 	
 	_client_session = QNClientSession.new()
 	_client_session.init(Callable(self, "_on_client_submit_packet"))
@@ -254,6 +262,8 @@ func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -
 						_telemetry_map[my_id].push_loss(_client_session.loss_of(SERVER_PEER_ID))
 
 func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
+	if not _hook.get_base().get_peers().has(peer_id):
+		return
 	var body := PackedByteArray([QNSerializer.TYPE_SNAPBACK])
 	body.append_array(pkt)
 	_hook.send_custom(peer_id, body, CH_STATE, TRANSFER_UNRELIABLE)
@@ -286,6 +296,10 @@ func get_remote_state(entity_id: int) -> Dictionary:
 	if not _is_server and _client_session:
 		return _client_session.remote_state(entity_id, Time.get_ticks_msec())
 	return {}
+
+func cleanup_entity(entity_id: int) -> void:
+	if not _is_server and _client_session:
+		_client_session.cleanup_entity(entity_id)
 
 func query_raycast(origin: Vector3, direction: Vector3, max_dist: float = -1.0, timestamp: int = -1) -> Dictionary:
 	if _is_server and _host_session:
@@ -359,13 +373,13 @@ func kick(peer_id: int) -> void:
 func toggle_netem() -> void:
 	if _wire:
 		_netem_on = not _netem_on
-		_wire.set_netem_config(_netem_on, 10.0, 100, 20, 0.0) # default values for toggle
+		_wire.set_netem_config(_netem_on, 0.1, 100, 20, 0.0) # default values for toggle (10% loss)
 		print("[QuanticNet] Netem: ", "ON" if _netem_on else "OFF")
 
 func set_netem_config(loss_pct: float, latency_ms: int, jitter_ms: int, dup_pct: float = 0.0) -> void:
 	if _wire:
 		_netem_on = true
-		_wire.set_netem_config(true, loss_pct, latency_ms, jitter_ms, dup_pct)
+		_wire.set_netem_config(true, loss_pct / 100.0 if loss_pct > 1.0 else loss_pct, latency_ms, jitter_ms, dup_pct)
 
 func _exit_tree() -> void:
 	disconnect_net(true)
