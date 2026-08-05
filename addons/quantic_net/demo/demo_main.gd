@@ -77,7 +77,8 @@ var _current_profile_idx = 0
 var _next_prop_id = 1000
 
 var _next_bullet_id = 20000
-var active_bullets: Dictionary = {}
+var active_bullets = {} # {id: {pos, dir, speed, life}}
+var _bullet_counts = {}
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
@@ -88,6 +89,9 @@ func _create_profile(hz: float, priority: float, cull: float) -> QNEntityProfile
 	var p = QNEntityProfile.new()
 	p.init(hz, priority, cull)
 	return p
+
+var local_fake_bullets = []
+var local_laser_lines = []
 
 func _ready() -> void:
 	# Define os perfis disponíveis para testes de rede em tempo real
@@ -199,11 +203,45 @@ func _unhandled_input(event: InputEvent) -> void:
 						# HITSCAN INSTANTÂNEO (Com Compensação de Lag)
 						var ts = QuanticNet.get_server_time() - 100
 						print("[CLIENT] Atirou Hitscan! ts: ", ts)
-						_client_shoot_hitscan.rpc_id(1, origin, dir, ts)
+						_client_shoot_hitscan.rpc_id(1, ts)
+						
+						# Feedback visual imediato do Hitscan no cliente
+						var laser = MeshInstance3D.new()
+						var cyl = CylinderMesh.new()
+						cyl.top_radius = 0.05
+						cyl.bottom_radius = 0.05
+						cyl.height = 50.0
+						var mat = StandardMaterial3D.new()
+						mat.albedo_color = Color.RED
+						mat.emission_enabled = true
+						mat.emission = Color.RED
+						mat.emission_energy_multiplier = 4.0
+						cyl.material = mat
+						laser.mesh = cyl
+						# O laser nasce na origem e vai pra frente
+						laser.position = origin + dir.normalized() * 25.0
+						laser.rotation.x = PI/2.0 # deita o cilindro no eixo Z
+						add_child(laser)
+						local_laser_lines.push_back({"mesh": laser, "life": 0.1})
+						
 					else:
 						# PROJÉTIL FÍSICO (No presente)
 						print("[CLIENT] Atirou Projétil!")
-						_client_shoot_projectile.rpc_id(1, origin, dir)
+						_client_shoot_projectile.rpc_id(1)
+						
+						# Feedback visual imediato do Projétil no cliente
+						var fake = MeshInstance3D.new()
+						var mesh = SphereMesh.new()
+						var mat = StandardMaterial3D.new()
+						mat.albedo_color = Color.YELLOW
+						mat.emission_enabled = true
+						mat.emission = Color.YELLOW
+						mat.emission_energy_multiplier = 2.0
+						mesh.material = mat
+						fake.mesh = mesh
+						fake.position = origin
+						add_child(fake)
+						local_fake_bullets.push_back({"mesh": fake, "pos": origin, "dir": dir.normalized(), "speed": 40.0, "life": 2.0})
 
 # Os @rpc abaixo despacham comandos para o Servidor modificar as entidades registradas
 @rpc("any_peer", "call_local")
@@ -285,11 +323,16 @@ func _request_scale_props(factor: float) -> void:
 		_request_remove_props(remove_cnt)
 
 @rpc("any_peer", "call_remote")
-func _client_shoot_hitscan(origin: Vector3, direction: Vector3, timestamp: int) -> void:
+func _client_shoot_hitscan(timestamp: int) -> void:
 	if not QuanticNet.is_server(): return
 	var p_id = multiplayer.get_remote_sender_id()
 	
-	# Consulta temporal agnóstica no passado! (AABB/Sphere)
+	var reg = QuanticNet.get_registry()
+	if not reg.has(p_id): return
+	var p_state = reg[p_id]
+	var origin = p_state.pos
+	var direction = -Basis.from_euler(p_state.rot).z.normalized() * 50.0
+	
 	var hit = QuanticNet.query_raycast(origin, direction, 50.0, timestamp)
 	if hit.has("entity_id"):
 		var entity_id = hit["entity_id"]
@@ -298,22 +341,30 @@ func _client_shoot_hitscan(origin: Vector3, direction: Vector3, timestamp: int) 
 			print("[SERVER] HITSCAN (Rewind): Acertou %d" % entity_id)
 
 @rpc("any_peer", "call_remote")
-func _client_shoot_projectile(origin: Vector3, direction: Vector3) -> void:
+func _client_shoot_projectile() -> void:
 	if not QuanticNet.is_server(): return
 	var p_id = multiplayer.get_remote_sender_id()
 	
-	var b_id = _next_bullet_id
-	_next_bullet_id += 1
+	var reg = QuanticNet.get_registry()
+	if not reg.has(p_id): return
+	var p_state = reg[p_id]
+	var origin = p_state.pos
+	var direction = -Basis.from_euler(p_state.rot).z.normalized()
+	
+	# IDs de bullets são atrelados ao dono para que o cliente o reconheça e oculte
+	if not _bullet_counts.has(p_id): _bullet_counts[p_id] = 0
+	var b_id = 20000 + (p_id * 1000) + (_bullet_counts[p_id] % 1000)
+	_bullet_counts[p_id] += 1
 	
 	QuanticNet.register_entity(b_id, false, true, _profiles[4])
 	
 	active_bullets[b_id] = {
 		"pos": origin,
-		"dir": direction.normalized(),
-		"speed": 40.0,
-		"life": 2.0
+		"dir": direction,
+		"speed": 40.0, 
+		"life": 2.0 
 	}
-	print("[SERVER] PROJÉTIL: Peer %d atirou! Bullet ID %d gerada." % [p_id, b_id])
+	print("[SERVER] PROJÉTIL: Peer %d atirou! Bullet ID %d gerada na Pos: %v" % [p_id, b_id, origin])
 
 @rpc("any_peer", "call_local")
 func _delete_bullet(b_id: int) -> void:
@@ -509,6 +560,12 @@ func _on_peer_joined(id: int) -> void:
 		cube.visible = false
 		
 	cube.name = "Cube_%d" % id
+	if id >= 20000:
+		var owner_id = (id - 20000) / 1000
+		if owner_id == QuanticNet.get_unique_id():
+			# Esconde a bala recebida do servidor se ela for MINHA (pois eu já renderizo o fake tracer local)
+			cube.visible = false
+			
 	add_child(cube)
 	cubes[id] = cube
 	
@@ -614,8 +671,32 @@ func _physics_process(delta: float) -> void:
 		return
 
 	# ======================================================================
-	# FLUXO DO CLIENTE (CLIENT-SIDE PREDICTION)
+	# FLUXO DO CLIENTE (CLIENT-SIDE PREDICTION & VISUAIS)
 	# ======================================================================
+	var dead_lasers = []
+	for i in range(local_laser_lines.size()):
+		var l = local_laser_lines[i]
+		l.life -= delta
+		if l.life <= 0:
+			l.mesh.queue_free()
+			dead_lasers.push_back(i)
+	dead_lasers.reverse()
+	for i in dead_lasers:
+		local_laser_lines.remove_at(i)
+		
+	var dead_fakes = []
+	for i in range(local_fake_bullets.size()):
+		var fb = local_fake_bullets[i]
+		fb.pos += fb.dir * fb.speed * delta
+		fb.mesh.position = fb.pos
+		fb.life -= delta
+		if fb.life <= 0:
+			fb.mesh.queue_free()
+			dead_fakes.push_back(i)
+	dead_fakes.reverse()
+	for i in dead_fakes:
+		local_fake_bullets.remove_at(i)
+
 	# O Cliente processa sua posição fisicamente **sem esperar confirmação** do servidor.
 	# Ele se move instantaneamente, mas comunica a intenção via submit_state.
 	var my_id := QuanticNet.get_unique_id()

@@ -5,6 +5,7 @@
 /addons/gut/
 /GodotEngine_extracted/
 /quantic_net/
+/godot-cpp/
 
 # C++ Build outputs
 *.a
