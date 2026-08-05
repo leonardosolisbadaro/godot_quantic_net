@@ -18,11 +18,11 @@ extends RefCounted
 
 var _window_size: int
 var _rtt_samples: Array[float] = []
-var _loss_samples: Array[float] = []
 
 var _rtt_min: float = INF
 var _rtt_max: float = -INF
-var _loss_min: float = INF
+
+var _current_loss: float = 0.0
 var _loss_max: float = -INF
 
 func _init(window: int = 128) -> void:
@@ -38,11 +38,8 @@ func push_rtt(ms: float) -> void:
 	if ms > _rtt_max: _rtt_max = ms
 
 func push_loss(pct: float) -> void:
-	_loss_samples.append(pct)
-	if _loss_samples.size() > _window_size:
-		_loss_samples.pop_front()
+	_current_loss = pct
 	
-	if pct < _loss_min: _loss_min = pct
 	if pct > _loss_max: _loss_max = pct
 
 func get_current_rtt() -> float:
@@ -64,19 +61,9 @@ func get_min_rtt() -> float:
 	return _rtt_min
 
 func get_current_loss() -> float:
-	if _loss_samples.is_empty(): return 0.0
-	return _loss_samples.back()
-
-func get_avg_loss() -> float:
-	if _loss_samples.is_empty(): return 0.0
-	var sum := 0.0
-	for v in _loss_samples: sum += v
-	return sum / float(_loss_samples.size())
+	return _current_loss
 
 func get_max_loss() -> float:
-	if _loss_samples.is_empty(): return 0.0
+	if _loss_max == -INF: return 0.0
 	return _loss_max
 
-func get_min_loss() -> float:
-	if _loss_samples.is_empty(): return 0.0
-	return _loss_min

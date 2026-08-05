@@ -549,7 +549,7 @@ func _process(_delta: float) -> void:
 			var max_rtt = t2.get_max_rtt() if t2.get_max_rtt() != -INF else 0.0
 			var max_loss = t2.get_max_loss() if t2.get_max_loss() != -INF else 0.0
 			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f | Max: %.0f]" % [curr_rtt, t2.get_avg_rtt(), min_rtt, max_rtt]
-			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Avg: %.1f%% | Max: %.1f%%]" % [curr_loss, t2.get_avg_loss(), max_loss]
+			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Max: %.1f%%]" % [curr_loss, max_loss]
 			_diag_lbl_offset.text = "Clock Offset: %.1f ms" % [_current_offset]
 		else:
 			_diag_lbl_rtt.text = "RTT (ms): N/A"
