@@ -36,7 +36,7 @@ void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("on_peer_authenticated", "peer_id", "profile"), &QNHostSession::on_peer_authenticated, DEFVAL(nullptr));
 	ClassDB::bind_method(D_METHOD("unregister_entity", "entity_id"), &QNHostSession::unregister_entity);
 	ClassDB::bind_method(D_METHOD("change_entity_profile", "entity_id", "new_profile"), &QNHostSession::change_entity_profile);
-	ClassDB::bind_method(D_METHOD("update_entity_state", "entity_id", "pos", "rot", "ts"), &QNHostSession::update_entity_state);
+	ClassDB::bind_method(D_METHOD("update_entity_state", "entity_id", "pos", "rot", "custom_id", "ts"), &QNHostSession::update_entity_state);
 	ClassDB::bind_method(D_METHOD("on_peer_disconnected", "peer_id"), &QNHostSession::on_peer_disconnected);
 	
 	ClassDB::bind_method(D_METHOD("query_raycast", "origin", "direction", "max_dist", "timestamp"), &QNHostSession::query_raycast, DEFVAL(-1));
@@ -112,11 +112,12 @@ void QNHostSession::change_entity_profile(int entity_id, Ref<QNEntityProfile> ne
 	}
 }
 
-void QNHostSession::update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot, int ts) {
+void QNHostSession::update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot, int custom_id, int ts) {
 	if (_registry.has(entity_id)) {
 		Dictionary st = _registry[entity_id];
 		st["pos"] = pos;
 		st["rot"] = rot;
+		st["custom_id"] = custom_id;
 		st["ts"] = ts;
 		_registry[entity_id] = st;
 		_grid->update_entity(entity_id, pos);
@@ -153,6 +154,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 		Vector3 rot = state.get("rot", Vector3());
 		int seq = state.get("seq", 0);
 		int client_ts = state.get("ts", 0);
+		int custom_id = state.get("custom_id", 0);
 		
 		int last_seq = peer_st["seq"];
 		int diff = seq - last_seq;
@@ -171,6 +173,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 			peer_st["rot"] = result["rot"];
 			peer_st["seq"] = seq;
 			peer_st["ts"] = client_ts;
+			peer_st["custom_id"] = custom_id;
 			peer_st["has_state"] = true;
 			_registry[peer_id] = peer_st;
 			_grid->update_entity(peer_id, peer_st["pos"]);
@@ -179,6 +182,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 			peer_st["rot"] = result["rot"];
 			peer_st["seq"] = seq;
 			peer_st["ts"] = client_ts;
+			peer_st["custom_id"] = custom_id;
 			peer_st["has_state"] = true;
 			_registry[peer_id] = peer_st;
 			_grid->update_entity(peer_id, peer_st["pos"]);
@@ -208,7 +212,7 @@ void QNHostSession::tick_broadcast(int now) {
 			ws["seq"] = st["seq"];
 			ws["pos"] = st["pos"];
 			ws["rot"] = st["rot"];
-			ws["custom_id"] = 0;
+			ws["custom_id"] = st.get("custom_id", 0);
 			ws["ts"] = st["ts"];
 			
 			Ref<QNEntityProfile> profile = st.get("profile", Variant());

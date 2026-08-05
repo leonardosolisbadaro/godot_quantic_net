@@ -48,7 +48,7 @@ public:
 	void on_peer_authenticated(int peer_id, Ref<QNEntityProfile> profile = nullptr);
 	void unregister_entity(int entity_id);
 	void change_entity_profile(int entity_id, Ref<QNEntityProfile> new_profile);
-	void update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot, int ts);
+	void update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot, int custom_id, int ts);
 	
 	void on_peer_disconnected(int peer_id);
 	

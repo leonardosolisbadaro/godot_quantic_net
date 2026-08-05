@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://demo12345678"]
 
-[ext_resource type="Script" path="res://addons/quantic_net/demo/demo_main.gd" id=1]
+[ext_resource type="Script" path="res://addons/quantic_net/demo/demo_main.gd" id="1_demo"]
 
 [node name="DemoMain" type="Node3D"]
-script = ExtResource(1)
+script = ExtResource("1_demo")

@@ -344,9 +344,9 @@ func unregister_entity(entity_id: int) -> void:
 				if peer != entity_id:
 					_hook.send_custom(peer, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
 
-func update_entity_state(entity_id: int, pos: Vector3, rot: Vector3, ts: int) -> void:
+func update_entity_state(entity_id: int, pos: Vector3, rot: Vector3, custom_id: int = 0, ts: int = -1) -> void:
 	if _is_server and _host_session:
-		_host_session.update_entity_state(entity_id, pos, rot, ts)
+		_host_session.update_entity_state(entity_id, pos, rot, custom_id, ts)
 
 func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 	if _is_server and _host_session:

@@ -2,390 +2,136 @@
 ## @path res://addons/quantic_net/demo/demo_main.gd
 ##
 ## @description
-## Cena demo bare metal do QuanticNet: 1 servidor, 2 clientes com cubos
-## sincronizados via host/join/submit_state/remote_state e sinais
-## publicos do autoload. Nao conhece internals do plugin.
+## Cena demo reconstruída do QuanticNet com ZERO RPCs.
+## A demonstração foca 100% no uso da API pública, transmitindo inputs 
+## via custom_id (bitmask) e exibindo hits pelo mesmo canal.
 ##
-## @created 2026-07-29
-## @updated 2026-08-04
+## @created 2026-08-05
+## @updated 2026-08-05
 ##
-## @since 0.2.0
+## @since 0.5.0
 ## @lastModifiedIn 0.5.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends Node3D
-## QuanticNet DEMO — Bare Metal
-## =============================================
-## Este script demonstra o uso MINIMO da API publica do autoload
-## `QuanticNet` em um projeto Godot 4.7.
-##
-## A Demo comprova que você não precisa herdar classes do QuanticNet
-## para o seu jogo funcionar. Tudo é orquestrado de forma "Plug-and-play"
-## através de chamadas ao Autoload (Single-Point of Entry).
-##
-## Como executar (terminal):
-##   Servidor: godot --headless --path . -- --server
-##   Cliente 1: godot --path . -- --client
-##   Cliente 2: godot --path . -- --client --netem
-##
-## O plugin cuida de DTLS, clock-sync, snapback e interpolacao nos bastidores;
-## este arquivo foca EXCLUSIVAMENTE em ler input, mover visualmente os cubos
-## e despachar o estado para o motor de rede.
 
 const PORT := 4242
 const SECRET := "demo-secret"
-const SPEED := 2.0
 
-# Dicionário que mapeia o ID do Peer para a malha visual 3D (o "Avatar")
-var cubes := {} # peer_id -> MeshInstance3D
-
-var _poll_index: int = 0
-
+# HUD
+var _status_lbl: Label
 var _diag_lbl_fps: Label
-var _diag_lbl_phys: Label
-var _diag_lbl_mem: Label
-var _diag_lbl_nodes: Label
-var _diag_lbl_orphan: Label
-
-var _diag_lbl_rtt: Label
 var _diag_lbl_loss: Label
-var _diag_lbl_offset: Label
-var _diag_lbl_peers: Label
+var _diag_lbl_rtt: Label
 
-var _conn_status_lbl: Label
-var _reconnect_btn: Button
-
-var auto_move := true
+# Estado Local
+var cubes := {}
+var active_bullets := {}
+var auto_move := false
 var auto_time := 0.0
-var _last_rx := {}
-var _netem_active := false
-var _can_send_state := false
-var _current_offset := 0.0
-var _last_ui_update_ms := 0
-var _fps_total_sum: int = 0
-var _fps_total_samples: int = 0
-var _fps_min := 9999
-var _fps_max := 0
 
-# Array contendo instâncias de perfis de rede (Tick Rates e Culling).
-# Isso demonstra o "Hybrid Ticking" do QuanticNet, onde cada entidade
-# pode ser atualizada em frequências distintas, priorizando a banda.
+# Server State
+var prev_inputs := {}
+var hit_timers := {}
+var _bullet_counter := 0
+
+# Visuals
+var mat_player_local: StandardMaterial3D
+var mat_player_remote: StandardMaterial3D
+var mat_prop: StandardMaterial3D
+var mat_bullet: StandardMaterial3D
+var mat_hit: StandardMaterial3D
+
 var _profiles = []
-
-var _current_profile_idx = 0
-var _next_prop_id = 1000
-
-var _next_bullet_id = 20000
-var active_bullets = {} # {id: {pos, dir, speed, life}}
-var _bullet_counts = {}
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		QuanticNet.disconnect_net(true)
-		get_tree().quit()
 
 func _create_profile(hz: float, priority: float, cull: float) -> QNEntityProfile:
 	var p = QNEntityProfile.new()
 	p.init(hz, priority, cull)
 	return p
 
-var local_fake_bullets = []
-var local_laser_lines = []
-
 func _ready() -> void:
-	# Define os perfis disponíveis para testes de rede em tempo real
-	_profiles.push_back(_create_profile(60.0, 1.0, 10.0)) # 0: Padrão (60Hz)
-	_profiles.push_back(_create_profile(20.0, 1.0, 10.0)) # 1: Low-end (20Hz)
-	_profiles.push_back(_create_profile(10.0, 1.0, 10.0)) # 2: Mobile (10Hz)
-	_profiles.push_back(_create_profile(5.0, 1.0, 10.0)) # 3: Prop (5Hz) - Economiza muita banda
-	_profiles.push_back(_create_profile(20.0, 1.0, 50.0)) # 4: Bullet (20Hz) - Projéteis de rede muita banda
-
-	Engine.max_fps = 60
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
+	# Parse args
+	var args = OS.get_cmdline_user_args()
+	var is_server = args.has("--server")
+	var is_client = args.has("--client")
+	var use_netem = args.has("--netem")
 	
-	# [1] CONECTAR SINAIS (Event-Driven)
-	# Conectamos as respostas do QuanticNet ANTES de chamar host/join.
-	# Isso garante que não perderemos os eventos iniciais de handshake.
+	if not is_server and not is_client:
+		print("Iniciando topologia automática: 1 Servidor, 2 Clientes...")
+		is_server = true
+		
+		# Inicia Cliente 1 (Normal)
+		OS.create_instance(["--client"])
+		
+		# Inicia Cliente 2 (Com Netem)
+		OS.create_instance(["--client", "--netem"])
+		
+		DisplayServer.window_set_title("QuanticNet - SERVER")
+		
+	if is_client:
+		DisplayServer.window_set_title("QuanticNet - CLIENT" + (" (NETEM)" if use_netem else ""))
+	
+	if not is_server and not is_client:
+		print("Iniciando topologia automática: 1 Servidor, 2 Clientes...")
+		is_server = true
+		
+		# Inicia Cliente 1 (Normal)
+		OS.create_instance(["--client"])
+		
+		# Inicia Cliente 2 (Com Netem)
+		OS.create_instance(["--client", "--netem"])
+		
+		DisplayServer.window_set_title("QuanticNet - SERVER")
+		
+	if is_client:
+		DisplayServer.window_set_title("QuanticNet - CLIENT" + (" (NETEM)" if use_netem else ""))
+		
+	_setup_materials()
+	_setup_ui()
+	_setup_scene()
+	
+	_profiles.push_back(_create_profile(60.0, 1.0, 10.0)) # 0: Padrão
+	_profiles.push_back(_create_profile(20.0, 0.5, 50.0)) # 1: Low-tick
+	_profiles.push_back(_create_profile(10.0, 0.1, 5.0)) # 2: Background
+	_profiles.push_back(_create_profile(10.0, 1.0, 20.0)) # 3: Props
+	_profiles.push_back(_create_profile(60.0, 2.0, 100.0)) # 4: Bullets
+	
+	QuanticNet.connection_state_changed.connect(_on_conn_state)
 	QuanticNet.peer_joined.connect(_on_peer_joined)
 	QuanticNet.peer_left.connect(_on_peer_left)
-	QuanticNet.state_received.connect(_on_state)
-	QuanticNet.snapback_received.connect(_on_snapback)
-		
-	# Decide o papel desta instância baseado nos argumentos do terminal
-	var args := OS.get_cmdline_user_args()
-	if "--server" in args:
-		# [2] INICIAR SERVIDOR
-		# Levanta o servidor autoritativo em Background (com criptografia DTLS automática).
-		QuanticNet.host(PORT, SECRET, "127.0.0.1", 8)
-		print("[DEMO] Servidor na porta %d" % PORT)
-		_setup_server_props()
+	
+	if is_server:
+		print("Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
+		QuanticNet.host(PORT, SECRET)
+		_server_spawn_props()
 	else:
-		_netem_active = "--netem" in args
+		print("Iniciando CLIENTE QuanticNet...")
+		QuanticNet.join("127.0.0.1", PORT, SECRET)
 		
-		# [PREVENÇÃO DE DESINCRONIZAÇÃO]
-		# Apenas autorizamos o disparo do "Client-Side Prediction" local
-		# APÓS o servidor confirmar a nossa identidade, e adicionamos um pequeno delay (0.1s)
-		# para dar tempo ao SceneMultiplayer da Godot organizar as árvores de RPC internas.
-		QuanticNet.peer_joined.connect(func(id: int):
-			if id == QuanticNet.get_unique_id():
-				get_tree().create_timer(0.1).timeout.connect(func(): _can_send_state = true)
-		)
-		QuanticNet.pong_received.connect(func(rtt: float, off: float) -> void:
-			_current_offset = off
-		)
-		QuanticNet.connection_state_changed.connect(_on_connection_state_changed)
-		QuanticNet.connection_failed_reason.connect(_on_connection_failed)
-		
-		# [3] INICIAR CLIENTE
-		# O parâmetro _netem_active injeta problemas crônicos na rede se for `true`,
-		# para testarmos se a nossa Extrapolação e Jitter Buffer funcionam!
-		QuanticNet.join("127.0.0.1", PORT, SECRET, _netem_active)
-		if _netem_active:
-			QuanticNet.set_netem_config(0.10, 150, 50) # 10% perda, 150ms atraso, 50ms jitter
-		print("[DEMO] Cliente conectando (netem=%s) [Pressione 'N' para alternar]" % ("true" if _netem_active else "false"))
-		_setup_client_scene()
-		
-	# [CLONAGEM DO MULTIPLAYER API]
-	# O QuanticNet blinda e encapsula a comunicação numa aba invisível da SceneTree (usando MultiplayerAPIExtension).
-	# Para que possamos usar @rpc localmente NESTE script sem interrupções,
-	# nós referenciamos o mesmo contexto Multiplayer que o plugin gerou internamente.
-	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
+		if use_netem:
+			QuanticNet.set_network_simulation(true, 100.0, 20.0, 0.10) # 100ms, 20ms jitter, 10% loss
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_N:
-			_netem_active = not _netem_active
-			QuanticNet.set_netem_config(0.10 if _netem_active else 0.0, 150 if _netem_active else 0, 50 if _netem_active else 0)
-			var status = "ON (10% Loss, 150ms Delay, 50ms Jitter)" if _netem_active else "OFF"
-			print("[DEMO] NETEM: %s" % status)
-		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
-			auto_move = not auto_move
-			print("[DEMO] Auto-move: ", auto_move)
-		elif event.keycode == KEY_F:
-			if Engine.max_fps == 0:
-				Engine.max_fps = 60
-				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
-			else:
-				Engine.max_fps = 0
-				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-			print("[DEMO] FPS Limitado: ", "SIM (60)" if Engine.max_fps == 60 else "NAO (Unlimited)")
-			
-		if not QuanticNet.is_server():
-			# [CLIENT ADMIN BINDS (RPC TO SERVER)]
-			if event.keycode == KEY_SPACE:
-				_request_spawn_props.rpc_id(1, 100, true) # 'SPACE' reseta para 100
-			elif event.keycode == KEY_0:
-				_request_spawn_props.rpc_id(1, 0, true) # '0' zera todos
-			elif event.keycode == KEY_EQUAL or event.keycode == KEY_PLUS:
-				_request_spawn_props.rpc_id(1, 10, false) # '+' adiciona 10
-			elif event.keycode == KEY_MINUS:
-				_request_remove_props.rpc_id(1, 10) # '-' remove 10
-			elif event.keycode == KEY_ASTERISK or event.keycode == KEY_8:
-				_request_scale_props.rpc_id(1, 2.0) # '*' multiplica por 2
-			elif event.keycode == KEY_SLASH:
-				_request_scale_props.rpc_id(1, 0.5) # '/' divide por 2
-
-			# [CLIENT LOCAL BINDS]
-			if event.keycode == KEY_TAB:
-				_current_profile_idx = (_current_profile_idx + 1) % _profiles.size()
-				_apply_profile.rpc_id(1, QuanticNet.get_unique_id(), _current_profile_idx)
-					
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT or event.button_index == MOUSE_BUTTON_RIGHT:
-			if not QuanticNet.is_server():
-				var my_id = QuanticNet.get_unique_id()
-				if cubes.has(my_id):
-					var origin = cubes[my_id].position
-					var dir = - cubes[my_id].basis.z.normalized() * 50.0
-					
-					if event.button_index == MOUSE_BUTTON_LEFT:
-						# HITSCAN INSTANTÂNEO (Com Compensação de Lag)
-						var ts = QuanticNet.get_server_time() - 100
-						print("[CLIENT] Atirou Hitscan! ts: ", ts)
-						_client_shoot_hitscan.rpc_id(1, ts)
-						
-						# Feedback visual imediato do Hitscan no cliente
-						var laser = MeshInstance3D.new()
-						var cyl = CylinderMesh.new()
-						cyl.top_radius = 0.05
-						cyl.bottom_radius = 0.05
-						cyl.height = 50.0
-						var mat = StandardMaterial3D.new()
-						mat.albedo_color = Color.RED
-						mat.emission_enabled = true
-						mat.emission = Color.RED
-						mat.emission_energy_multiplier = 4.0
-						cyl.material = mat
-						laser.mesh = cyl
-						# O laser nasce na origem e vai pra frente
-						laser.position = origin + dir.normalized() * 25.0
-						laser.rotation.x = PI/2.0 # deita o cilindro no eixo Z
-						add_child(laser)
-						local_laser_lines.push_back({"mesh": laser, "life": 0.1})
-						
-					else:
-						# PROJÉTIL FÍSICO (No presente)
-						print("[CLIENT] Atirou Projétil!")
-						_client_shoot_projectile.rpc_id(1)
-						
-						# Feedback visual imediato do Projétil no cliente
-						var fake = MeshInstance3D.new()
-						var mesh = SphereMesh.new()
-						var mat = StandardMaterial3D.new()
-						mat.albedo_color = Color.YELLOW
-						mat.emission_enabled = true
-						mat.emission = Color.YELLOW
-						mat.emission_energy_multiplier = 2.0
-						mesh.material = mat
-						fake.mesh = mesh
-						fake.position = origin
-						add_child(fake)
-						local_fake_bullets.push_back({"mesh": fake, "pos": origin, "dir": dir.normalized(), "speed": 40.0, "life": 2.0})
-
-# Os @rpc abaixo despacham comandos para o Servidor modificar as entidades registradas
-@rpc("any_peer", "call_local")
-func _apply_profile(peer_id: int, profile_idx: int) -> void:
-	if QuanticNet.is_server():
-		# Servidor valida a mudanca de perfil daquele peer_id
-		if profile_idx >= 0 and profile_idx < _profiles.size():
-			QuanticNet.change_entity_profile(peer_id, _profiles[profile_idx])
-			print("[SERVER] Perfil alterado para o Peer %d -> Index: %d (%.0f HZ)" % [peer_id, profile_idx, _profiles[profile_idx].tick_rate_hz])
-		
-	if cubes.has(peer_id):
-		var cube: MeshInstance3D = cubes[peer_id]
-		var mat: StandardMaterial3D = cube.mesh.material
-		if mat:
-			var colors = [Color(0.2, 1.0, 0.2), Color(1.0, 1.0, 0.2), Color(1.0, 0.5, 0.2), Color(1.0, 0.2, 0.2), Color(0.5, 0.2, 1.0)]
-			var target_color = colors[profile_idx % colors.size()]
-			var tw = get_tree().create_tween()
-			tw.tween_property(mat, "emission", target_color, 0.5)
-
-@rpc("any_peer", "call_local")
-func _request_spawn_props(count: int, clear_previous: bool) -> void:
-	if not QuanticNet.is_server(): return
+func _setup_materials() -> void:
+	mat_player_local = StandardMaterial3D.new()
+	mat_player_local.albedo_color = Color.GREEN
 	
-	if clear_previous:
-		var to_remove = []
-		for id in cubes.keys():
-			if id >= 1000: to_remove.append(id)
-		for id in to_remove:
-			QuanticNet.unregister_entity(id)
-			cubes[id].queue_free()
-			cubes.erase(id)
-		_next_prop_id = 1000
-		print("[SERVER] Limpando props anteriores...")
-		
-	for i in range(count):
-		var prop_id = _next_prop_id
-		_next_prop_id += 1
-		# Registramos uma entidade estúpida (ex: NPC/monstro falso) no QuanticNet.
-		QuanticNet.register_entity(prop_id, false, true, _profiles[2]) # Perfil Prop (5Hz)
-		
-		# Inicia exatamente na posição onde o physics_process vai atualizá-lo, 
-		# evitando que ele deslize artificialmente (drifting) ao nascer.
-		var initial_pos = _calc_prop_pos(prop_id - 1000, auto_time)
-		QuanticNet.update_entity_state(prop_id, initial_pos, Vector3.ZERO, Time.get_ticks_msec())
-		_on_peer_joined(prop_id)
-		
-	print("[SERVER] Spawnei %d props! Total atual de props: %d" % [count, _next_prop_id - 1000])
-
-@rpc("any_peer", "call_local")
-func _request_remove_props(count: int) -> void:
-	var removed = 0
-	var keys = cubes.keys()
-	keys.reverse() # Remove os últimos criados primeiro
-	for id in keys:
-		if id >= 1000:
-			QuanticNet.unregister_entity(id)
-			cubes[id].queue_free()
-			cubes.erase(id)
-			removed += 1
-			if removed >= count:
-				break
-				
-	if QuanticNet.is_server():
-		print("[SERVER] Removidos %d props! Props restantes: %d" % [removed, _next_prop_id - 1000 - removed])
-		_next_prop_id -= removed
-		if _next_prop_id < 1000: _next_prop_id = 1000
-
-@rpc("any_peer", "call_local")
-func _request_scale_props(factor: float) -> void:
-	if not QuanticNet.is_server(): return
-	var p_id = multiplayer.get_remote_sender_id()
-
-	var k = cubes.keys()
-	if factor > 1.0:
-		var extra = k.size() * (factor - 1.0)
-		_request_spawn_props(extra, false)
-	elif factor < 1.0:
-		var remove_cnt = k.size() * (1.0 - factor)
-		_request_remove_props(remove_cnt)
-
-@rpc("any_peer", "call_remote")
-func _client_shoot_hitscan(timestamp: int) -> void:
-	if not QuanticNet.is_server(): return
-	var p_id = multiplayer.get_remote_sender_id()
+	mat_player_remote = StandardMaterial3D.new()
+	mat_player_remote.albedo_color = Color.CYAN
 	
-	var reg = QuanticNet.get_registry()
-	if not reg.has(p_id): return
-	var p_state = reg[p_id]
-	var origin = p_state.pos
-	var direction = -Basis.from_euler(p_state.rot).z.normalized() * 50.0
+	mat_prop = StandardMaterial3D.new()
+	mat_prop.albedo_color = Color.RED
 	
-	var hit = QuanticNet.query_raycast(origin, direction, 50.0, timestamp)
-	if hit.has("entity_id"):
-		var entity_id = hit["entity_id"]
-		if entity_id >= 1000 and entity_id < 20000 and entity_id != p_id:
-			_show_hit_marker.rpc(entity_id)
-			print("[SERVER] HITSCAN (Rewind): Acertou %d" % entity_id)
-
-@rpc("any_peer", "call_remote")
-func _client_shoot_projectile() -> void:
-	if not QuanticNet.is_server(): return
-	var p_id = multiplayer.get_remote_sender_id()
+	mat_bullet = StandardMaterial3D.new()
+	mat_bullet.albedo_color = Color.YELLOW
 	
-	var reg = QuanticNet.get_registry()
-	if not reg.has(p_id): return
-	var p_state = reg[p_id]
-	var origin = p_state.pos
-	var direction = -Basis.from_euler(p_state.rot).z.normalized()
-	
-	# IDs de bullets são atrelados ao dono para que o cliente o reconheça e oculte
-	if not _bullet_counts.has(p_id): _bullet_counts[p_id] = 0
-	var b_id = 20000 + (p_id * 1000) + (_bullet_counts[p_id] % 1000)
-	_bullet_counts[p_id] += 1
-	
-	QuanticNet.register_entity(b_id, false, true, _profiles[4])
-	
-	active_bullets[b_id] = {
-		"pos": origin,
-		"dir": direction,
-		"speed": 40.0, 
-		"life": 2.0 
-	}
-	print("[SERVER] PROJÉTIL: Peer %d atirou! Bullet ID %d gerada na Pos: %v" % [p_id, b_id, origin])
+	mat_hit = StandardMaterial3D.new()
+	mat_hit.albedo_color = Color.WHITE
+	mat_hit.emission_enabled = true
+	mat_hit.emission = Color.WHITE
+	mat_hit.emission_energy_multiplier = 2.0
 
-@rpc("any_peer", "call_local")
-func _delete_bullet(b_id: int) -> void:
-	if cubes.has(b_id):
-		cubes[b_id].queue_free()
-		cubes.erase(b_id)
-
-@rpc("any_peer", "call_local")
-func _show_hit_marker(entity_id: int) -> void:
-	if cubes.has(entity_id):
-		var mat = cubes[entity_id].mesh.material
-		mat.emission = Color.WHITE
-		await get_tree().create_timer(0.2).timeout
-		mat.emission = Color.BLACK
-
-func _setup_server_props() -> void:
-	# O servidor automaticamente spawna 5 props fictícios na inicialização.
-	_request_spawn_props(5, true)
-
-func _setup_client_scene() -> void:
-	# Monta a cena visual dinamicamente para o cliente (Câmera, Luz, Chão, HUD).
+func _setup_scene() -> void:
 	var cam := Camera3D.new()
 	cam.position = Vector3(0, 8, 10)
 	cam.rotation_degrees = Vector3(-35, 0, 0)
@@ -395,540 +141,258 @@ func _setup_client_scene() -> void:
 	light.rotation_degrees = Vector3(-45, 45, 0)
 	light.shadow_enabled = true
 	add_child(light)
-	
-	var floor_mesh := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(40, 40)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.2, 0.2, 0.25)
-	plane.material = mat
-	floor_mesh.mesh = plane
-	add_child(floor_mesh)
-	
-	var hud = CanvasLayer.new()
-	
-	var top_panel = PanelContainer.new()
-	top_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_conn_status_lbl = Label.new()
-	_conn_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_conn_status_lbl.text = "🟡 CONNECTING"
-	_conn_status_lbl.add_theme_color_override("font_color", Color.YELLOW)
-	top_panel.add_child(_conn_status_lbl)
-	hud.add_child(top_panel)
-	
-	_reconnect_btn = Button.new()
-	_reconnect_btn.text = "Reconectar"
-	_reconnect_btn.visible = false
-	_reconnect_btn.pressed.connect(_on_reconnect_pressed)
-	var btn_margin = MarginContainer.new()
-	btn_margin.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	btn_margin.add_theme_constant_override("margin_top", 40)
-	var center_btn = CenterContainer.new()
-	center_btn.add_child(_reconnect_btn)
-	btn_margin.add_child(center_btn)
-	hud.add_child(btn_margin)
-	
-	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_top", 20)
+
+func _setup_ui() -> void:
 	var vbox = VBoxContainer.new()
+	vbox.position = Vector2(20, 20)
+	add_child(vbox)
 	
-	var shortcuts = [
-		"CONTROLES IN-GAME:",
-		"Setas      : Mover",
-		"Enter      : Auto-Move On/Off",
-		"F          : Destravar FPS / V-Sync",
-		"N          : Ativar/Desativar NETEM",
-		"1 a 5      : Mudar Perfil de Rede (Tick Rate)",
-		"SPACE      : Spawna 100 Props (reseta)",
-		"+ / -      : Adiciona/Remove 10 Props",
-		"* / /      : Multiplica/Divide total por 2",
-		"0          : Remove todos os Props"
-	]
-	
-	for s in shortcuts:
-		var lbl = Label.new()
-		lbl.text = s
-		lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 4)
-		vbox.add_child(lbl)
-		
-	margin.add_child(vbox)
-	hud.add_child(margin)
-	
-	# [DIAGNOSTIC PROFILER UI]
-	var diag_margin = MarginContainer.new()
-	diag_margin.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	diag_margin.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	diag_margin.add_theme_constant_override("margin_left", 20)
-	diag_margin.add_theme_constant_override("margin_bottom", 20)
-	var diag_vbox = VBoxContainer.new()
-	
-	var diag_title = Label.new()
-	diag_title.text = "[ SYSTEM PROFILER ]"
-	diag_title.add_theme_color_override("font_color", Color.YELLOW)
-	diag_vbox.add_child(diag_title)
+	_status_lbl = Label.new()
+	_status_lbl.text = "OFFLINE"
+	vbox.add_child(_status_lbl)
 	
 	_diag_lbl_fps = Label.new()
-	_diag_lbl_phys = Label.new()
-	_diag_lbl_mem = Label.new()
-	_diag_lbl_nodes = Label.new()
-	_diag_lbl_orphan = Label.new()
-	
-	var labels_sys = [_diag_lbl_fps, _diag_lbl_phys, _diag_lbl_mem, _diag_lbl_nodes, _diag_lbl_orphan]
-	for l in labels_sys:
-		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
-		l.add_theme_color_override("font_outline_color", Color.BLACK)
-		l.add_theme_constant_override("outline_size", 3)
-		diag_vbox.add_child(l)
-		
-	var diag_spacer = Control.new()
-	diag_spacer.custom_minimum_size = Vector2(0, 15)
-	diag_vbox.add_child(diag_spacer)
-	
-	var net_title = Label.new()
-	net_title.text = "[ NETWORK PROFILER ]"
-	net_title.add_theme_color_override("font_color", Color.CYAN)
-	diag_vbox.add_child(net_title)
+	vbox.add_child(_diag_lbl_fps)
 	
 	_diag_lbl_rtt = Label.new()
+	vbox.add_child(_diag_lbl_rtt)
+	
 	_diag_lbl_loss = Label.new()
-	_diag_lbl_offset = Label.new()
-	_diag_lbl_peers = Label.new()
+	vbox.add_child(_diag_lbl_loss)
 	
-	var labels_net = [_diag_lbl_rtt, _diag_lbl_loss, _diag_lbl_offset, _diag_lbl_peers]
-	for l in labels_net:
-		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
-		l.add_theme_color_override("font_outline_color", Color.BLACK)
-		l.add_theme_constant_override("outline_size", 3)
-		diag_vbox.add_child(l)
-		
-	diag_margin.add_child(diag_vbox)
-	hud.add_child(diag_margin)
-	
-	add_child(hud)
+	var info = Label.new()
+	info.text = "\n[CONTROLES]\nSetas/WASD: Mover\nBotão Esquerdo: Tiro Hitscan (Laser)\nBotão Direito: Projétil (Bala)\nEnter: Auto-Move"
+	vbox.add_child(info)
 
-func _on_peer_joined(id: int) -> void:
-	# [CONSTRUÇÃO DO AVATAR]
-	# Assim que o servidor relatar a presença de uma nova entidade, 
-	# nós criamos a representação visual (Cubo) no cenário local.
-	if cubes.has(id):
-		return
-	var cube := MeshInstance3D.new()
-	var mesh: PrimitiveMesh = BoxMesh.new()
-	var mat := StandardMaterial3D.new()
-	
-	if id == QuanticNet.get_unique_id():
-		mat.albedo_color = Color.GREEN # Jogador Local (Você)
-	elif id >= 20000:
-		mat.albedo_color = Color.YELLOW # Bala
-		mat.emission_enabled = true
-		mat.emission = Color.YELLOW
-		mat.emission_energy_multiplier = 4.0
-		mesh = SphereMesh.new()
-		mesh.radius = 0.2
-		mesh.height = 0.4
-	elif id >= 1000:
-		mat.albedo_color = Color.RED # Props (NPCs controlados pelo servidor)
-	else:
-		mat.albedo_color = Color.CYAN # Outros Clientes Reais
-		
-	if id < 20000:
-		mat.emission_enabled = true
-		mat.emission = Color.BLACK
-		mat.emission_energy_multiplier = 2.0
-		
-	mesh.material = mat
+func _on_conn_state(state: int) -> void:
+	match state:
+		QuanticNet.ConnectionState.DISCONNECTED:
+			_status_lbl.text = "⚪ DISCONNECTED"
+			_status_lbl.add_theme_color_override("font_color", Color.GRAY)
+		QuanticNet.ConnectionState.CONNECTED:
+			_status_lbl.text = "🟢 CONNECTED"
+			_status_lbl.add_theme_color_override("font_color", Color.GREEN)
+
+func _on_peer_joined(peer_id: int) -> void:
+	print("Peer joined: ", peer_id)
+	var mesh = BoxMesh.new()
+	var cube = MeshInstance3D.new()
 	cube.mesh = mesh
 	
-	if id == QuanticNet.get_unique_id():
-		# O próprio jogador inicia em zero e será movido localmente.
-		cube.position = Vector3(0, 0.5, 0)
-	elif QuanticNet.is_server():
-		# O servidor deve posicionar os props em suas posições corretas imediatamente
-		# para que o snapshot inicial já leve a posição exata, evitando teleportes.
-		if id >= 20000:
-			if active_bullets.has(id): cube.position = active_bullets[id].pos
-		elif id >= 1000:
-			cube.position = _calc_prop_pos(id - 1000, auto_time)
-		else:
-			cube.position = Vector3(0, 0.5, 0)
+	if peer_id == QuanticNet.get_unique_id():
+		cube.material_override = mat_player_local
+	elif peer_id < 1000:
+		cube.material_override = mat_player_remote
 	else:
-		# Avatares remotos começam invisíveis até que o 1º pacote contendo 
-		# a sua posição real interpolada chegue.
-		cube.visible = false
+		cube.material_override = mat_prop
 		
-	cube.name = "Cube_%d" % id
-	if id >= 20000:
-		var owner_id = (id - 20000) / 1000
-		if owner_id == QuanticNet.get_unique_id():
-			# Esconde a bala recebida do servidor se ela for MINHA (pois eu já renderizo o fake tracer local)
-			cube.visible = false
-			
 	add_child(cube)
-	cubes[id] = cube
+	cubes[peer_id] = cube
 	
-	if id == QuanticNet.get_unique_id():
-		# [DEBUG VISUAL: CULLING RADIUS]
-		# Adiciona uma área translúcida ao redor do jogador local 
-		# para demonstrar a distância exata em que outras entidades perdem relevância 
-		# e deixam de receber atualizações para poupar rede (Spatial Hashing futuro).
-		var area = MeshInstance3D.new()
-		var area_mesh = CylinderMesh.new()
-		area_mesh.top_radius = 10.0
-		area_mesh.bottom_radius = 10.0
-		area_mesh.height = 0.05
-		
-		var area_mat = StandardMaterial3D.new()
-		area_mat.albedo_color = Color(0.0, 0.5, 1.0, 0.25) # Azul translúcido
-		area_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		area_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		
-		area.mesh = area_mesh
-		area.position.y = -0.45 # Fica quase rente ao chão
-		cube.add_child(area)
-		
-		# [DEBUG VISUAL: RAYCAST]
-		# Adiciona uma linha preta à frente do jogador para demonstrar 
-		# a área de colisão (hitscan) do tiro ao clicar com o botão esquerdo.
-		var raycast_line = MeshInstance3D.new()
-		var ray_mesh = CylinderMesh.new()
-		ray_mesh.top_radius = 0.05
-		ray_mesh.bottom_radius = 0.05
-		ray_mesh.height = 50.0
-		
-		var ray_mat = StandardMaterial3D.new()
-		ray_mat.albedo_color = Color.RED
-		ray_mat.emission_enabled = true
-		ray_mat.emission = Color.RED
-		
-		raycast_line.mesh = ray_mesh
-		# Gira o cilindro para apontar no eixo Z (frente é -Z) e move para frente
-		raycast_line.rotation.x = PI / 2.0
-		raycast_line.position.z = -25.0
-		cube.add_child(raycast_line)
-		
-	print("[DEMO] peer %d ganhou cubo" % id)
+	if QuanticNet.is_server() and peer_id < 1000:
+		QuanticNet.register_entity(peer_id, true, true, _profiles[0])
 
-func _on_peer_left(id: int) -> void:
-	# O servidor informou que a entidade sumiu do mapa. Nós a apagamos da memória visual.
-	if cubes.has(id):
-		cubes[id].queue_free()
-		cubes.erase(id)
+func _on_peer_left(peer_id: int) -> void:
+	print("Peer left: ", peer_id)
+	if cubes.has(peer_id):
+		cubes[peer_id].queue_free()
+		cubes.erase(peer_id)
+
+func _server_spawn_props() -> void:
+	for i in range(10):
+		var prop_id = 1000 + i
+		QuanticNet.register_entity(prop_id, false, true, _profiles[3])
+		_on_peer_joined(prop_id)
+
+func _calc_prop_pos(offset: int, time: float) -> Vector3:
+	var r = 10.0 + (offset % 3) * 5.0
+	var speed = 0.5 + (offset % 2) * 0.5
+	var angle = time * speed + offset * 0.7
+	return Vector3(cos(angle) * r, 0, sin(angle) * r)
 
 func _physics_process(delta: float) -> void:
-	# ======================================================================
-	# FLUXO DO SERVIDOR (AUTORITATIVO)
-	# ======================================================================
-	if QuanticNet.is_server():
-		# O servidor dita as regras do mundo. Neste caso simples, ele assume 
-		# a inteligência artificial dos Props, calculando matematicamente 
-		# suas posições no espaço e notificando o roteador de broadcast de que eles mudaram.
-		auto_time += delta
-		var reg = QuanticNet.get_registry()
-		
-		# ============================================================
-		# FÍSICA AUTORITATIVA DO SERVIDOR (PROJÉTEIS)
-		# ============================================================
-		var bullets_to_remove = []
-		for b_id in active_bullets.keys():
-			var b = active_bullets[b_id]
-			b.pos += b.dir * b.speed * delta
-			b.life -= delta
-			
-			if b.life <= 0:
-				bullets_to_remove.append(b_id)
-				continue
-				
-			# Detecção de acerto usando a API Agnóstica!
-			var hits = QuanticNet.query_sphere(b.pos, 1.0)
-			var hit_someone = false
-			for hit_id in hits:
-				if hit_id >= 1000 and hit_id < 20000 and hit_id != b_id:
-					_show_hit_marker.rpc(hit_id)
-					bullets_to_remove.append(b_id)
-					hit_someone = true
-					break
-					
-			if not hit_someone:
-				QuanticNet.update_entity_state(b_id, b.pos, Vector3.ZERO, QuanticNet.get_server_time())
-				
-		for b_id in bullets_to_remove:
-			if active_bullets.has(b_id):
-				active_bullets.erase(b_id)
-				QuanticNet.unregister_entity(b_id)
-				_delete_bullet.rpc(b_id)
-		
-		for prop_id in reg.keys():
-			if prop_id >= 1000 and prop_id < 20000:
-				var p = reg[prop_id]
-				var new_pos = _calc_prop_pos(prop_id - 1000, auto_time)
-				# Força a inserção da nova posição no cache interno 
-				# para ser processado pelo ciclo de Broadcast nativo (Tick Híbrido).
-				QuanticNet.update_entity_state(prop_id, new_pos, p.rot, QuanticNet.get_server_time())
-				_on_state(prop_id, new_pos, p.rot, 0)
-		return
-
-	# ======================================================================
-	# FLUXO DO CLIENTE (CLIENT-SIDE PREDICTION & VISUAIS)
-	# ======================================================================
-	var dead_lasers = []
-	for i in range(local_laser_lines.size()):
-		var l = local_laser_lines[i]
-		l.life -= delta
-		if l.life <= 0:
-			l.mesh.queue_free()
-			dead_lasers.push_back(i)
-	dead_lasers.reverse()
-	for i in dead_lasers:
-		local_laser_lines.remove_at(i)
-		
-	var dead_fakes = []
-	for i in range(local_fake_bullets.size()):
-		var fb = local_fake_bullets[i]
-		fb.pos += fb.dir * fb.speed * delta
-		fb.mesh.position = fb.pos
-		fb.life -= delta
-		if fb.life <= 0:
-			fb.mesh.queue_free()
-			dead_fakes.push_back(i)
-	dead_fakes.reverse()
-	for i in dead_fakes:
-		local_fake_bullets.remove_at(i)
-
-	# O Cliente processa sua posição fisicamente **sem esperar confirmação** do servidor.
-	# Ele se move instantaneamente, mas comunica a intenção via submit_state.
-	var my_id := QuanticNet.get_unique_id()
+	_update_ui()
 	
-	if my_id > 1 and cubes.has(my_id):
-		var cube: MeshInstance3D = cubes[my_id]
-		var move := Vector2.ZERO
-		
-		if auto_move:
-			auto_time += delta
-			# Simula input direcional em um círculo imperfeito (wobble)
-			move.x = cos(auto_time) + cos(auto_time * 2.3) * 0.3
-			move.y = sin(auto_time) + sin(auto_time * 1.7) * 0.3
-			move = move.normalized()
-		else:
-			move = Vector2(
-				Input.get_axis("ui_left", "ui_right"),
-				Input.get_axis("ui_up", "ui_down"))
-				
-		cube.position.x += move.x * SPEED * delta
-		cube.position.z += move.y * SPEED * delta
-		
-		# Empacota o novo vetor e envia ao QuanticNet.
-		# A camada do plugin irá embutir um "sequence ID" (ACK) a este input para gerenciar perdas UDP.
-		if _can_send_state and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-			QuanticNet.submit_state(cube.position, cube.rotation, 0, delta)
+	if QuanticNet.is_server():
+		_server_physics(delta)
+	
+	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		_client_physics(delta)
+	
+	_apply_visuals()
 
-func _process(_delta: float) -> void:
-	var now_ms = Time.get_ticks_msec()
+func _update_ui() -> void:
+	if _diag_lbl_fps:
+		_diag_lbl_fps.text = "FPS: %d" % Engine.get_frames_per_second()
+		if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+			_diag_lbl_rtt.text = "RTT: %dms" % QuanticNet.get_rtt()
+			_diag_lbl_loss.text = "Loss: %.1f%%" % (QuanticNet.loss_of(1) * 100.0)
+
+# ==============================================================
+# FLUXO DO CLIENTE (Client-Side Prediction & API Polling)
+# ==============================================================
+func _client_physics(delta: float) -> void:
 	var my_id = QuanticNet.get_unique_id()
+	if not cubes.has(my_id): return
+	
+	var cube = cubes[my_id]
+	var move := Vector2.ZERO
+	
+	if Input.is_action_just_pressed("ui_accept"):
+		auto_move = !auto_move
+		
+	if auto_move:
+		auto_time += delta
+		move.x = cos(auto_time) + cos(auto_time * 2.3) * 0.3
+		move.y = sin(auto_time) + sin(auto_time * 1.7) * 0.3
+		move = move.normalized()
+	else:
+		move = Vector2(Input.get_axis("ui_left", "ui_right"), Input.get_axis("ui_up", "ui_down"))
+	
+	cube.position.x += move.x * 10.0 * delta
+	cube.position.z += move.y * 10.0 * delta
+	
+	# Input Polling empacotado em custom_id
+	var input_mask = 0
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		input_mask |= 1 # Shoot Hitscan
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		input_mask |= 2 # Shoot Projectile
+		
+	QuanticNet.submit_state(cube.position, cube.rotation, input_mask, delta)
 
-	# [DIAGNOSTIC PROFILER ATUALIZAÇÃO]
-	var current_fps = Engine.get_frames_per_second()
+# ==============================================================
+# FLUXO DO SERVIDOR (Authoritative Logic)
+# ==============================================================
+func _server_physics(delta: float) -> void:
+	var now = QuanticNet.get_server_time()
+	var auto_time_srv = float(now) / 1000.0
+	var reg = QuanticNet.get_registry()
 	
-	_fps_total_sum += current_fps
-	_fps_total_samples += 1
-	
-	if current_fps < _fps_min and current_fps > 0: _fps_min = current_fps
-	if current_fps > _fps_max: _fps_max = current_fps
-	
-	if _diag_lbl_fps != null and is_instance_valid(_diag_lbl_fps) and now_ms - _last_ui_update_ms > 250:
-		_last_ui_update_ms = now_ms
-		var avg_fps = _fps_total_sum / max(1, _fps_total_samples)
-		
-		_diag_lbl_fps.text = "FPS: %d [Avg: %d | Min: %d | Max: %d]" % [current_fps, avg_fps, _fps_min, _fps_max]
-		_diag_lbl_phys.text = "Physics Time (sec): %.4f" % Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)
-		_diag_lbl_mem.text = "Static Mem: %.2f MB" % (Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)
-		_diag_lbl_nodes.text = "Active Nodes: %d" % Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
-		_diag_lbl_orphan.text = "Orphan Nodes: %d" % Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
-		
-		var c_peers = 0
-		var c_props = 0
-		for k in cubes.keys():
-			if k >= 1000: c_props += 1
-			else: c_peers += 1
-		_diag_lbl_peers.text = "Total Peers: %d | Props: %d" % [c_peers, c_props]
-		
-		var t2 = QuanticNet.get_telemetry(my_id)
-		if t2:
-			var curr_rtt = t2.get_current_rtt()
-			var curr_loss = t2.get_current_loss()
-			var min_rtt = t2.get_min_rtt() if t2.get_min_rtt() != INF else 0.0
-			var max_rtt = t2.get_max_rtt() if t2.get_max_rtt() != -INF else 0.0
-			var max_loss = t2.get_max_loss() if t2.get_max_loss() != -INF else 0.0
-			_diag_lbl_rtt.text = "RTT (ms): %.0f [Avg: %.0f | Min: %.0f | Max: %.0f]" % [curr_rtt, t2.get_avg_rtt(), min_rtt, max_rtt]
-			_diag_lbl_loss.text = "Packet Loss: %.1f%% [Max: %.1f%%]" % [curr_loss, max_loss]
-			_diag_lbl_offset.text = "Clock Offset: %.1f ms" % [_current_offset]
-		else:
-			_diag_lbl_rtt.text = "RTT (ms): N/A"
-			_diag_lbl_loss.text = "Packet Loss: N/A"
-			_diag_lbl_offset.text = "Clock Offset: N/A"
-
-	# O Loop visual roda fora de `_physics_process` para maximizar a fluidez, 
-	# independentemente da taxa estrita de física do servidor (geralmente 60fps constantes).
-	if QuanticNet.is_server():
-		return
-		
-	var fps := Engine.get_frames_per_second()
-	
-	var prof = _profiles[_current_profile_idx]
-	var prof_str = "%.0f HZ" % prof.tick_rate_hz
-	
-	var netem_str = "NETEM - LOSS 10%, DELAY 150ms, JITTER 50ms" if _netem_active else "NETEM - OFF"
-	DisplayServer.window_set_title("#%d | FPS %d | %s | %s" % [my_id, fps, prof_str, netem_str])
-	
-	# (O Staggered Polling original foi removido pois a telemetria agora é centralizada)
-
-	if "--test-cycle" in OS.get_cmdline_user_args():
-		var cycle = int(Time.get_ticks_msec() / 5000.0) % 6
-		if cycle == 0:
-			_current_profile_idx = 0
-			_netem_active = false
-			QuanticNet.set_netem_config(0.0, 0, 0)
-		elif cycle == 1:
-			_current_profile_idx = 1
-		elif cycle == 2:
-			_current_profile_idx = 4
-		elif cycle == 3:
-			_netem_active = true
-			QuanticNet.set_netem_config(0.1, 150, 50)
-			_current_profile_idx = 0
-		elif cycle == 4:
-			_current_profile_idx = 1
-		elif cycle == 5:
-			_current_profile_idx = 4
+	# 1. Movimenta Props
+	for prop_id in reg.keys():
+		if prop_id >= 1000 and prop_id < 20000:
+			var new_pos = _calc_prop_pos(prop_id - 1000, auto_time_srv)
 			
-		if Engine.get_process_frames() % 60 == 0:
-			print("[TEST-LOG] Client ", my_id, " | ", prof_str, " | ", netem_str, " | Loss: ", _diag_lbl_loss.text)
-	
-	# Desabilita/Oculta cubos que não recebem atualizações há mais de 0.5 segundo (saíram do AoI)
-	var now = Time.get_ticks_msec()
-	var my_pos = cubes[my_id].position if cubes.has(my_id) else Vector3.ZERO
-	
-	# [VISUAL CULLING - DESENHO DA CENA]
-	# Esconde e ignora a renderização de entidades que saíram 
-	# da nossa área de interesse e pararam de nos enviar snapshots pelo servidor.
-	for id in cubes.keys():
-		if id != my_id:
-			var dist = my_pos.distance_to(cubes[id].position)
+			# Processa Timer de Hit
+			var custom = 0
+			if hit_timers.has(prop_id):
+				if now >= hit_timers[prop_id]:
+					hit_timers.erase(prop_id)
+				else:
+					custom = 1 # 1 = Hitted
 			
-			# Raio de descarte diferente para Props (10m) e Players reais (50m)
-			var max_dist = 11.0 if id >= 1000 else 52.0
+			QuanticNet.update_entity_state(prop_id, new_pos, Vector3.ZERO, custom, now)
 			
-			if dist > max_dist:
-				cubes[id].visible = false
-			elif _last_rx.has(id) and now - _last_rx[id] > 2000:
-				cubes[id].visible = false
-			else:
-				cubes[id].visible = true
+	# 2. Processa Inputs dos Jogadores
+	for p_id in reg.keys():
+		if p_id < 1000: # Player
+			var p_state = reg[p_id]
+			if not p_state.has("has_state") or not p_state["has_state"]: continue
+			
+			var current_input = p_state.get("custom_id", 0)
+			var prev_input = prev_inputs.get(p_id, 0)
+			var just_pressed = current_input & ~prev_input
+			
+			if just_pressed & 1:
+				_server_execute_hitscan(p_id, p_state)
+			
+			if just_pressed & 2:
+				_server_execute_projectile(p_id, p_state)
 				
-	# [SNAPSHOT INTERPOLATION REMOTA]
-	# Em vez de ditar a posição diretamente quando a rede notifica, 
-	# consumimos `remote_state` a cada quadro.
-	# O QuanticNet usa seu Jitter Buffer circular interno e devolve uma mesclagem suave
-	# entre os pacotes do passado (compensando latência oscilante do Netem).
-	for id in cubes.keys():
-		if id == my_id:
+			prev_inputs[p_id] = current_input
+
+	# 3. Processa Balas Físicas
+	var bullets_to_remove = []
+	for b_id in active_bullets.keys():
+		var b = active_bullets[b_id]
+		b.pos += b.dir * b.speed * delta
+		b.life -= delta
+		
+		if b.life <= 0:
+			bullets_to_remove.append(b_id)
 			continue
+			
+		var hits = QuanticNet.query_sphere(b.pos, 1.0, now)
+		var hit_someone = false
+		for hit_id in hits:
+			if hit_id >= 1000 and hit_id < 20000:
+				hit_timers[hit_id] = now + 150 # Pisca por 150ms
+				bullets_to_remove.append(b_id)
+				hit_someone = true
+				break
+				
+		if not hit_someone:
+			QuanticNet.update_entity_state(b_id, b.pos, Vector3.ZERO, 0, now)
+			
+	for b_id in bullets_to_remove:
+		if active_bullets.has(b_id):
+			active_bullets.erase(b_id)
+			QuanticNet.unregister_entity(b_id)
+
+func _server_execute_hitscan(p_id: int, p_state: Dictionary) -> void:
+	var origin = p_state.pos
+	var direction = - Basis.from_euler(p_state.rot).z.normalized()
+	
+	# Raycast Offset para não acertar o próprio jogador
+	var ray_origin = origin + direction * 2.0
+	
+	# Usa o Timestamp exato em que o cliente disparou o input para o Lag Compensation
+	var hit = QuanticNet.query_raycast(ray_origin, direction, 50.0, p_state.ts)
+	
+	if hit.has("entity_id"):
+		var entity_id = hit["entity_id"]
+		if entity_id >= 1000 and entity_id < 20000 and entity_id != p_id:
+			hit_timers[entity_id] = QuanticNet.get_server_time() + 150
+
+func _server_execute_projectile(p_id: int, p_state: Dictionary) -> void:
+	var origin = p_state.pos
+	var direction = - Basis.from_euler(p_state.rot).z.normalized()
+	
+	_bullet_counter += 1
+	var b_id = 20000 + (p_id * 1000) + (_bullet_counter % 1000)
+	
+	active_bullets[b_id] = {
+		"pos": origin + direction * 2.0,
+		"dir": direction,
+		"speed": 40.0,
+		"life": 3.0
+	}
+	QuanticNet.register_entity(b_id, false, true, _profiles[4])
+
+# ==============================================================
+# VISUALIZAÇÃO E INTERPOLAÇÃO (Para Todos)
+# ==============================================================
+func _apply_visuals() -> void:
+	var my_id = QuanticNet.get_unique_id()
+	
+	for id in cubes.keys():
+		if id == my_id: continue
+		
+		# Consome Interpolation Buffer (Jitter Buffer) para peers/props/bullets
 		var s := QuanticNet.remote_state(id)
 		if not s.is_empty():
 			cubes[id].position = s["pos"]
 			cubes[id].rotation = s["rot"]
 			
-func _on_connection_state_changed(new_state: int) -> void:
-	if _conn_status_lbl == null: return
-	
-	match new_state:
-		QuanticNet.ConnectionState.DISCONNECTED:
-			_conn_status_lbl.text = "⚪ DISCONNECTED"
-			_conn_status_lbl.add_theme_color_override("font_color", Color.GRAY)
-			if _reconnect_btn: _reconnect_btn.visible = true
-		QuanticNet.ConnectionState.CONNECTING:
-			_conn_status_lbl.text = "🟡 CONNECTING"
-			_conn_status_lbl.add_theme_color_override("font_color", Color.YELLOW)
-			if _reconnect_btn: _reconnect_btn.visible = false
-		QuanticNet.ConnectionState.AUTHENTICATING:
-			_conn_status_lbl.text = "🟠 AUTHENTICATING"
-			_conn_status_lbl.add_theme_color_override("font_color", Color.ORANGE)
-		QuanticNet.ConnectionState.CONNECTED:
-			_conn_status_lbl.text = "🟢 CONNECTED"
-			_conn_status_lbl.add_theme_color_override("font_color", Color.GREEN)
-		QuanticNet.ConnectionState.FAILED:
-			_conn_status_lbl.text = "🔴 FAILED"
-			_conn_status_lbl.add_theme_color_override("font_color", Color.RED)
-			if _reconnect_btn: _reconnect_btn.visible = true
+			# Feedback Visual Nativo (sem RPC)
+			if id >= 1000 and id < 20000:
+				var custom = s.get("custom_id", 0)
+				if custom == 1:
+					cubes[id].material_override = mat_hit
+				else:
+					cubes[id].material_override = mat_prop
+			
+			cubes[id].visible = true
 
-func _on_connection_failed(reason: int) -> void:
-	if _conn_status_lbl:
-		_conn_status_lbl.text = "🔴 FAILED (ERR: %d)" % reason
-		_conn_status_lbl.add_theme_color_override("font_color", Color.RED)
-	if _reconnect_btn:
-		_reconnect_btn.visible = true
-
-func _on_reconnect_pressed() -> void:
-	if _reconnect_btn: _reconnect_btn.visible = false
-	print("[DEMO] Reconectando...")
-	_current_offset = 0.0
-	_fps_total_sum = 0
-	_fps_total_samples = 0
-	
-	# Limpar cubes antigos para reset visual
-	for id in cubes.keys():
-		if is_instance_valid(cubes[id]):
-			cubes[id].queue_free()
-	cubes.clear()
-	
-	QuanticNet.join("127.0.0.1", PORT, SECRET, _netem_active)
-
-func _on_state(owner: int, pos: Vector3, rot: Vector3, _custom: int) -> void:
-	# Sinal bruto disparado assim que o pacote desembarca no cliente
-	# após ser decodificado pelo domínio.
-	if not QuanticNet.is_server():
-		if _last_rx.has(owner):
-			var gap = Time.get_ticks_msec() - _last_rx[owner]
-			# Se demorou mais de 200ms para receber a nova posição (devido a perda de pacote ou netem), 
-			# imprime log alertando sobre o atraso
-			if owner >= 1000 and gap > 200:
-				print("[CLIENT] Recebeu %d apos %d ms! Pos: %s" % [owner, gap, str(pos)])
-				
-	_last_rx[owner] = Time.get_ticks_msec()
-	
-	# Prevenção: O pacote de um peer chegou, mas o sinal "peer_joined" da Engine 
-	# atrasou internamente. Inicializamos o cubo preemptivamente.
-	if not QuanticNet.is_server() and not cubes.has(owner) and owner != QuanticNet.get_unique_id():
-		_on_peer_joined(owner)
-		
-	# Caso o pacote chegue, re-ativamos a visibilidade instantânea (Saindo do Culling Oculto).
-	if not QuanticNet.is_server() and cubes.has(owner) and not cubes[owner].visible:
-		cubes[owner].position = pos
-		cubes[owner].rotation = rot
-		cubes[owner].visible = true
-		
-	# No servidor, este é o momento onde o pacote validado do cliente 
-	# altera de fato o estado global autoritativo mantido na memória visual do host.
-	if QuanticNet.is_server() and cubes.has(owner):
-		cubes[owner].position = pos
-		cubes[owner].rotation = rot
-
-func _calc_prop_pos(offset: int, time: float) -> Vector3:
-	# Lógica matemática (sem uso do motor de colisão da Engine) 
-	# que gera um movimento determinístico e harmônico para os Props no cenário.
-	# Golden angle (~2.3999 radianos) distribui os cubos radialmente de forma uniforme.
-	var angle = offset * 2.4 + time * 0.2
-	var radius = 5.0 + (offset % 10) * 2.0 + sin(time * 0.5 + offset) * 2.0
-	return Vector3(cos(angle) * radius, 0.5, sin(angle) * radius)
-
-func _on_snapback(seq: int, _pos: Vector3, _rot: Vector3, reason: int, replay: Array) -> void:
-	# [RECONCILIAÇÃO DO SERVIDOR]
-	# O servidor cassou a nossa predição por irregularidade grave! 
-	# Ex: andamos por dentro de uma parede, fomos empurrados, ou speedhack.
-	# Num jogo real, faríamos algo como:
-	# player.position = pos
-	# for past_input in replay:
-	#     player.move_with_input(past_input.dt) 
-	print("[DEMO] snapback (seq=%d reason=%d replay=%d)" % [seq, reason, replay.size()])
+	# Desenha Balas dinâmicas recebidas da rede
+	var reg = QuanticNet.get_registry()
+	for id in reg.keys():
+		if id >= 20000:
+			if not cubes.has(id):
+				_on_peer_joined(id)
+				var mesh = SphereMesh.new()
+				mesh.radius = 0.5
+				mesh.height = 1.0
+				cubes[id].mesh = mesh
+				cubes[id].material_override = mat_bullet
