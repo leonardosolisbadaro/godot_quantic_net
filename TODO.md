@@ -59,11 +59,19 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 - [x] Implementar Barra de Estado de Conexão no topo da tela, reagindo aos sinais de rede (🔴 FAILED, 🟡 CONNECTING, 🟠 AUTHENTICATING, 🟢 CONNECTED).
 - [x] Adicionar botão de reconexão na interface em caso de falha (`connection_failed_reason`).
 
-### PR 24: Sessão D — "Monitoramento e Logs"
+### PR 24: GDExtension Migration — "Coração em C++ (Performance Core)"
+
+- [x] Fase 1: Setup da Infraestrutura GDExtension (SConstruct, Register Types, Bindings).
+- [x] Fase 2: Migração das Estruturas de Dados e Hotpaths (Buffers e Serializers).
+- [x] Fase 3: Acesso Direto (MultiplayerPeerExtension + DTLS + QNNetHook).
+- [x] Fase 4: Regras de Negócio e Ticking (Session Host/Client, Loss Tracker).
+- [x] Fase 5: Refatoração da API GDScript Pública (Plug and Play via Autoload).
+
+### PR 25: Sessão D — "Monitoramento e Logs"
 
 - [ ] Criar "Log de Eventos Rolante" (tecla `L`): `RichTextLabel` no canto inferior esquerdo para exibir os últimos 10 eventos (joins, mudança de perfil, snaps) com código de cores e timestamps.
 
-### PR 25: Sessão E — "Telemetria por Entidade"
+### PR 26: Sessão E — "Telemetria por Entidade"
 
 - [ ] Criar sistema de HUD Flutuante (tecla `H`) em ambiente 2D (CanvasLayer) projetado no 3D usando `camera.unproject_position()` (com checagem `is_position_behind` para evitar espelhamento).
 - [ ] Adicionar `VisibleOnScreenNotifier3D` aos cubos para desativar o cálculo do HUD 2D quando o objeto estiver fora do frustum.
@@ -71,13 +79,13 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 - [ ] Adicionar indicador visual de degradação ("Last seen: X.Xs ago") mudando de branco para vermelho antes do objeto entrar em culling forçado.
 - [ ] HUD Local: Separar o campo `confirmed_pos` do transform local durante o `_on_state()`, calculando o *Prediction Drift* apenas quando houver posição confirmada pelo servidor.
 
-### PR 26: Sessão F — "Drama" (Feedback de Netcode)
+### PR 27: Sessão F — "Drama" (Feedback de Netcode)
 
 - [ ] Implementar Snapback Visual: Disparar um `Tween` de 0.4s na emissão vermelha do material quando `snapback_received` for chamado.
 - [ ] Adicionar banner de texto temporário na tela (2.5s) informando os dados do snapback (sequência e total de inputs refeitos).
 - [ ] Implementar tecla `B` (Burst): Salvar a configuração atual de Netem e aplicar um caos temporal extremo por 4 segundos, restaurando automaticamente depois (com *guard* para ignorar no servidor).
 
-### PR 27: Sessão G — "Extras de Arquitetura"
+### PR 28: Sessão G — "Extras de Arquitetura"
 
 - [ ] Implementar Modo Spectator (tecla `V`): Forçar `_can_send_state = false`, trocar material do cubo local para branco translúcido, e atualizar rótulo do HUD para `[SPECTATOR]`.
 - [ ] Implementar Minimap 2D (tecla `Tab`): Criar painel customizado usando `_draw()` para renderizar pontos de entidades, vetores de velocidade (baseados no delta posicional) e raio do culling de rede.

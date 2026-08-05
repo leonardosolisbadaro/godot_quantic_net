@@ -10,7 +10,7 @@
 ## @updated 2026-08-02
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.4.0
+## @lastModifiedIn 0.5.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
@@ -28,13 +28,6 @@ signal snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, repl
 
 enum ConnectionState {DISCONNECTED, CONNECTING, AUTHENTICATING, CONNECTED, FAILED}
 
-const QNDTLSBootstrap = preload("res://addons/quantic_net/src/infrastructure/qn_dtls_bootstrap.gd")
-const QNWirePeer = preload("res://addons/quantic_net/src/infrastructure/qn_wire_peer.gd")
-const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
-const QNHostSession = preload("res://addons/quantic_net/src/use_cases/qn_host_session.gd")
-const QNClientSession = preload("res://addons/quantic_net/src/use_cases/qn_client_session.gd")
-const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
-const EntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
 const QNTelemetryAggregator = preload("res://addons/quantic_net/src/domain/qn_telemetry_aggregator.gd")
 
 const CH_STATE := 1
@@ -49,6 +42,7 @@ var _host_session: RefCounted = null # QNHostSession
 var _client_session: RefCounted = null # QNClientSession
 var _secret: String = ""
 var _is_server: bool = false
+var _netem_on: bool = false
 
 var _telemetry_map: Dictionary = {}
 
@@ -99,13 +93,14 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 		connection_failed_reason.emit(err_out[0])
 		return err_out[0]
 		
-	_wire = QNWirePeer.new(_enet, true)
+	_wire = QNWirePeer.new()
+	_wire.initialize(_enet, true)
 	_hook = QNNetHook.new()
 	_hook.base.multiplayer_peer = _wire
 	_hook.base.server_relay = true
 	
 	_host_session = QNHostSession.new()
-	_host_session.validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
+	_host_session.set_validator(preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new())
 	_host_session.snapback_requested.connect(_on_host_snapback_requested)
 	_host_session.packet_ready.connect(_on_host_packet_ready)
 	_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
@@ -146,20 +141,22 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	_secret = secret
 	_set_state(ConnectionState.CONNECTING)
 	var err_out := [OK]
-	_enet = QNDTLSBootstrap.join(ip, port, QNDTLSBootstrap.CERT_HOSTNAME, err_out)
+	_enet = QNDTLSBootstrap.join(ip, port, "quanticnet", err_out)
 	if _enet == null:
 		_set_state(ConnectionState.FAILED)
 		connection_failed_reason.emit(err_out[0])
 		return err_out[0]
 		
-	_wire = QNWirePeer.new(_enet)
+	_wire = QNWirePeer.new()
+	_wire.initialize(_enet, false)
 	if netem:
 		_wire.netem_enabled = true
 		
 	_hook = QNNetHook.new()
 	_hook.base.multiplayer_peer = _wire
 	
-	_client_session = QNClientSession.new(Callable(self, "_on_client_submit_packet"))
+	_client_session = QNClientSession.new()
+	_client_session.init(Callable(self, "_on_client_submit_packet"))
 	_client_session.pong_received.connect(func(rtt: float, off: float) -> void:
 		var my_id = _hook.base.get_unique_id()
 		if _telemetry_map.has(my_id):
@@ -324,15 +321,14 @@ func kick(peer_id: int) -> void:
 
 func toggle_netem() -> void:
 	if _wire:
-		_wire.netem_enabled = not _wire.netem_enabled
-		print("[QuanticNet] Netem: ", "ON" if _wire.netem_enabled else "OFF")
+		_netem_on = not _netem_on
+		_wire.set_netem_config(_netem_on, 10.0, 100, 20, 0.0) # default values for toggle
+		print("[QuanticNet] Netem: ", "ON" if _netem_on else "OFF")
 
 func set_netem_config(loss_pct: float, latency_ms: int, jitter_ms: int, dup_pct: float = 0.0) -> void:
 	if _wire:
-		_wire.netem_loss_pct = loss_pct
-		_wire.netem_latency_ms = latency_ms
-		_wire.netem_jitter_ms = jitter_ms
-		_wire.netem_dup_pct = dup_pct
+		_netem_on = true
+		_wire.set_netem_config(true, loss_pct, latency_ms, jitter_ms, dup_pct)
 
 func _exit_tree() -> void:
 	disconnect_net(true)

@@ -1,6 +1,6 @@
 # QuanticNet
 
-**Versão Atual:** `0.4.0` (Stable Foundation)
+**Versão Atual:** `0.5.0` (GDExtension Performance Core)
 
 O **QuanticNet** é um ecossistema de rede *plug-and-play* autoritativo construído para a **Godot Engine 4.7**. Focado estritamente na criação de jogos `3D Open World MMO` e arenas competitivas, ele resolve os desafios clássicos de infraestrutura de rede, despache e reconciliação sem acoplar a lógica de domínio aos nós visuais da Engine.
 

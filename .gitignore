@@ -5,3 +5,9 @@
 /addons/gut/
 /GodotEngine_extracted/
 /quantic_net/
+
+# C++ Build outputs
+*.a
+*.o
+*.obj
+.sconsign.dblite

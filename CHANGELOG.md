@@ -25,6 +25,19 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - ...
 
+## [0.5.0] - 2026-08-05
+
+### Adicionado
+
+- **GDExtension (PR 24):** Setup da infraestrutura de compilação em C++ via SCons (`SConstruct`), integrando o Godot-CPP e configurando bindings para registro de classes.
+- **Camada de Transporte Nativa (PR 24):** Implementação de `QNWirePeer`, `QNNetHook` e `QNDTLSBootstrap` integralmente em C++, permitindo manipulação de bytes no nível da engine sem o gargalo do GDScript.
+- **Lógica e Bufferização em C++ (PR 24):** Migração das regras de negócio pesadas, incluindo `QNClockSync`, `QNLossTracker`, `QNInterpBuffer`, `QNInputBuffer`, `QNPriorityAccumulator`, e os Serializadores (`QNSerializer`, `QNDeltaSerializer`) para o *Performance Core*.
+- **Orquestração de Sessões C++ (PR 24):** Substituição dos nós GDScript por `QNClientSession` e `QNHostSession` nativos, operando em C++, reduzindo drasticamente a sobrecarga de Ticking.
+
+### Modificado
+
+- **API Autoload (PR 24):** Refatoração da casca GDScript (`quantic_net_autoload.gd`) para atuar puramente como proxy de integração "Plug and Play" com a Godot Engine, despachando chamadas e eventos diretamente para as instâncias instanciadas do GDExtension.
+
 ## [0.4.0] - 2026-08-04
 
 ### Adicionado
