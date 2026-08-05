@@ -71,13 +71,8 @@ var _fps_max := 0
 # Array contendo instâncias de perfis de rede (Tick Rates e Culling).
 # Isso demonstra o "Hybrid Ticking" do QuanticNet, onde cada entidade
 # pode ser atualizada em frequências distintas, priorizando a banda.
-var _profiles = [
-	QuanticNet.EntityProfile.new(20.0, 5.0, 50.0), # 1: Padrão (20Hz)
-	QuanticNet.EntityProfile.new(10.0, 3.0, 30.0), # 2: Intermediário (10Hz)
-	QuanticNet.EntityProfile.new(5.0, 1.0, 10.0), # 3: Prop (5Hz) - Economiza muita banda
-	QuanticNet.EntityProfile.new(1.0, 0.5, 5.0), # 4: Muito Lento (1Hz) - Props inertes
-	QuanticNet.EntityProfile.new(60.0, 10.0, 100.0) # 5: Extremo (60Hz) - Para combate rápido
-]
+var _profiles = []
+
 var _current_profile_idx = 0
 var _next_prop_id = 1000
 
@@ -86,7 +81,19 @@ func _notification(what: int) -> void:
 		QuanticNet.disconnect_net(true)
 		get_tree().quit()
 
+func _create_profile(hz: float, priority: float, cull: float) -> QNEntityProfile:
+	var p = QNEntityProfile.new()
+	p.init(hz, priority, cull)
+	return p
+
 func _ready() -> void:
+	_profiles = [
+		_create_profile(20.0, 5.0, 50.0), # 1: Padrão (20Hz)
+		_create_profile(10.0, 3.0, 30.0), # 2: Intermediário (10Hz)
+		_create_profile(5.0, 1.0, 10.0), # 3: Prop (5Hz) - Economiza muita banda
+		_create_profile(1.0, 0.5, 5.0), # 4: Muito Lento (1Hz) - Props inertes
+		_create_profile(60.0, 10.0, 100.0) # 5: Extremo (60Hz) - Para combate rápido
+	]
 	Engine.max_fps = 60
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
 	
@@ -536,8 +543,8 @@ func _process(_delta: float) -> void:
 		
 		var t2 = QuanticNet.get_telemetry(my_id)
 		if t2:
-			var curr_rtt = t2.get_avg_rtt()
-			var curr_loss = t2.get_avg_loss()
+			var curr_rtt = t2.get_current_rtt()
+			var curr_loss = t2.get_current_loss()
 			var min_rtt = t2.get_min_rtt() if t2.get_min_rtt() != INF else 0.0
 			var max_rtt = t2.get_max_rtt() if t2.get_max_rtt() != -INF else 0.0
 			var max_loss = t2.get_max_loss() if t2.get_max_loss() != -INF else 0.0

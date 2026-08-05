@@ -34,22 +34,20 @@ func push_rtt(ms: float) -> void:
 	if _rtt_samples.size() > _window_size:
 		_rtt_samples.pop_front()
 	
-	_rtt_min = INF
-	_rtt_max = -INF
-	for v in _rtt_samples:
-		if v < _rtt_min: _rtt_min = v
-		if v > _rtt_max: _rtt_max = v
+	if ms < _rtt_min: _rtt_min = ms
+	if ms > _rtt_max: _rtt_max = ms
 
 func push_loss(pct: float) -> void:
 	_loss_samples.append(pct)
 	if _loss_samples.size() > _window_size:
 		_loss_samples.pop_front()
 	
-	_loss_min = INF
-	_loss_max = -INF
-	for v in _loss_samples:
-		if v < _loss_min: _loss_min = v
-		if v > _loss_max: _loss_max = v
+	if pct < _loss_min: _loss_min = pct
+	if pct > _loss_max: _loss_max = pct
+
+func get_current_rtt() -> float:
+	if _rtt_samples.is_empty(): return 0.0
+	return _rtt_samples.back()
 
 func get_avg_rtt() -> float:
 	if _rtt_samples.is_empty(): return 0.0
@@ -64,6 +62,10 @@ func get_max_rtt() -> float:
 func get_min_rtt() -> float:
 	if _rtt_samples.is_empty(): return 0.0
 	return _rtt_min
+
+func get_current_loss() -> float:
+	if _loss_samples.is_empty(): return 0.0
+	return _loss_samples.back()
 
 func get_avg_loss() -> float:
 	if _loss_samples.is_empty(): return 0.0

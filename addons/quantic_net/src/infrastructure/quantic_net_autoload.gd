@@ -57,8 +57,8 @@ func is_server() -> bool:
 
 func get_unique_id() -> int:
 	if _is_server: return 1
-	if _hook != null and _hook.base != null:
-		return _hook.base.get_unique_id()
+	if _hook != null and _hook.get_base() != null:
+		return _hook.get_base().get_unique_id()
 	return 0
 
 func _set_state(s: int) -> void:
@@ -96,8 +96,8 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 	_wire = QNWirePeer.new()
 	_wire.initialize(_enet, true)
 	_hook = QNNetHook.new()
-	_hook.base.multiplayer_peer = _wire
-	_hook.base.server_relay = true
+	_hook.get_base().multiplayer_peer = _wire
+	_hook.get_base().server_relay = true
 	
 	_host_session = QNHostSession.new()
 	_host_session.set_validator(preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new())
@@ -106,13 +106,13 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32)
 	_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
 		print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
 		if s >= 5:
-			_hook.base.disconnect_peer(id)
+			_hook.get_base().disconnect_peer(id)
 	)
 		
 	_hook.custom_packet.connect(_on_custom_packet)
-	_hook.base.auth_timeout = 3.0
-	_hook.base.allow_object_decoding = false
-	_hook.base.auth_callback = Callable(self, "_on_auth_callback")
+	_hook.get_base().auth_timeout = 3.0
+	_hook.get_base().allow_object_decoding = false
+	_hook.get_base().auth_callback = Callable(self, "_on_auth_callback")
 	_hook.peer_connected.connect(func(id: int) -> void:
 		if _is_server:
 			print("HOOK PEER CONNECTED: ", id)
@@ -150,15 +150,15 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	_wire = QNWirePeer.new()
 	_wire.initialize(_enet, false)
 	if netem:
-		_wire.netem_enabled = true
+		_wire.set_netem_config(true, 0.1, 150, 50, 0.0)
 		
 	_hook = QNNetHook.new()
-	_hook.base.multiplayer_peer = _wire
+	_hook.get_base().multiplayer_peer = _wire
 	
 	_client_session = QNClientSession.new()
 	_client_session.init(Callable(self, "_on_client_submit_packet"))
 	_client_session.pong_received.connect(func(rtt: float, off: float) -> void:
-		var my_id = _hook.base.get_unique_id()
+		var my_id = _hook.get_base().get_unique_id()
 		if _telemetry_map.has(my_id):
 			_telemetry_map[my_id].push_rtt(rtt)
 		pong_received.emit(rtt, off)
@@ -168,11 +168,11 @@ func join(ip: String, port: int, secret: String, netem: bool = false) -> int:
 	_client_session.snapback_received.connect(func(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
 		snapback_received.emit(seq, pos, rot, reason, replay))
 		
-	_hook.base.auth_callback = _on_client_auth_callback
+	_hook.get_base().auth_callback = _on_client_auth_callback
 	
 	_hook.custom_packet.connect(_on_custom_packet)
 	_hook.connected_to_server.connect(func() -> void:
-		var my_id: int = _hook.base.get_unique_id()
+		var my_id: int = _hook.get_base().get_unique_id()
 		_client_session.set_local_id(my_id)
 		_telemetry_map[my_id] = QNTelemetryAggregator.new()
 		_set_state(ConnectionState.CONNECTED)
@@ -203,9 +203,9 @@ func _physics_process(delta: float) -> void:
 			var s = peers[0].get_state()
 			if s == ENetPacketPeer.STATE_CONNECTED and _state == ConnectionState.CONNECTING:
 				_set_state(ConnectionState.AUTHENTICATING)
-				var err = _hook.base.send_auth(SERVER_PEER_ID, _secret.to_utf8_buffer())
+				var err = _hook.get_base().send_auth(SERVER_PEER_ID, _secret.to_utf8_buffer())
 				print("CLIENT SEND AUTH RESULT: ", err)
-				# _hook.base.complete_auth(SERVER_PEER_ID)
+				# _hook.get_base().complete_auth(SERVER_PEER_ID)
 				# Wait for the server to reply with the assigned ID in _on_client_auth_callback
 
 func _on_auth_callback(id: int, data: PackedByteArray) -> void:
@@ -222,10 +222,10 @@ func _on_server_auth_callback(id: int, data: PackedByteArray) -> void:
 		var b = PackedByteArray()
 		b.resize(4)
 		b.encode_u32(0, id)
-		_hook.base.send_auth(id, b)
-		_hook.base.complete_auth(id)
+		_hook.get_base().send_auth(id, b)
+		_hook.get_base().complete_auth(id)
 	else:
-		_hook.base.disconnect_peer(id)
+		_hook.get_base().disconnect_peer(id)
 
 func _on_client_auth_callback(id: int, data: PackedByteArray) -> void:
 	print("CLIENT AUTH CALLBACK TRIGGERED: ", id)
@@ -233,7 +233,7 @@ func _on_client_auth_callback(id: int, data: PackedByteArray) -> void:
 		var assigned_id = data.decode_u32(0)
 		_wire.set_client_id(assigned_id)
 		print("CLIENT ASSIGNED ID: ", assigned_id)
-	_hook.base.complete_auth(id)
+	_hook.get_base().complete_auth(id)
 
 func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -> void:
 	if _is_server:
@@ -249,7 +249,7 @@ func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -
 			else:
 				_client_session.handle_packet(data, Time.get_ticks_msec())
 				if data[0] == 4: # TYPE_SNAPSHOT
-					var my_id = _hook.base.get_unique_id()
+					var my_id = _hook.get_base().get_unique_id()
 					if _telemetry_map.has(my_id):
 						_telemetry_map[my_id].push_loss(_client_session.loss_of(SERVER_PEER_ID))
 
@@ -259,7 +259,7 @@ func _on_host_snapback_requested(peer_id: int, pkt: PackedByteArray) -> void:
 	_hook.send_custom(peer_id, body, CH_STATE, TRANSFER_UNRELIABLE)
 
 func _on_host_packet_ready(peer_id: int, data: PackedByteArray) -> void:
-	if not _hook.base.get_peers().has(peer_id):
+	if not _hook.get_base().get_peers().has(peer_id):
 		return
 	var pkt := PackedByteArray([4]) # 4 = TYPE_SNAPSHOT
 	pkt.append_array(data)
@@ -300,16 +300,19 @@ func unregister_entity(entity_id: int) -> void:
 	if _is_server and _host_session:
 		_host_session.unregister_entity(entity_id)
 		
-		# Dispara TYPE_PEER_LEFT para todos os clientes
-		var pkt := PackedByteArray([QNSerializer.TYPE_PEER_LEFT])
-		var id_bytes := PackedByteArray()
-		id_bytes.resize(4)
-		id_bytes.encode_u32(0, entity_id)
-		pkt.append_array(id_bytes)
-		
-		for peer_id in _hook.base.get_peers():
-			if peer_id != 1:
-				_hook.send_custom(peer_id, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+		# Dispara TYPE_PEER_LEFT apenas para clientes reais (id < 1000)
+		# Não inundar a rede mandando exclusão de centenas de props ao mesmo tempo,
+		# pois a ausência deles já provoca culling natural no cliente.
+		if entity_id < 1000:
+			var pkt := PackedByteArray([QNSerializer.TYPE_PEER_LEFT])
+			var id_bytes := PackedByteArray()
+			id_bytes.resize(4)
+			id_bytes.encode_u32(0, entity_id)
+			pkt.append_array(id_bytes)
+			
+			for peer_id in _hook.get_base().get_peers():
+				if peer_id != 1:
+					_hook.send_custom(peer_id, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
 
 func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 	if _is_server and _host_session:
@@ -317,7 +320,7 @@ func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 
 func kick(peer_id: int) -> void:
 	if _is_server and _hook:
-		_hook.base.disconnect_peer(peer_id)
+		_hook.get_base().disconnect_peer(peer_id)
 
 func toggle_netem() -> void:
 	if _wire:

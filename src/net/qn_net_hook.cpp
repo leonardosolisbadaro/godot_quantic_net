@@ -22,6 +22,7 @@ QNNetHook::~QNNetHook() {
 
 void QNNetHook::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("close"), &QNNetHook::close);
+	ClassDB::bind_method(D_METHOD("get_base"), &QNNetHook::get_base);
 	ClassDB::bind_method(D_METHOD("set_hooks", "outgoing_rpc", "incoming_packet", "outgoing_packet", "config_add"), &QNNetHook::set_hooks);
 	ClassDB::bind_method(D_METHOD("send_custom", "to_peer", "data", "channel", "mode"), &QNNetHook::send_custom, DEFVAL(1), DEFVAL(MultiplayerPeer::TRANSFER_MODE_UNRELIABLE));
 	
@@ -47,6 +48,10 @@ void QNNetHook::close() {
 	on_incoming_packet = Callable();
 	on_outgoing_packet = Callable();
 	on_config_add = Callable();
+}
+
+Ref<SceneMultiplayer> QNNetHook::get_base() const {
+	return base;
 }
 
 void QNNetHook::set_hooks(Callable p_outgoing_rpc, Callable p_incoming_packet, Callable p_outgoing_packet, Callable p_config_add) {

@@ -35,6 +35,7 @@ public:
 	~QNNetHook();
 
 	void close();
+	Ref<SceneMultiplayer> get_base() const;
 	void set_hooks(Callable p_outgoing_rpc, Callable p_incoming_packet, Callable p_outgoing_packet, Callable p_config_add);
 
 	Error send_custom(int to_peer, PackedByteArray data, int channel = 1, int mode = MultiplayerPeer::TRANSFER_MODE_UNRELIABLE);
