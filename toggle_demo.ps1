@@ -28,7 +28,8 @@ if ($runningInstances) {
     Start-Process -FilePath $godotExe -ArgumentList "--path $cwd -- --client" -WorkingDirectory $cwd
     
     # Start Client 2 (With Netem)
-    Start-Process -FilePath $godotExe -ArgumentList "--path $cwd -- --client --netem" -WorkingDirectory $cwd
+    # Start-Process -FilePath $godotExe -ArgumentList "--path $cwd -- --client --netem" -WorkingDirectory $cwd
+    Start-Process -FilePath $godotExe -ArgumentList "--path $cwd -- --client" -WorkingDirectory $cwd
     
     Write-Host "Demo iniciada com sucesso! Para fechar as janelas, rode este script novamente." -ForegroundColor Green
 }

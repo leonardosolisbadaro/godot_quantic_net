@@ -378,8 +378,10 @@ func toggle_netem() -> void:
 
 func set_netem_config(loss_pct: float, latency_ms: int, jitter_ms: int, dup_pct: float = 0.0) -> void:
 	if _wire:
-		_netem_on = true
-		_wire.set_netem_config(true, loss_pct / 100.0 if loss_pct > 1.0 else loss_pct, latency_ms, jitter_ms, dup_pct)
+		# Se todos os parâmetros forem 0, interpretamos que o Netem deve ser completamente desligado.
+		var should_enable = (loss_pct > 0.0 or latency_ms > 0 or jitter_ms > 0 or dup_pct > 0.0)
+		_netem_on = should_enable
+		_wire.set_netem_config(should_enable, loss_pct / 100.0 if loss_pct > 1.0 else loss_pct, latency_ms, jitter_ms, dup_pct)
 
 func _exit_tree() -> void:
 	disconnect_net(true)

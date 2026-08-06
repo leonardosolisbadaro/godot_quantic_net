@@ -90,21 +90,30 @@ Implementação de reconciliação de tempo para hit-registration preciso em jog
 - [x] Especificar lógica de captura temporal cíclica circular retrocedendo no máximo até 1,5s no passado do servidor.
 - [x] Integrar no Autoload a função `raycast_past(origin, direction, timestamp)`, expondo-a para que jogos de FPS construam seu HitScan determinístico compensando pings de até 250ms perfeitamente.
 
-### PR 27 — Sincronização de Física Rígida (Networked Physics)
+### PR 27 — Reconstrução da Demo (Bare Metal Playground)
+
+Refatoração completa da demonstração `demo_main.gd` para servir como um ambiente educacional e descritivo (Zero RPCs para gameplay). A demo comprovará a viabilidade de um MMO simulando de forma rústica predição, interpolação, perfis de rede dinâmicos e combate autoritativo.
+
+- [x] Fase 1: **Setup e UI de Diagnóstico**. Recriar a HUD (System e Network Profiler) e atalhos em tempo real (Alternar FPS, Netem, Auto-Move).
+- [x] Fase 2: **Conexão e Topologia Automática**. Implementar host/join com suporte a DTLS e Netem. Conectar os sinais vitais do Autoload (`peer_joined`, `state_received`, `snapback_received`, etc.).
+- [ ] Fase 3: **Entidades e Perfis Híbridos**. Definir a matriz de `QNEntityProfile` para Players (60Hz), NPCs (20Hz), Props (10Hz) e Projéteis (60Hz).
+- [ ] Fase 4: **Client-Side Prediction e Culling Visual**. Movimentação local instantânea e envio de estado (`submit_state`). Ocultar avatares remotos fora do raio da área de interesse visual (AoI mockup).
+- [ ] Fase 5: **Snapshot Interpolation e Movimento Autoritativo**. Servidor move props de forma matemática. Cliente suaviza as posições remotas consumindo o buffer temporal (`remote_state`).
+- [ ] Fase 6: **Combate Zero-RPC (Bitmask & custom_id)**. Cliente empacota inputs de tiro (Hitscan de laser e Projétil físico) no `custom_id` do snapshot, descartando chamadas RPC.
+- [ ] Fase 7: **Resolução de Conflitos e Hit-Registration**. Servidor processa balística espacial (`query_sphere`), emitindo eventos de acerto no próprio payload de estado. Cliente reage a snapbacks.
+
+### PR 28 — Sincronização de Física Rígida (Networked Physics)
 
 - [ ] TDD: Expansão do codec `QNSerializer` ou `BitBuffer` para suportar empacotamento rigoroso de *Linear Velocity* e *Angular Velocity*.
 - [ ] Criar constante no Domain: `NetProfile.RIGID_BODY`.
 - [ ] Alterar `QNClientSession` e `QNHostSession` para gerenciar repousos (Sleeping states): economizar 100% de banda de entidades físicas quando suas energias cinéticas zerarem e notificar apenas a eclosão inicial do pulso.
 
-### PR 28 — Testes de Escalabilidade Massiva
+### PR 29 — Testes de Escalabilidade Massiva
 
 - [ ] Criar nova suíte de testes de integração Headless simulando a conexão concorrente de dezenas de `QNClientSessions` e dezenas de entidades.
 - [ ] Validar consumo de banda em *Bytes per Second* em cima do `PriorityAccumulator`. Comprovar matematicamente que o teto de *MTU* é respeitado independente da saturação.
 
-### PR 29 — Separação Visual e Demos (Sessões de UI Fluff)
+### PR 30 — Separação Visual e Demos (Sessões de UI Fluff)
 
 - [ ] Desacoplar quaisquer cenários visuais pesados. Manter apenas um script base estéril "Smoke Test".
-- [ ] Iniciar um repositório secundário (ex: `quantic-net-demos`) para ilustrar:
-    - **HUD Flutuante (Ex-PR 26)**: (Atenção: Projetar 1600 props em 2D por frame `unproject_position` causará estrangulamento da CPU no cliente. Deve ser limitado aos *Players* reais).
-    - **Feedback Visual (Snapback, Logs)**: Adicionar tweens vermelhos e banners.
-    - **Modo Spectator & Minimap**.
+- [ ] Iniciar um repositório secundário (ex: `quantic-net-demos`) para ilustrar mecânicas complexas em instâncias separadas.
