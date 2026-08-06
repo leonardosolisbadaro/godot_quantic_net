@@ -165,14 +165,14 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 			continue;
 		}
 		
-		Dictionary result = validator->call("validate", peer_id, pos, rot, client_ts);
+		Dictionary result = validator->call("validate", peer_id, pos, rot, now);
 		String action = result.get("action", "");
 		
 		if (action == "accept") {
 			peer_st["pos"] = result["pos"];
 			peer_st["rot"] = result["rot"];
 			peer_st["seq"] = seq;
-			peer_st["ts"] = client_ts;
+			peer_st["ts"] = now;
 			peer_st["custom_id"] = custom_id;
 			peer_st["has_state"] = true;
 			_registry[peer_id] = peer_st;
@@ -181,7 +181,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 			peer_st["pos"] = result["pos"];
 			peer_st["rot"] = result["rot"];
 			peer_st["seq"] = seq;
-			peer_st["ts"] = client_ts;
+			peer_st["ts"] = now;
 			peer_st["custom_id"] = custom_id;
 			peer_st["has_state"] = true;
 			_registry[peer_id] = peer_st;
@@ -213,7 +213,7 @@ void QNHostSession::tick_broadcast(int now) {
 			ws["pos"] = st["pos"];
 			ws["rot"] = st["rot"];
 			ws["custom_id"] = st.get("custom_id", 0);
-			ws["ts"] = st["ts"];
+			ws["ts"] = now;
 			
 			Ref<QNEntityProfile> profile = st.get("profile", Variant());
 			if (profile.is_valid()) {

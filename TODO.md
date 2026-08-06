@@ -96,10 +96,10 @@ Refatoração completa da demonstração `demo_main.gd` para servir como um ambi
 
 - [x] Fase 1: **Setup e UI de Diagnóstico**. Recriar a HUD (System e Network Profiler) e atalhos em tempo real (Alternar FPS, Netem, Auto-Move).
 - [x] Fase 2: **Conexão e Topologia Automática**. Implementar host/join com suporte a DTLS e Netem. Conectar os sinais vitais do Autoload (`peer_joined`, `state_received`, `snapback_received`, etc.).
-- [ ] Fase 3: **Entidades e Perfis Híbridos**. Definir a matriz de `QNEntityProfile` para Players (60Hz), NPCs (20Hz), Props (10Hz) e Projéteis (60Hz).
-- [ ] Fase 4: **Client-Side Prediction e Culling Visual**. Movimentação local instantânea e envio de estado (`submit_state`). Ocultar avatares remotos fora do raio da área de interesse visual (AoI mockup).
-- [ ] Fase 5: **Snapshot Interpolation e Movimento Autoritativo**. Servidor move props de forma matemática. Cliente suaviza as posições remotas consumindo o buffer temporal (`remote_state`).
-- [ ] Fase 6: **Combate Zero-RPC (Bitmask & custom_id)**. Cliente empacota inputs de tiro (Hitscan de laser e Projétil físico) no `custom_id` do snapshot, descartando chamadas RPC.
+- [x] Fase 3: **Entidades e Perfis Híbridos**. Definir a matriz de `QNEntityProfile` para Players (60Hz), NPCs (20Hz), Props (10Hz) e Projéteis (60Hz).
+- [x] Fase 4: **Client-Side Prediction e Culling Visual**. Movimentação local instantânea e envio de estado (`submit_state`). Ocultar avatares remotos fora do raio da área de interesse visual (AoI mockup).
+- [x] Fase 5: **Snapshot Interpolation e Movimento Autoritativo**. Servidor move props de forma matemática. Cliente suaviza as posições remotas consumindo o buffer temporal (`remote_state`).
+- [x] Fase 6: **Combate Zero-RPC (Bitmask & custom_id)**. Cliente empacota inputs de tiro (Hitscan de laser e Projétil físico) no `custom_id` do snapshot, descartando chamadas RPC.
 - [ ] Fase 7: **Resolução de Conflitos e Hit-Registration**. Servidor processa balística espacial (`query_sphere`), emitindo eventos de acerto no próprio payload de estado. Cliente reage a snapbacks.
 
 ### PR 28 — Sincronização de Física Rígida (Networked Physics)

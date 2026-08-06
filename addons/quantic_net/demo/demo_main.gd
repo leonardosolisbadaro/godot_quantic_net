@@ -78,6 +78,14 @@ var _network_config = {
 var _is_server: bool = false
 var _my_id: int = 0
 
+# ==============================================================================
+# PERFIS DE ENTIDADES (FASE 3)
+# ==============================================================================
+var _profile_player: QNEntityProfile
+var _profile_npc: QNEntityProfile
+var _profile_prop: QNEntityProfile
+var _profile_projectile: QNEntityProfile
+
 # ------------------------------------------------------------------------------
 # RASTREAMENTO E HISTÓRICOS DE REDE (ALIMENTADO VIA SINAIS)
 # ------------------------------------------------------------------------------
@@ -98,8 +106,16 @@ var _loss_max: float = 0.0
 # ==============================================================================
 # VARIÁVEIS DE ESTADO DA INTERFACE E SISTEMA
 # ==============================================================================
+var _world_root: Node3D
+var _entities_visuals: Dictionary = {}
+var _local_pos: Vector3 = Vector3.ZERO
+var _auto_move_active: bool = false
+var _auto_move_time: float = 0.0
+var _server_props: Array = [1001, 1002, 1003] # [Fase 5] Props
+var _server_props_time: float = 0.0
 var _status_lbl: Label
 var _reconnect_btn: Button
+var _last_shot_time: int = 0 # [Fase 6] Cooldown de tiros
 
 # Labels do System Profiler (CPU, RAM, GPU, Engine)
 var _diag_lbl_fps: Label
@@ -187,7 +203,21 @@ func _ready() -> void:
 		
 	_is_server = is_server
 		
-	# 4. Conectando os Sinais Vitais (Event-Driven Architecture)
+	# 4. Criando a Matriz de Perfis (Fase 3)
+	# Estes Value Objects vão para as entranhas do C++ orientar a frequência da rede.
+	_profile_player = QNEntityProfile.new()
+	_profile_player.init(60.0, 2.0, 100.0) # 60Hz
+	
+	_profile_npc = QNEntityProfile.new()
+	_profile_npc.init(20.0, 1.0, 50.0) # 20Hz
+	
+	_profile_prop = QNEntityProfile.new()
+	_profile_prop.init(10.0, 0.5, 30.0) # 10Hz
+	
+	_profile_projectile = QNEntityProfile.new()
+	_profile_projectile.init(60.0, 3.0, 150.0) # 60Hz (Prioridade Extrema)
+		
+	# 5. Conectando os Sinais Vitais (Event-Driven Architecture)
 	# O QuanticNet emite sinais limpos quando eventos ocorrem nas entranhas do C++.
 	QuanticNet.connection_state_changed.connect(_on_conn_state)
 	QuanticNet.peer_joined.connect(_on_peer_joined)
@@ -199,10 +229,21 @@ func _ready() -> void:
 	# 5. Configura cenário 3D visual mínimo para que a tela não fique cinza.
 	_setup_scene()
 	
-	# 6. Iniciando os Motores (Bootstrapping do ENet + DTLS)
+	# 6. Força o FPS cravado inicial para o atalho F funcionar corretamente
+	Engine.max_fps = TARGET_FPS
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
+	
+	# 7. Iniciando os Motores (Bootstrapping do ENet + DTLS)
 	if _is_server:
 		print("[DEMO] Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
 		QuanticNet.host(PORT, SECRET, "127.0.0.1", MAX_PEERS, _network_config)
+		
+		# O Servidor registra a si mesmo (ID 1)
+		QuanticNet.register_entity(1, true, true, _profile_player)
+		
+		# [Fase 5] Servidor instanciando Props Autoritativos
+		for prop_id in _server_props:
+			QuanticNet.register_entity(prop_id, false, true, _profile_prop)
 	else:
 		print("[DEMO] Iniciando CLIENTE QuanticNet...")
 		QuanticNet.join("127.0.0.1", PORT, SECRET, use_netem, _network_config)
@@ -243,6 +284,9 @@ func _setup_scene() -> void:
 	plane.material = mat
 	floor_mesh.mesh = plane
 	add_child(floor_mesh)
+	
+	_world_root = Node3D.new()
+	add_child(_world_root)
 
 
 # ==============================================================================
@@ -271,8 +315,10 @@ func _setup_ui() -> void:
 	
 	var vbox_shortcuts = VBoxContainer.new()
 	var shortcuts = [
-		"CONTROLES IN-GAME (Fase 2):",
-		"Setas/WASD : Mover (Fase 4)",
+		"CONTROLES IN-GAME (Fase 4):",
+		"F1         : Resetar System Metrics",
+		"F2         : Resetar Network Metrics",
+		"Setas/WASD : Mover (CSP)",
 		"Enter      : Auto-Move On/Off",
 		"F          : Destravar FPS / V-Sync",
 		"N          : Ativar/Desativar NETEM"
@@ -354,17 +400,69 @@ func _setup_ui() -> void:
 func _physics_process(delta: float) -> void:
 	# O _physics_process é síncrono e cravado (60Hz default). 
 	# Toda a matemática de movimentação, predição e rede pesada ocorre aqui.
-	# Fase 2: O QuanticNet é hiper-otimizado e não gera tráfego isolado de PING. 
-	# O cálculo de RTT pega carona ("Piggybacking") no cabeçalho dos pacotes 
-	# de estado das entidades (Players). Como na Fase 2 ainda não temos entidades, 
-	# a rede ficaria muda. Para forçar o Profiler a acordar, disparamos um 
-	# Vector3.ZERO fantasma periodicamente.
+	if QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		# [Fase 5] Servidor move Props Autoritativamente
+		_server_props_time += delta
+		for i in range(_server_props.size()):
+			var prop_id = _server_props[i]
+			var offset_time = _server_props_time + (i * 2.0)
+			var pos = Vector3(sin(offset_time) * 4.0, 0, cos(offset_time) * 4.0 + (i * 3.0))
+			QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
+			_update_visual(prop_id, pos, false) # Atualiza o visual do próprio servidor
+			
 	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-		QuanticNet.submit_state(Vector3.ZERO, Vector3.ZERO, 0, delta)
+		var speed = _network_config["max_speed"]
+		var input_dir = Vector3.ZERO
+		
+		if not _auto_move_active:
+			if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): input_dir.z -= 1
+			if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): input_dir.z += 1
+			if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): input_dir.x -= 1
+			if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): input_dir.x += 1
+		else:
+			_auto_move_time += delta
+			input_dir = Vector3(sin(_auto_move_time * 2.0), 0, cos(_auto_move_time * 2.0))
+			
+		if input_dir.length_squared() > 0:
+			input_dir = input_dir.normalized()
+			
+		# [Fase 4] Client-Side Prediction: Movimenta instantaneamente o boneco local
+		_local_pos += input_dir * speed * delta
+		_update_visual(QuanticNet.get_unique_id(), _local_pos, true)
+		
+		# [Fase 6] Combate Zero-RPC
+		var custom_input = 0
+		var now = Time.get_ticks_msec()
+		if now - _last_shot_time > 200:
+			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+				custom_input = 1 # Laser Hitscan
+				_last_shot_time = now
+				_spawn_laser(_local_pos, Color.AQUA)
+			elif Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+				custom_input = 2 # Projétil Físico
+				_last_shot_time = now
+				_spawn_laser(_local_pos, Color.ORANGE)
+		
+		# Envia a predição otimista de forma cravada para a Engine C++ assinar e rotear
+		QuanticNet.submit_state(_local_pos, Vector3.ZERO, custom_input, delta)
 
 func _process(_delta: float) -> void:
 	# O _process é assíncrono à física e é atrelado apenas à Placa de Vídeo (Taxa de atualização do Monitor).
 	# Usamos ele exclusivamente para ler métricas visuais cruas, evitando poluir o Thread de física.
+	# [Fase 5] Snapshot Interpolation (Cliente suavizando os Props e Remotos)
+	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		for id in _entities_visuals.keys():
+			if id != QuanticNet.get_unique_id():
+				var interp_state = QuanticNet.remote_state(id)
+				if not interp_state.is_empty():
+					var visual = _entities_visuals[id]
+					visual.position = interp_state.get("pos", visual.position)
+					
+					# Culling Visual
+					var dist = _local_pos.distance_to(visual.position)
+					var rad = _profile_player.get_spatial_culling_radius() if id < 1000 else _profile_prop.get_spatial_culling_radius()
+					visual.visible = dist <= rad
+					
 	# Histórico de FPS
 	var current_fps = Engine.get_frames_per_second()
 	if current_fps > 0:
@@ -493,8 +591,27 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 			_diag_lbl_loss.text = "Packet Loss: Aguardando..."
 			_diag_lbl_offset.text = "Clock Offset: Aguardando..."
 			
-		var total_peers = QuanticNet.get_registry().size()
-		_diag_lbl_peers.text = "Entidades Registradas: %d" % total_peers
+		var total_entities = 0
+		var count_peers = 0
+		var count_props = 0
+		
+		if QuanticNet.is_server():
+			var registry = QuanticNet.get_registry()
+			total_entities = registry.size()
+			for k in registry:
+				if registry[k].get("is_peer", false):
+					count_peers += 1
+				else:
+					count_props += 1
+		else:
+			total_entities = _entities_visuals.size()
+			for id in _entities_visuals.keys():
+				if id < 1000:
+					count_peers += 1
+				else:
+					count_props += 1
+				
+		_diag_lbl_peers.text = "Entities: %d (Peers: %d | Props: %d)" % [total_entities, count_peers, count_props]
 
 # ==============================================================================
 # SINAIS DE REDE (EVENT-DRIVEN CALLBACKS)
@@ -535,14 +652,70 @@ func _on_pong_received(rtt: float, offset: float) -> void:
 
 func _on_peer_joined(peer_id: int) -> void:
 	print("[DEMO] Peer Joined: %d" % peer_id)
+	if _is_server:
+		QuanticNet.register_entity(peer_id, true, true, _profile_player)
 
 func _on_peer_left(peer_id: int) -> void:
 	print("[DEMO] Peer Left: %d" % peer_id)
+	if _is_server:
+		QuanticNet.unregister_entity(peer_id)
+		
+	if _entities_visuals.has(peer_id):
+		var v = _entities_visuals[peer_id]
+		v.queue_free()
+		_entities_visuals.erase(peer_id)
+		
+func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
+	if not _entities_visuals.has(id):
+		var mesh_inst = MeshInstance3D.new()
+		var box = BoxMesh.new()
+		box.size = Vector3(1, 2, 1) if id < 1000 else Vector3(1, 1, 1)
+		mesh_inst.mesh = box
+		var mat = StandardMaterial3D.new()
+		if is_local:
+			mat.albedo_color = Color.GREEN
+		elif id < 1000:
+			mat.albedo_color = Color.RED
+		else:
+			mat.albedo_color = Color.YELLOW
+		mesh_inst.material_override = mat
+		_world_root.add_child(mesh_inst)
+		_entities_visuals[id] = mesh_inst
+		
+	var visual = _entities_visuals[id]
+	if is_local or QuanticNet.is_server():
+		visual.position = pos
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
-	# Fase 2 ignora processamento espacial visual, mas o sinal já está 
-	# pronto para quando as entidades forem criadas nas fases seguintes.
-	pass
+	# Recebemos o Snapshot do Servidor confirmando onde o inimigo (ou nó mesmo) está.
+	# Ignoramos a nós mesmos por ora porque usamos predição instantânea local.
+	if owner != QuanticNet.get_unique_id():
+		if not _entities_visuals.has(owner):
+			_update_visual(owner, pos, false)
+			
+		# [Fase 6] Disparo propagado via C++
+		if custom == 1:
+			_spawn_laser(pos, Color.AQUA)
+		elif custom == 2:
+			_spawn_laser(pos, Color.ORANGE)
+
+func _spawn_laser(start_pos: Vector3, color: Color) -> void:
+	var mesh = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	box.size = Vector3(0.2, 2.0, 0.2)
+	mesh.mesh = box
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.emission_enabled = true
+	mat.emission = color
+	mat.emission_energy_multiplier = 5.0
+	mesh.material_override = mat
+	mesh.position = start_pos + Vector3(0, 2, 0)
+	_world_root.add_child(mesh)
+	
+	var tween = get_tree().create_tween()
+	tween.tween_property(mesh, "position", mesh.position + Vector3(0, 10, 0), 0.5)
+	tween.tween_callback(mesh.queue_free)
 
 func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
 	# O Snapback é o corretivo severo do Servidor (Reconciliação). 
@@ -566,12 +739,32 @@ func _unhandled_input(event: InputEvent) -> void:
 			var jit = _network_config["netem_jitter"] if _netem_active else 0
 			var dup = _network_config["netem_dup"] if _netem_active else 0.0
 			
-			# No Godot puro, testes de rede são perfeitos. 
-			# O QuanticNet injeta este "ruído e caos" nativamente nas rotas UDP 
-			# da Engine em C++ simulando cenários catastróficos reais.
 			QuanticNet.set_netem_config(loss, lat, jit, dup)
 			var status = "ON (Loss: %.0f%% | Lat: %dms | Jit: %dms)" % [loss, lat, jit] if _netem_active else "OFF"
 			print("[DEMO] NETEM Toggle: %s" % status)
+			
+		# [F1] - Resetar Métricas de System
+		elif event.keycode == KEY_F1:
+			_fps_history.clear()
+			_fps_min = SENTINEL_MAX_INT
+			_fps_max = 0
+			_frame_ms_history.clear()
+			_frame_ms_min = SENTINEL_MAX_FLOAT
+			_frame_ms_max = 0.0
+			_phys_ms_history.clear()
+			_phys_ms_min = SENTINEL_MAX_FLOAT
+			_phys_ms_max = 0.0
+			print("[DEMO] System Profiler resetado!")
+			
+		# [F2] - Resetar Métricas de Network
+		elif event.keycode == KEY_F2:
+			_rtt_history.clear()
+			_rtt_min = SENTINEL_MAX_FLOAT
+			_rtt_max = 0.0
+			_loss_history.clear()
+			_loss_min = SENTINEL_MAX_FLOAT
+			_loss_max = 0.0
+			print("[DEMO] Network Profiler resetado!")
 			
 		# [F] - Toggle V-Sync e Max FPS (Teste de Stress visual)
 		elif event.keycode == KEY_F:
