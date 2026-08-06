@@ -165,7 +165,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 			continue;
 		}
 		
-		Dictionary result = validator->call("validate", peer_id, pos, rot, now);
+		Dictionary result = validator->call("validate", peer_id, pos, rot, client_ts);
 		String action = result.get("action", "");
 		
 		if (action == "accept") {

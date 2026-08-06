@@ -109,10 +109,14 @@ var _loss_max: float = 0.0
 var _world_root: Node3D
 var _entities_visuals: Dictionary = {}
 var _local_pos: Vector3 = Vector3(0, 1.0, 0)
-var _auto_move_active: bool = false
+var _auto_move: bool = false
+var _auto_move_origin: Vector3 = Vector3.ZERO
 var _auto_move_time: float = 0.0
 var _server_props: Array = [1001, 1002, 1003] # [Fase 5] Props
 var _server_props_time: float = 0.0
+var _client_view_distance: float = 12.0
+var _client_cull_ring: MeshInstance3D
+var _server_cull_ring: MeshInstance3D
 var _status_lbl: Label
 var _reconnect_btn: Button
 var _last_shot_time: int = 0 # [Fase 6] Cooldown de tiros
@@ -141,7 +145,6 @@ var _diag_lbl_peers: Label
 # gargalo na CPU. Nós estrangulamos (throttle) a UI para atualizar apenas a cada 250ms.
 var _last_ui_update_ms: int = 0
 var _netem_active: bool = false
-var _auto_move: bool = false
 
 # Histórico para cálculos estatísticos (1% Low, Médias)
 # Mantemos um array com os últimos 600 valores (10 segundos a 60fps)
@@ -203,19 +206,18 @@ func _ready() -> void:
 		
 	_is_server = is_server
 		
-	# 4. Criando a Matriz de Perfis (Fase 3)
-	# Estes Value Objects vão para as entranhas do C++ orientar a frequência da rede.
+	# 4. Perfis Dinâmicos (Tick Rate vs Priority vs Culling Radius)
 	_profile_player = QNEntityProfile.new()
-	_profile_player.init(20.0, 2.0, 100.0) # 20Hz Default
+	_profile_player.init(60.0, 1.0, 20.0) # 60Hz default, 20m culling
 	
 	_profile_npc = QNEntityProfile.new()
-	_profile_npc.init(20.0, 1.0, 50.0) # 20Hz
+	_profile_npc.init(20.0, 1.0, 20.0) # 20Hz
 	
 	_profile_prop = QNEntityProfile.new()
-	_profile_prop.init(5.0, 0.5, 30.0) # 5Hz Default
+	_profile_prop.init(5.0, 0.5, 20.0) # 5Hz Default
 	
 	_profile_projectile = QNEntityProfile.new()
-	_profile_projectile.init(60.0, 3.0, 150.0) # 60Hz (Prioridade Extrema)
+	_profile_projectile.init(60.0, 3.0, 50.0) # 60Hz (Prioridade Extrema)
 		
 	# 5. Conectando os Sinais Vitais (Event-Driven Architecture)
 	# O QuanticNet emite sinais limpos quando eventos ocorrem nas entranhas do C++.
@@ -287,6 +289,28 @@ func _setup_scene() -> void:
 	
 	_world_root = Node3D.new()
 	add_child(_world_root)
+	
+	if not _is_server:
+		_client_cull_ring = _create_ring(Color(0.0, 1.0, 0.0, 0.3), 10.0, 0.1)
+		add_child(_client_cull_ring)
+		_server_cull_ring = _create_ring(Color(1.0, 1.0, 0.0, 0.3), 10.2, 0.2)
+		add_child(_server_cull_ring)
+
+func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3D:
+	var mi = MeshInstance3D.new()
+	var mesh = TorusMesh.new()
+	mesh.inner_radius = radius - 0.2
+	mesh.outer_radius = radius
+	mesh.rings = 64
+	mesh.ring_segments = 32
+	mi.mesh = mesh
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mi.material_override = mat
+	mi.position.y = y_offset
+	return mi
 
 
 # ==============================================================================
@@ -430,6 +454,10 @@ func _physics_process(delta: float) -> void:
 		if input_dir.length_squared() > 0:
 			input_dir = input_dir.normalized()
 			
+		# Se auto-move estiver ativo e sair do limite, forçar input_dir pro centro
+		if _auto_move and _local_pos.distance_to(_auto_move_origin) > 8.0:
+			input_dir = (_auto_move_origin - _local_pos).normalized()
+			
 		# [Fase 4] Client-Side Prediction: Movimenta instantaneamente o boneco local
 		_local_pos += input_dir * speed * delta
 		_update_visual(QuanticNet.get_unique_id(), _local_pos, true)
@@ -455,20 +483,46 @@ func _process(_delta: float) -> void:
 	# Usamos ele exclusivamente para ler métricas visuais cruas, evitando poluir o Thread de física.
 	# [Fase 5] Snapshot Interpolation (Cliente suavizando os Props e Remotos)
 	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		var now = Time.get_ticks_msec()
 		for id in _entities_visuals.keys():
 			if id != QuanticNet.get_unique_id():
 				var interp_state = QuanticNet.remote_state(id)
 				if not interp_state.is_empty():
 					var visual = _entities_visuals[id]
 					var target_pos = interp_state.get("pos", visual.position)
-					# Visual Lerp PESADO (5.0) para mascarar Buffer Underruns extremos do Netem (Elasticidade)
-					visual.position = visual.position.lerp(target_pos, _delta * 5.0)
+					var last_up = visual.get_meta("last_update", now)
 					
 					# Culling Visual
-					var dist = _local_pos.distance_to(visual.position)
 					var rad = _profile_player.get_spatial_culling_radius() if id < 1000 else _profile_prop.get_spatial_culling_radius()
-					visual.visible = dist <= rad
+					var dist = _local_pos.distance_to(visual.position)
 					
+					# Se passou de 0.5s sem atualizar, o servidor removeu (Server Culling)
+					# Se dist > _client_view_distance, o cliente ocultou localmente (Client Culling)
+					var is_visible = (dist <= _client_view_distance) and (now - last_up <= 500)
+					
+					if not visual.visible and is_visible:
+						# Acabou de entrar no raio (ou voltou a receber pacotes), não vamos patinar! 
+						visual.position = target_pos
+					else:
+						# Visual Lerp PESADO (5.0) para mascarar Buffer Underruns extremos do Netem (Elasticidade)
+						visual.position = visual.position.lerp(target_pos, _delta * 5.0)
+					
+					visual.visible = is_visible
+					
+		if _client_cull_ring and _server_cull_ring:
+			_client_cull_ring.position = _local_pos
+			_client_cull_ring.position.y = 0.1
+			_server_cull_ring.position = _local_pos
+			_server_cull_ring.position.y = 0.2
+			
+			if _client_cull_ring.mesh.outer_radius != _client_view_distance:
+				_client_cull_ring.mesh.inner_radius = maxf(0.1, _client_view_distance - 0.2)
+				_client_cull_ring.mesh.outer_radius = _client_view_distance
+				
+			var srv_rad = _profile_player.get_spatial_culling_radius()
+			if _server_cull_ring.mesh.outer_radius != srv_rad + 0.3:
+				_server_cull_ring.mesh.inner_radius = srv_rad + 0.1
+				_server_cull_ring.mesh.outer_radius = srv_rad + 0.3
 	# Histórico de FPS
 	var current_fps = Engine.get_frames_per_second()
 	if current_fps > 0:
@@ -610,12 +664,14 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 				else:
 					count_props += 1
 		else:
-			total_entities = _entities_visuals.size()
 			for id in _entities_visuals.keys():
-				if id < 1000:
-					count_peers += 1
-				else:
-					count_props += 1
+				var last_up = _entities_visuals[id].get_meta("last_update", now_ms)
+				if now_ms - last_up <= 500:
+					total_entities += 1
+					if id < 1000:
+						count_peers += 1
+					else:
+						count_props += 1
 				
 		_diag_lbl_peers.text = "Entities: %d (Peers: %d | Props: %d)" % [total_entities, count_peers, count_props]
 
@@ -698,6 +754,9 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 	if owner != QuanticNet.get_unique_id():
 		if not _entities_visuals.has(owner):
 			_update_visual(owner, pos, false)
+			
+		var visual = _entities_visuals[owner]
+		visual.set_meta("last_update", Time.get_ticks_msec())
 			
 		# [Fase 6] Disparo propagado via C++
 		if custom == 1:
@@ -799,13 +858,28 @@ func _unhandled_input(event: InputEvent) -> void:
 		# [ENTER] - Toggle Auto-Move (Será integrado na Fase 4)
 		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			_auto_move = not _auto_move
+			if _auto_move:
+				_auto_move_origin = _local_pos
 			print("[DEMO] Auto-move: ", _auto_move)
+			
+		# [+ / -] - Client View Distance (Visual Culling)
+		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
+			_client_view_distance += 2.0
+			print("[DEMO] View Distance: ", _client_view_distance)
+		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
+			_client_view_distance = maxf(2.0, _client_view_distance - 2.0)
+			print("[DEMO] View Distance: ", _client_view_distance)
 
 # ==============================================================================
 # PERFIS DINÂMICOS (TESTE DE ARQUITETURA)
 # ==============================================================================
 
 func _request_profile_change(tick: float, culling: float) -> void:
+	# Atualiza o perfil local ANTES de avisar o Servidor
+	var t = tick if tick > 0 else _profile_player.get_tick_rate_hz()
+	var c = culling if culling > 0 else _profile_player.get_spatial_culling_radius()
+	_profile_player.init(t, _profile_player.get_base_priority(), c)
+
 	if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 		rpc_id(1, "server_update_profile", QuanticNet.get_unique_id(), tick, culling)
 	elif _is_server:
