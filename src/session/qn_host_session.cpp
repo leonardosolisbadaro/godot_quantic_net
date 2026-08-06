@@ -280,8 +280,10 @@ void QNHostSession::tick_broadcast(int now) {
 		Dictionary peer_current_states;
 		Dictionary profiles;
 		
-		// Use spatial grid to cull entities beyond 250m
-		PackedInt32Array nearby = _grid->get_entities_in_radius(st["pos"], 250.0);
+		// Use spatial grid to cull entities beyond the peer's dynamic culling radius (AoI)
+		Ref<QNEntityProfile> my_profile = st.get("profile", Variant());
+		double cull_rad = my_profile.is_valid() ? my_profile->get_spatial_culling_radius() : 250.0;
+		PackedInt32Array nearby = _grid->get_entities_in_radius(st["pos"], cull_rad);
 		for (int j = 0; j < nearby.size(); j++) {
 			int cid = nearby[j];
 			if (current_states.has(cid)) {

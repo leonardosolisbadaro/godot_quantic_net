@@ -108,7 +108,7 @@ var _loss_max: float = 0.0
 # ==============================================================================
 var _world_root: Node3D
 var _entities_visuals: Dictionary = {}
-var _local_pos: Vector3 = Vector3.ZERO
+var _local_pos: Vector3 = Vector3(0, 1.0, 0)
 var _auto_move_active: bool = false
 var _auto_move_time: float = 0.0
 var _server_props: Array = [1001, 1002, 1003] # [Fase 5] Props
@@ -206,13 +206,13 @@ func _ready() -> void:
 	# 4. Criando a Matriz de Perfis (Fase 3)
 	# Estes Value Objects vão para as entranhas do C++ orientar a frequência da rede.
 	_profile_player = QNEntityProfile.new()
-	_profile_player.init(60.0, 2.0, 100.0) # 60Hz
+	_profile_player.init(20.0, 2.0, 100.0) # 20Hz Default
 	
 	_profile_npc = QNEntityProfile.new()
 	_profile_npc.init(20.0, 1.0, 50.0) # 20Hz
 	
 	_profile_prop = QNEntityProfile.new()
-	_profile_prop.init(10.0, 0.5, 30.0) # 10Hz
+	_profile_prop.init(5.0, 0.5, 30.0) # 5Hz Default
 	
 	_profile_projectile = QNEntityProfile.new()
 	_profile_projectile.init(60.0, 3.0, 150.0) # 60Hz (Prioridade Extrema)
@@ -321,7 +321,9 @@ func _setup_ui() -> void:
 		"Setas/WASD : Mover (CSP)",
 		"Enter      : Auto-Move On/Off",
 		"F          : Destravar FPS / V-Sync",
-		"N          : Ativar/Desativar NETEM"
+		"N          : Ativar/Desativar NETEM",
+		"1 a 5      : Profile Peers (20 a 1Hz)",
+		"6 a 0      : Profile Culling (5 a 100m)"
 	]
 	
 	for s in shortcuts:
@@ -406,7 +408,7 @@ func _physics_process(delta: float) -> void:
 		for i in range(_server_props.size()):
 			var prop_id = _server_props[i]
 			var offset_time = _server_props_time + (i * 2.0)
-			var pos = Vector3(sin(offset_time) * 4.0, 0, cos(offset_time) * 4.0 + (i * 3.0))
+			var pos = Vector3(sin(offset_time) * 4.0, 0.5, cos(offset_time) * 4.0 + (i * 3.0))
 			QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
 			_update_visual(prop_id, pos, false) # Atualiza o visual do próprio servidor
 			
@@ -414,14 +416,16 @@ func _physics_process(delta: float) -> void:
 		var speed = _network_config["max_speed"]
 		var input_dir = Vector3.ZERO
 		
-		if not _auto_move_active:
+		if not _auto_move:
 			if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): input_dir.z -= 1
 			if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): input_dir.z += 1
 			if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): input_dir.x -= 1
 			if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): input_dir.x += 1
 		else:
 			_auto_move_time += delta
-			input_dir = Vector3(sin(_auto_move_time * 2.0), 0, cos(_auto_move_time * 2.0))
+			# Simula inputs agressivos mudando de direção rapidamente para testar o Client-Side Prediction sob estresse
+			input_dir.x = sin(_auto_move_time * 3.0)
+			input_dir.z = cos(_auto_move_time * 2.0)
 			
 		if input_dir.length_squared() > 0:
 			input_dir = input_dir.normalized()
@@ -456,7 +460,9 @@ func _process(_delta: float) -> void:
 				var interp_state = QuanticNet.remote_state(id)
 				if not interp_state.is_empty():
 					var visual = _entities_visuals[id]
-					visual.position = interp_state.get("pos", visual.position)
+					var target_pos = interp_state.get("pos", visual.position)
+					# Visual Lerp PESADO (5.0) para mascarar Buffer Underruns extremos do Netem (Elasticidade)
+					visual.position = visual.position.lerp(target_pos, _delta * 5.0)
 					
 					# Culling Visual
 					var dist = _local_pos.distance_to(visual.position)
@@ -776,7 +782,45 @@ func _unhandled_input(event: InputEvent) -> void:
 				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 			print("[DEMO] FPS Limitado: ", "SIM (60Hz)" if Engine.max_fps == 60 else "NÃO (Unlimited)")
 			
+		# [1-5] - Tick Rate do Profile
+		elif event.keycode == KEY_1: _request_profile_change(20.0, -1)
+		elif event.keycode == KEY_2: _request_profile_change(10.0, -1)
+		elif event.keycode == KEY_3: _request_profile_change(5.0, -1)
+		elif event.keycode == KEY_4: _request_profile_change(1.0, -1)
+		elif event.keycode == KEY_5: _request_profile_change(60.0, -1)
+		
+		# [6-0] - Culling Radius do Profile
+		elif event.keycode == KEY_6: _request_profile_change(-1, 5.0)
+		elif event.keycode == KEY_7: _request_profile_change(-1, 10.0)
+		elif event.keycode == KEY_8: _request_profile_change(-1, 20.0)
+		elif event.keycode == KEY_9: _request_profile_change(-1, 50.0)
+		elif event.keycode == KEY_0: _request_profile_change(-1, 100.0)
+			
 		# [ENTER] - Toggle Auto-Move (Será integrado na Fase 4)
 		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			_auto_move = not _auto_move
 			print("[DEMO] Auto-move: ", _auto_move)
+
+# ==============================================================================
+# PERFIS DINÂMICOS (TESTE DE ARQUITETURA)
+# ==============================================================================
+
+func _request_profile_change(tick: float, culling: float) -> void:
+	if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		rpc_id(1, "server_update_profile", QuanticNet.get_unique_id(), tick, culling)
+	elif _is_server:
+		server_update_profile(1, tick, culling)
+
+@rpc("any_peer", "call_local")
+func server_update_profile(peer_id: int, new_tick: float, new_culling: float) -> void:
+	if not QuanticNet.is_server(): return
+	var registry = QuanticNet.get_registry()
+	if registry.has(peer_id):
+		var old_prof = registry[peer_id].get("profile")
+		if old_prof != null:
+			var t = new_tick if new_tick > 0 else old_prof.get_tick_rate_hz()
+			var c = new_culling if new_culling > 0 else old_prof.get_spatial_culling_radius()
+			var new_prof = QNEntityProfile.new()
+			new_prof.init(t, old_prof.get_base_priority(), c)
+			QuanticNet.change_entity_profile(peer_id, new_prof)
+			print("[DEMO] Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c])
