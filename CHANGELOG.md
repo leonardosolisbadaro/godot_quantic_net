@@ -30,33 +30,48 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 <summary>Histórico de Versões Arquivadas (0.1.0 até 0.5.0)</summary>
 
 ## [0.5.0] - 2026-08-05
+
 ### Adicionado
+
 - Setup da infraestrutura de compilação em C++ via SCons.
 - Camada de Transporte Nativa (GDExtension), `QNWirePeer`, `QNNetHook`.
 - Migração de Lógica Pesada para C++ (`QNInterpBuffer`, Serializadores).
 
 ## [0.4.0] - 2026-08-04
+
 ### Adicionado
+
 - Criação de `QNTelemetryAggregator` e classe imutável `QNEntityProfile`.
 
 ## [0.3.0-rc.2] - 2026-08-04
+
 ### Adicionado
+
 - Implementação da struct `PeerTelemetrics` para RTT e Jitter.
 
 ## [0.3.0-rc.1] - 2026-08-02
+
 ### Corrigido
+
 - Prevenção de Memory Leaks e Crashes via teardown limpo.
 
 ## [0.3.0] - 2026-07-31
+
 ### Adicionado
+
 - Handshake de Identidade Segura e `TYPE_PEER_LEFT`.
 
 ## [0.2.0] - 2026-07-30
+
 ### Adicionado
+
 - Integração de mbedTLS, Netem em C++, Serialização ZSTD.
 - Client-Side Prediction, Server Reconciliation e Snapshot Interpolation bases.
 
 ## [0.1.0] - 2026-07-28
+
 ### Lançamento Inicial
+
 - Estruturação base do projeto.
+
 </details>
