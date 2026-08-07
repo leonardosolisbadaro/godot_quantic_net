@@ -80,7 +80,12 @@ var _network_config = {
 	"netem_loss": 10.0, # [NETEM] % de perda de pacote forçada
 	"netem_latency": 150, # [NETEM] Milissegundos atrasados intencionalmente na fila de despacho
 	"netem_jitter": 50, # [NETEM] Variação aleatória do atraso (simulando 4G/Wifi oscilante)
-	"netem_dup": 0.0 # [NETEM] % de duplicação de pacotes (simula re-envios fantasma de rotas ruins)
+	"netem_dup": 0.0, # [NETEM] % de duplicação de pacotes (simula re-envios fantasma de rotas ruins)
+	
+	# --- Culling de Domínio (Configuração Híbrida de Mundo) ---
+	# false = Mapa Único (Apenas o AoI Individual opera). true = Chunk System (AoI Geral ativo).
+	"grid_culling_enabled": true, 
+	"grid_culling_size": (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
 }
 
 # Controle de estado da topologia local
@@ -177,6 +182,11 @@ var _phys_ms_max: float = 0.0
 func _ready() -> void:
 	# 1. Configura a UI de diagnóstico via código (Clean Architecture, zero painéis sujos na árvore)
 	_setup_ui()
+	
+	# 1.5 Corrige a anomalia visual da Câmera do Servidor
+	# A ilusão de ótica ocorria porque janelas de tamanhos diferentes mudam o FOV horizontal nativo da Godot (Keep Height).
+	# Cravamos um tamanho de tela padrão para que Servidor e Cliente mostrem o mesmo volume de mundo 3D.
+	DisplayServer.window_set_size(Vector2i(1024, 768))
 	
 	# 2. Força o V-Sync para estabilizar os testes locais em 60Hz.
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
@@ -296,9 +306,10 @@ func _setup_scene() -> void:
 	add_child(floor_mesh)
 	
 	# [AoI Geral] Feedback visual do Grid System (Spatial Partitioning)
-	var aoi_size = FLOOR_SIZE * GENERAL_AOI_RATIO
-	var general_aoi = _create_aoi_grid(Color(1.0, 0.5, 0.0, 0.4), aoi_size, 0.05)
-	add_child(general_aoi)
+	if _network_config.get("grid_culling_enabled", false):
+		var aoi_size = FLOOR_SIZE * GENERAL_AOI_RATIO
+		var general_aoi = _create_aoi_grid(Color(1.0, 0.5, 0.0, 0.4), aoi_size, 0.05)
+		add_child(general_aoi)
 	
 	_world_root = Node3D.new()
 	add_child(_world_root)
@@ -501,8 +512,10 @@ func _physics_process(delta: float) -> void:
 			# A Lógica do Filtro Geral (Grid System): 
 			# Se o prop passar do limite do Grid, o Servidor SIMPLESMENTE PARA DE SINCRONIZÁ-LO!
 			# A ausência de estado fará o Client cullar o prop após o timeout (SERVER_CULL_TIMEOUT_MS)
-			var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
-			var is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
+			var is_inside_aoi = true
+			if _network_config.get("grid_culling_enabled", false):
+				var aoi_limit = _network_config.get("grid_culling_size", 9999.0)
+				is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
 			
 			if is_inside_aoi:
 				QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
@@ -583,8 +596,10 @@ func _process(_delta: float) -> void:
 					
 					# A Lógica do Filtro Geral (Grid System) simulada no Cliente para Peers:
 					# Entidades que transpassam o Grid perdem a sincronia
-					var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
-					var is_inside_aoi = absf(target_pos.x) <= aoi_limit and absf(target_pos.z) <= aoi_limit
+					var is_inside_aoi = true
+					if _network_config.get("grid_culling_enabled", false):
+						var aoi_limit = _network_config.get("grid_culling_size", 9999.0)
+						is_inside_aoi = absf(target_pos.x) <= aoi_limit and absf(target_pos.z) <= aoi_limit
 					
 					# Se passou de SERVER_CULL_TIMEOUT_MS sem atualizar, o servidor removeu (Server Culling)
 					# Se dist > _client_view_distance, o cliente ocultou localmente (Client Culling)
@@ -620,7 +635,8 @@ func _process(_delta: float) -> void:
 		# O Servidor não recebe "_on_state" de peers, ele apenas atualiza o registro interno via C++.
 		# Lemos o registro aqui no _process para desenhar os clientes conectados na tela do Servidor.
 		var registry = QuanticNet.get_registry()
-		var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
+		var grid_enabled = _network_config.get("grid_culling_enabled", false)
+		var aoi_limit = _network_config.get("grid_culling_size", 9999.0)
 		
 		for id in registry:
 			var st = registry[id]
@@ -631,7 +647,10 @@ func _process(_delta: float) -> void:
 				# Feedback visual do Filtro Geral para Peers na tela do Servidor
 				if _entities_visuals.has(id):
 					var vis = _entities_visuals[id]
-					var is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
+					var is_inside_aoi = true
+					if grid_enabled:
+						is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
+						
 					var mat = vis.material_override as StandardMaterial3D
 					if is_inside_aoi:
 						mat.albedo_color = Color.RED
@@ -775,12 +794,18 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 		
 		if QuanticNet.is_server():
 			var registry = QuanticNet.get_registry()
-			var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
+			var grid_enabled = _network_config.get("grid_culling_enabled", false)
+			var aoi_limit = _network_config.get("grid_culling_size", 9999.0)
+			
 			for k in registry:
 				var st = registry[k]
 				var pos = st.get("pos", Vector3.ZERO)
 				# Na UI do Servidor, contabilizamos apenas quem está ATIVO dentro do Grid
-				if absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit:
+				var is_inside_aoi = true
+				if grid_enabled:
+					is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
+					
+				if is_inside_aoi:
 					total_entities += 1
 					if st.get("is_peer", false):
 						count_peers += 1
@@ -875,15 +900,16 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 	# [AoI Geral Simulada no Cliente]
 	# O Grid System corta a existência de pacotes indesejados. 
 	# Como o Servidor ainda emite tudo por não ter C++ Grid, simulamos o bloqueio rígido aqui no receptor.
-	var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
-	
-	# 1. Se o próprio jogador local saiu do Grid, a rede é cortada para ele (Não vê mais nada).
-	if absf(_local_pos.x) > aoi_limit or absf(_local_pos.z) > aoi_limit:
-		return
+	if _network_config.get("grid_culling_enabled", false):
+		var aoi_limit = _network_config.get("grid_culling_size", 9999.0)
 		
-	# 2. Se a entidade relatada (prop ou outro peer) saiu do Grid, bloqueamos a atualização do last_update.
-	if absf(pos.x) > aoi_limit or absf(pos.z) > aoi_limit:
-		return
+		# 1. Se o próprio jogador local saiu do Grid, a rede é cortada para ele (Não vê mais nada).
+		if absf(_local_pos.x) > aoi_limit or absf(_local_pos.z) > aoi_limit:
+			return
+			
+		# 2. Se a entidade relatada (prop ou outro peer) saiu do Grid, bloqueamos a atualização do last_update.
+		if absf(pos.x) > aoi_limit or absf(pos.z) > aoi_limit:
+			return
 
 	# Recebemos o Snapshot do Servidor confirmando onde o inimigo (ou nó mesmo) está.
 	# Ignoramos a nós mesmos por ora porque usamos predição instantânea local.
