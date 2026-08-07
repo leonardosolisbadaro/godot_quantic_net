@@ -614,6 +614,33 @@ func _process(_delta: float) -> void:
 			if _server_cull_ring.mesh.outer_radius != srv_rad + 0.3:
 				_server_cull_ring.mesh.inner_radius = srv_rad + 0.1
 				_server_cull_ring.mesh.outer_radius = srv_rad + 0.3
+				
+	elif QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		# [Fase 5] Feedback Visual exclusivo do Servidor (Monitor Mode)
+		# O Servidor não recebe "_on_state" de peers, ele apenas atualiza o registro interno via C++.
+		# Lemos o registro aqui no _process para desenhar os clientes conectados na tela do Servidor.
+		var registry = QuanticNet.get_registry()
+		var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
+		
+		for id in registry:
+			var st = registry[id]
+			if st.get("is_peer", false):
+				var pos = st.get("pos", Vector3.ZERO)
+				_update_visual(id, pos, false)
+				
+				# Feedback visual do Filtro Geral para Peers na tela do Servidor
+				if _entities_visuals.has(id):
+					var vis = _entities_visuals[id]
+					var is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
+					var mat = vis.material_override as StandardMaterial3D
+					if is_inside_aoi:
+						mat.albedo_color = Color.RED
+						mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+					else:
+						mat.albedo_color = Color.DIM_GRAY
+						mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+						mat.albedo_color.a = 0.3
+
 	# Histórico de FPS
 	var current_fps = Engine.get_frames_per_second()
 	if current_fps > 0:
