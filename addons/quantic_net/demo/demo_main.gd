@@ -84,7 +84,7 @@ var _network_config = {
 	
 	# --- Culling de Domínio (Configuração Híbrida de Mundo) ---
 	# false = Mapa Único (Apenas o AoI Individual opera). true = Chunk System (AoI Geral ativo).
-	"grid_culling_enabled": true, 
+	"grid_culling_enabled": true,
 	"grid_culling_size": (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
 }
 
@@ -186,7 +186,7 @@ func _ready() -> void:
 	# 1.5 Corrige a anomalia visual da Câmera do Servidor
 	# A ilusão de ótica ocorria porque janelas de tamanhos diferentes mudam o FOV horizontal nativo da Godot (Keep Height).
 	# Cravamos um tamanho de tela padrão para que Servidor e Cliente mostrem o mesmo volume de mundo 3D.
-	DisplayServer.window_set_size(Vector2i(1024, 768))
+	# DisplayServer.window_set_size(Vector2i(1024, 768))
 	
 	# 2. Força o V-Sync para estabilizar os testes locais em 60Hz.
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
@@ -520,7 +520,8 @@ func _physics_process(delta: float) -> void:
 			if is_inside_aoi:
 				QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
 				
-			_update_visual(prop_id, pos, false) # Atualiza o visual do próprio servidor para feedback visual
+			# O Servidor no Modo Monitor parou de empurrar a posição crua dos Props para a tela aqui.
+			# Agora, ele lê do Registro na mesma dinâmica de um Cliente e interpola no _process!
 			
 			# Modifica a cor no Servidor para provar o estado do Filtro
 			if _entities_visuals.has(prop_id):
@@ -633,32 +634,56 @@ func _process(_delta: float) -> void:
 	elif QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 		# [Fase 5] Feedback Visual exclusivo do Servidor (Monitor Mode)
 		# O Servidor não recebe "_on_state" de peers, ele apenas atualiza o registro interno via C++.
-		# Lemos o registro aqui no _process para desenhar os clientes conectados na tela do Servidor.
+		# Lemos o registro aqui no _process para desenhar TODAS as entidades (Peers e Props) na tela do Servidor,
+		# atuando como um "Cliente Capado", usando a mesma dinâmica de renderização e interpolação.
 		var registry = QuanticNet.get_registry()
 		var grid_enabled = _network_config.get("grid_culling_enabled", false)
 		var aoi_limit = _network_config.get("grid_culling_size", 9999.0)
 		
-		for id in registry:
-			var st = registry[id]
-			if st.get("is_peer", false):
-				var pos = st.get("pos", Vector3.ZERO)
-				_update_visual(id, pos, false)
+		for id in registry.keys():
+			if id == QuanticNet.get_unique_id():
+				continue # Monitor não tem avatar próprio e não se renderiza
 				
-				# Feedback visual do Filtro Geral para Peers na tela do Servidor
-				if _entities_visuals.has(id):
-					var vis = _entities_visuals[id]
-					var is_inside_aoi = true
-					if grid_enabled:
-						is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
-						
-					var mat = vis.material_override as StandardMaterial3D
-					if is_inside_aoi:
-						mat.albedo_color = Color.RED
-						mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-					else:
-						mat.albedo_color = Color.DIM_GRAY
-						mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-						mat.albedo_color.a = 0.3
+			# [Solução de Domínio Robusta] 
+			# O Servidor Monitor deve consumir os dados através da API oficial de Snapshot 
+			# Interpolation (remote_state), que retorna o Vector3 canônico e formatado,
+			# em vez de ler a estrutura crua interna da engine C++ no registry.
+			var st = QuanticNet.remote_state(id)
+			if st.is_empty():
+				st = registry[id] # Fallback apenas para o tick inicial
+				
+			var target_pos = st.get("pos", Vector3.ZERO)
+			
+			# [Interface Adapter - View]
+			# O servidor recebe a malha de coordenadas da engine base com a matriz espelhada (X = Z).
+			# Para não poluir o domínio, adaptamos os dados na camada de visualização (Monitor):
+			var view_pos = Vector3(target_pos.z, target_pos.y, target_pos.x)
+			
+			# Se não existe, cria a malha visual na posição exata inicial
+			if not _entities_visuals.has(id):
+				_update_visual(id, view_pos, false)
+				
+			# Interpolação suave para o Monitor do Servidor atuar idêntico ao cliente
+			var vis = _entities_visuals[id]
+			vis.position = vis.position.lerp(view_pos, _delta * INTERP_LERP_SPEED)
+			
+			# Feedback visual do Filtro Geral na tela do Servidor
+			var is_inside_aoi = true
+			if grid_enabled:
+				is_inside_aoi = absf(view_pos.x) <= aoi_limit and absf(view_pos.z) <= aoi_limit
+				
+			# Identificamos se é peer pelo ID, já que o remote_state não empacota flags internas
+			var is_peer = (id < 1000)
+			var mat = vis.material_override as StandardMaterial3D
+			
+			if is_inside_aoi:
+				mat.albedo_color = Color.RED if is_peer else Color.YELLOW
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+			else:
+				# Fantasma visual se a entidade transpassou as fronteiras físicas do Culling Geral
+				mat.albedo_color = Color.DIM_GRAY if is_peer else Color.DARK_KHAKI
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				mat.albedo_color.a = 0.3
 
 	# Histórico de FPS
 	var current_fps = Engine.get_frames_per_second()
@@ -893,7 +918,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		_entities_visuals[id] = mesh_inst
 		
 	var visual = _entities_visuals[id]
-	if is_local or QuanticNet.is_server():
+	if is_local:
 		visual.position = pos
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
