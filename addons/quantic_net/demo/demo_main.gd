@@ -63,8 +63,8 @@ const SECRET := "demo-secret"
 # Este dicionário é passado diretamente para as funções host() e join(). 
 # Ele define as regras globais de comportamento autoritativo do Servidor e da Emulação.
 var _network_config = {
-	"max_speed": 6.0, # Velocidade máxima teórica de um player (usado no Anti-Speedhack)
-	"hard_cap": 20.0, # Velocidade absurda (cair, teleportar) onde a interpolação é desligada e vira um "teleporte visual" (snap)
+	"max_speed": 30.0, # Tolerância elevada do Anti-Speedhack (Absorve os Jitters extremos do NETEM)
+	"hard_cap": 50.0, # Velocidade absurda (cair, teleportar) onde a interpolação é desligada e vira um "teleporte visual" (snap)
 	"world_bounds": 60.0, # Limites do mundo (anti-fly/anti-void)
 	"max_strikes": 5, # Quantas vezes um cliente pode enviar pacotes inválidos antes de ser kickado
 	"auth_timeout": 3.0, # Tempo máximo (segundos) tolerado na fase de handshake
@@ -437,7 +437,7 @@ func _physics_process(delta: float) -> void:
 			_update_visual(prop_id, pos, false) # Atualiza o visual do próprio servidor
 			
 	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-		var speed = _network_config["max_speed"]
+		var speed = 6.0 # Desacoplado da rede! (Player anda a 6m/s, mas o server tolera até 30m/s por conta do Jitter)
 		var input_dir = Vector3.ZERO
 		
 		if not _auto_move:
@@ -787,6 +787,15 @@ func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Arr
 	# Se a simulação do cliente discordou gravemente da matriz de física do Servidor,
 	# recebemos esta "bronca" para teletransportar o corpo e reprocessar os inputs (replay).
 	print("[DEMO] Snapback Recebido (Reconciliação Forçada): %s" % str(pos))
+	
+	_local_pos = pos
+	
+	# [Fase 4] Re-apply pending inputs
+	var speed = 6.0 # Velocidade do client fixada em 6.0 m/s
+	for pending in replay:
+		var dir = pending["move"]
+		var dt = pending["dt"]
+		_local_pos += Vector3(dir.x, 0, dir.y) * speed * dt
 
 # ==============================================================================
 # PROCESSAMENTO DE INPUTS GLOBAIS
