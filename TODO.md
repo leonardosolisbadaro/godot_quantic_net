@@ -5,46 +5,44 @@ As diretrizes estruturais de **Code-First**, **Test-Driven Development (TDD)** e
 
 ---
 
-## 🏗️ FUNDAÇÃO (Concluída - Fases 1 a 9)
+## 🗄️ ARQUIVO (Fases Anteriores Concluídas)
 
-O projeto base estabilizou na versão **0.6.0**. Os seguintes épicos estão **100% testados (GUT), homologados e concluídos**:
+O projeto base estabilizou. As seguintes fundações já estão **100% testadas (GUT), homologadas e integradas em C++ / GDScript**:
 
-- [x] Configuração da Clean Architecture e Metodologia AAA (TDD obrigatório).
-- [x] Construção do Core Domain: `QNSerializer`, `QNClockSync`, `QNLossTracker`, `QNInterpBuffer`, `QNServerValidator` e `QNInputBuffer`.
-- [x] Infraestrutura e Transporte: `QNWirePeer` com ENet, Codec, Obfuscação e Emulação de Redes Extremas via **Netem**.
-- [x] Ganchos Nativos Livres de Leaks: `QNNetHook` encapsulando e interceptando a `MultiplayerAPIExtension` do Godot com teardown seguro (`close()`) cravando 0 ObjectDB Leaks!
-- [x] Casos de Uso Autoritativos: `QNHostSession` (Anti-Cheat, Reject, Clamp) e `QNClientSession` (Prediction e Local Replay).
-- [x] Integração Criptográfica DTLS: `QNDTLSBootstrap` gerando certificados mbedTLS *on the fly* com Fingerprint Pinning de proteção.
-- [x] Evolução Competitiva MMO: Delta Compression & ACKs, Priority Accumulator e Tick Híbrido.
-- [x] Demo "Bare Metal" e Teste End-to-End validando o Autoload `QuanticNet` *Plug-and-play*.
-- [x] **[0.6.0] Spatial Hashing Puro (Area of Interest - AoI):** Culling de rede e Spatial Grid (`QNSpatialGrid`) no C++.
-- [x] **[0.6.0] Lag Compensation:** `QNWorldHistoryBuffer` armazenando entidades no passado.
-- [x] **[0.6.0] Demo Definitiva e Estabilidade Core:** Refatoração integral da `demo_main.gd` e blindagem da desserialização contra Undefined Behavior de compiladores (MSVC/Windows).
+* **Clean Architecture & Core Domain:** Implementados `QNSerializer`, `QNClockSync`, `QNLossTracker`, `QNInterpBuffer`, `QNServerValidator` e `QNInputBuffer`.
+* **Infraestrutura e Transporte:** ENet, obfuscação de pacotes e emulação de redes extremas (Netem).
+* **Teardown Seguro:** `QNNetHook` garantindo zero ObjectDB Leaks no encerramento da `MultiplayerAPIExtension`.
+* **Criptografia:** DTLS dinâmico com mbedTLS *on the fly* e Fingerprint Pinning.
+* **Competitivo MMO:** Delta Compression, Priority Accumulator e Tick Híbrido consolidados.
+* **Spatial Hashing (AoI) C++:** `QNSpatialGrid` implementado em C++ para culling de rede ultra-rápido.
+* **Lag Compensation:** `QNWorldHistoryBuffer` armazenando entidades no passado para hitscan determinístico.
+* **Demo Bare Metal:** O `demo_main.gd` foi completamente reescrito para demonstrar a API pública, inputs empacotados via `custom_id` e simulação sem RPCs.
 
 ---
 
-## 🚀 FASE 10: A FRONTEIRA MMO E FÍSICA
+## 🚀 NOVA FASE 1: A FRONTEIRA DO GRID SYSTEM E MMO MACIÇO
 
-Esta etapa abraçará mecânicas massivas. A arquitetura de base não será tocada, em vez disso, módulos puristas em GDScript (ou C++ se houver gargalo) serão anexados ao Domínio visando expandir as capacidades simulativas do servidor. O ciclo TDD será estrito.
+Nesta nova etapa, a arquitetura passa a explorar as verdadeiras capacidades do `QNSpatialGrid` (C++), preparando o terreno para mundos colossais baseados em chunks e simulações físicas maciças.
 
-### PR 28 — Sincronização de Física Rígida (Networked Physics)
+### PR 1 — Integração de Grid/Chunk System na Demo (Spatial Partitioning)
 
-- [ ] TDD: Expansão do codec `QNSerializer` ou `BitBuffer` para suportar empacotamento rigoroso de *Linear Velocity* e *Angular Velocity*.
-- [ ] Criar constante no Domain: `NetProfile.RIGID_BODY`.
-- [ ] Alterar `QNClientSession` e `QNHostSession` para gerenciar repousos (Sleeping states): economizar 100% de banda de entidades físicas quando suas energias cinéticas zerarem e notificar apenas a eclosão inicial do pulso.
+* [ ] Adaptar a `demo_main.gd` para instanciar cenários divididos em múltiplos "Chunks/Grids" lógicos, utilizando a flag `grid_culling_enabled`.
+* [ ] Implementar a transição invisível de entidades (avatares e props) entre as fronteiras do grid, demonstrando o culling ativo e dinâmico quando a distância inter-grids exceder o *Area of Interest*.
+* [ ] Garantir que o código da Demo sirva como documentação viva, permitindo e exemplificando claramente ambas as implementações de domínio: "Mapa Único Estático" (atual) e "Grid/Chunk System Dinâmico" (futuro).
 
-### PR 29 — Object Replication Protocol e Interação de Mundo
+### PR 2 — Networked Physics (RigidBody Sync)
 
-- [ ] Permitir "spawn" dinâmico no meio da partida. Atualmente, os clientes recebem estado das entidades, mas precisam de um protocolo para saber que "A entidade 1004 é um Baú" ou "A entidade 1005 é uma Porta".
-- [ ] Implementar sistema de RPC Assíncrono Desacoplado: Mensagens determinísticas e confiáveis via QuanticNet (fora do `submit_state` interpolado).
+* [ ] TDD: Expansão do codec `QNSerializer` ou `BitBuffer` para suportar o empacotamento rigoroso e escalável de *Linear Velocity* e *Angular Velocity*.
+* [ ] Criar nova categoria no Domain: `NetProfile.RIGID_BODY`.
+* [ ] Alterar `QNClientSession` e `QNHostSession` para gerenciar *Sleeping states*: economizar 100% da banda de entidades físicas quando suas energias cinéticas zerarem, transmitindo apenas a eclosão inicial do pulso.
 
-### PR 30 — Testes de Escalabilidade Massiva e Cloud
+### PR 3 — Object Replication Protocol (Spawn Dinâmico)
 
-- [ ] Criar nova suíte de testes de integração Headless simulando a conexão concorrente de dezenas de `QNClientSessions` e dezenas de entidades.
-- [ ] Validar consumo de banda em *Bytes per Second* em cima do `PriorityAccumulator`. Comprovar matematicamente que o teto de *MTU* é respeitado independente da saturação.
-- [ ] Deploy da infraestrutura autônoma em contêineres Docker / Linux Headless.
+* [ ] Desenvolver um protocolo para "spawn" semântico dinâmico no meio da partida. Clientes precisam saber tipagens no decorrer da sessão (ex: "A entidade 1004 é um Baú", "A entidade 1005 é uma Porta").
+* [ ] Implementar um sistema de RPC Assíncrono Desacoplado na API do QuanticNet: permitir o envio de mensagens determinísticas e confiáveis (fora do ciclo ininterrupto e preditivo do `submit_state`).
 
-### PR 31 — Separação Visual e Demos Secundárias
+### PR 4 — Testes de Escalabilidade Massiva e Cloud Deploy
 
-- [ ] Manter `demo_main.gd` como um "Smoke Test" Bare Metal.
-- [ ] Iniciar um repositório secundário (ex: `quantic-net-demos`) para ilustrar mecânicas complexas em instâncias separadas (ex: integração do HitScan determinístico com o `QNWorldHistoryBuffer`).
+* [ ] Criar uma suíte de testes de integração Headless simulando a conexão concorrente de centenas de `QNClientSessions` transitando ativamente entre os grids do `QNSpatialGrid`.
+* [ ] Validar o teto do *Bytes per Second* em cima do `PriorityAccumulator` sob alto estresse populacional no mesmo chunk. Comprovar que a saturação não rompe o limite imposto do MTU.
+* [ ] Homologar o deploy da topologia autônoma em contêineres Docker / Linux Headless.
