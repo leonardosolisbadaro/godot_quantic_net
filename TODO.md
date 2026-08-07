@@ -5,9 +5,9 @@ As diretrizes estruturais de **Code-First**, **Test-Driven Development (TDD)** e
 
 ---
 
-## 🏗️ FUNDAÇÃO (Concluída - Fases 1 a 8)
+## 🏗️ FUNDAÇÃO (Concluída - Fases 1 a 9)
 
-O projeto base estabilizou na versão **0.3.0**. Os seguintes épicos estão **100% testados (GUT), homologados e concluídos**:
+O projeto base estabilizou na versão **0.6.0**. Os seguintes épicos estão **100% testados (GUT), homologados e concluídos**:
 
 - [x] Configuração da Clean Architecture e Metodologia AAA (TDD obrigatório).
 - [x] Construção do Core Domain: `QNSerializer`, `QNClockSync`, `QNLossTracker`, `QNInterpBuffer`, `QNServerValidator` e `QNInputBuffer`.
@@ -17,55 +17,9 @@ O projeto base estabilizou na versão **0.3.0**. Os seguintes épicos estão **1
 - [x] Integração Criptográfica DTLS: `QNDTLSBootstrap` gerando certificados mbedTLS *on the fly* com Fingerprint Pinning de proteção.
 - [x] Evolução Competitiva MMO: Delta Compression & ACKs, Priority Accumulator e Tick Híbrido.
 - [x] Demo "Bare Metal" e Teste End-to-End validando o Autoload `QuanticNet` *Plug-and-play*.
-
----
-
-## 📊 FASE 9: QuanticNet Demo (Visual & Telemetry Update)
-
-Este documento rastreia as tarefas de implementação da nova interface e telemetria da demo, garantindo o alinhamento de longo prazo com o `ROADMAP_MMO.md` e as restrições de arquitetura descritas no `GEMINI.md`.
-
-### PR 21: Sessão A — "Zero Bugs" e Fundações
-
-- [x] Implementar `_notification` para capturar `NOTIFICATION_WM_CLOSE_REQUEST` e executar `QuanticNet.disconnect_net(true)` antes de sair.
-- [x] Limpar o input `Escape` do `_physics_process` (agora tratado de forma limpa pelo `_notification`).
-- [x] Corrigir o bug do Netem: mover a chamada `set_netem_config(0.10, 150, 50)` para dentro do bloco `if _netem_active`.
-- [x] Refatorar atalhos: Migrar toggle de FPS/VSync da tecla `L` para `F` (liberando `L` para os logs).
-
-### PR 22: Sessão B — "Dados Vivos e Infraestrutura"
-
-- [x] Criar classe de dados `PeerTelemetrics` (Struct interna) para armazenar telemetria (RTT, Loss, Offset, etc.) com tipagem forte.
-- [x] Inicializar métricas de mínimo (`rtt_min`, `loss_min`) com valores sentinela lógicos (`INF`) para garantir registro correto da primeira amostra.
-- [x] Implementar Buffer Circular (ex: 30 amostras) para suavização de `loss_avg` e `rtt_avg`.
-- [x] Implementar sistema de *Staggered Polling* (Round-robin) no `_process` para a chamada de `loss_of(id)`, distribuindo a carga de 100+ entidades ao longo dos frames.
-- [x] Implementar troca de cor de emissão dos materiais dos cubos (teclas `1-5`) via `Tween` vinculado ao callback `_apply_profile()`.
-
-### PR 22.5: Sessão B.5 — "Network Profiler Avançado"
-
-- [x] Ampliar o painel de Profiler para incluir dados de rede (RTT, Loss, Offset) extraídos da struct `PeerTelemetrics`.
-
-### PR 22.8: Sessão B.8 — "Extração Agnóstica (Domínio e Value Objects)"
-
-- [x] TDD: Criar testes `test_qn_telemetry_aggregator.gd` com simulações de janela deslizante para RTT e Loss, incluindo cold start e limite de buffer.
-- [x] Implementar classe pura `QNTelemetryAggregator` no `src/domain/` sem dependências do Godot.
-- [x] Integrar agregação no `quantic_net_autoload.gd` mapeando por peer_id, expondo `get_telemetry(peer_id)`.
-- [x] Refatorar a Demo substituindo o uso da struct interna `PeerTelemetrics` pela API nativa do `QuanticNet`.
-- [x] TDD: Criar `test_qn_entity_profile.gd` validando o contrato estrito (invariantes via `assert`) das propriedades do perfil.
-- [x] Implementar o Value Object imutável `QNEntityProfile` no `src/domain/` englobando `tick_rate_hz`, `priority_weight`, etc.
-- [x] Refatorar o HostSession e a Demo para utilizar o `QNEntityProfile` com tipagem forte (abandonando Dictionaries crus).
-
-### PR 23: Sessão C — "Atmosfera e Estado"
-
-- [x] Implementar atalho de simulação Netem (tecla `N`): Ativa/desativa delay, jitter e packet loss. (Efeito visual de pulsação removido a pedido do usuário).
-- [x] Implementar Barra de Estado de Conexão no topo da tela, reagindo aos sinais de rede (🔴 FAILED, 🟡 CONNECTING, 🟠 AUTHENTICATING, 🟢 CONNECTED).
-- [x] Adicionar botão de reconexão na interface em caso de falha (`connection_failed_reason`).
-
-### PR 24: GDExtension Migration — "Coração em C++ (Performance Core)"
-
-- [x] Fase 1: Setup da Infraestrutura GDExtension (SConstruct, Register Types, Bindings).
-- [x] Fase 2: Migração das Estruturas de Dados e Hotpaths (Buffers e Serializers).
-- [x] Fase 3: Acesso Direto (MultiplayerPeerExtension + DTLS + QNNetHook).
-- [x] Fase 4: Regras de Negócio e Ticking (Session Host/Client, Loss Tracker).
-- [x] Fase 5: Refatoração da API GDScript Pública (Plug and Play via Autoload).
+- [x] **[0.6.0] Spatial Hashing Puro (Area of Interest - AoI):** Culling de rede e Spatial Grid (`QNSpatialGrid`) no C++.
+- [x] **[0.6.0] Lag Compensation:** `QNWorldHistoryBuffer` armazenando entidades no passado.
+- [x] **[0.6.0] Demo Definitiva e Estabilidade Core:** Refatoração integral da `demo_main.gd` e blindagem da desserialização contra Undefined Behavior de compiladores (MSVC/Windows).
 
 ---
 
@@ -73,47 +27,24 @@ Este documento rastreia as tarefas de implementação da nova interface e teleme
 
 Esta etapa abraçará mecânicas massivas. A arquitetura de base não será tocada, em vez disso, módulos puristas em GDScript (ou C++ se houver gargalo) serão anexados ao Domínio visando expandir as capacidades simulativas do servidor. O ciclo TDD será estrito.
 
-### PR 25 — Spatial Hashing Puro (Area of Interest - AoI)
-
-O despache não pode propagar todo o universo. Filtragem espacial inteligente.
-
-- [x] TDD: Criar a classe `QNSpatialGrid` em `src/domain/`.
-- [x] Especificar inserção, atualização e remoção veloz de IDs em células de Grid (Cell Size parametrizável).
-- [x] Especificar busca de vizinhos radial (`get_entities_in_radius`).
-- [x] Integrar no ciclo de broadcast do `QNHostSession`, poupando banda limitando *snapshots* apenas a entidades que colidem visualmente (culling).
-
-### PR 26 — Lag Compensation (Server-Side Rewind)
-
-Implementação de reconciliação de tempo para hit-registration preciso em jogos competitivos.
-
-- [x] TDD: Criar `QNWorldHistoryBuffer` armazenando AABB / Bounds das entidades por `render_ts`.
-- [x] Especificar lógica de captura temporal cíclica circular retrocedendo no máximo até 1,5s no passado do servidor.
-- [x] Integrar no Autoload a função `raycast_past(origin, direction, timestamp)`, expondo-a para que jogos de FPS construam seu HitScan determinístico compensando pings de até 250ms perfeitamente.
-
-### PR 27 — Reconstrução da Demo (Bare Metal Playground)
-
-Refatoração completa da demonstração `demo_main.gd` para servir como um ambiente educacional e descritivo (Zero RPCs para gameplay). A demo comprovará a viabilidade de um MMO simulando de forma rústica predição, interpolação, perfis de rede dinâmicos e combate autoritativo.
-
-- [x] Fase 1: **Setup e UI de Diagnóstico**. Recriar a HUD (System e Network Profiler) e atalhos em tempo real (Alternar FPS, Netem, Auto-Move).
-- [x] Fase 2: **Conexão e Topologia Automática**. Implementar host/join com suporte a DTLS e Netem. Conectar os sinais vitais do Autoload (`peer_joined`, `state_received`, `snapback_received`, etc.).
-- [x] Fase 3: **Entidades e Perfis Híbridos**. Definir a matriz de `QNEntityProfile` para Players (60Hz), NPCs (20Hz), Props (10Hz) e Projéteis (60Hz).
-- [x] Fase 4: **Client-Side Prediction e Culling Visual**. Movimentação local instantânea e envio de estado (`submit_state`). Ocultar avatares remotos fora do raio da área de interesse visual (AoI mockup).
-- [x] Fase 5: **Snapshot Interpolation e Movimento Autoritativo**. Servidor move props de forma matemática. Cliente suaviza as posições remotas consumindo o buffer temporal (`remote_state`).
-- [x] Fase 6: **Combate Zero-RPC (Bitmask & custom_id)**. Cliente empacota inputs de tiro (Hitscan de laser e Projétil físico) no `custom_id` do snapshot, descartando chamadas RPC.
-- [ ] Fase 7: **Resolução de Conflitos e Hit-Registration**. Servidor processa balística espacial (`query_sphere`), emitindo eventos de acerto no próprio payload de estado. Cliente reage a snapbacks.
-
 ### PR 28 — Sincronização de Física Rígida (Networked Physics)
 
 - [ ] TDD: Expansão do codec `QNSerializer` ou `BitBuffer` para suportar empacotamento rigoroso de *Linear Velocity* e *Angular Velocity*.
 - [ ] Criar constante no Domain: `NetProfile.RIGID_BODY`.
 - [ ] Alterar `QNClientSession` e `QNHostSession` para gerenciar repousos (Sleeping states): economizar 100% de banda de entidades físicas quando suas energias cinéticas zerarem e notificar apenas a eclosão inicial do pulso.
 
-### PR 29 — Testes de Escalabilidade Massiva
+### PR 29 — Object Replication Protocol e Interação de Mundo
+
+- [ ] Permitir "spawn" dinâmico no meio da partida. Atualmente, os clientes recebem estado das entidades, mas precisam de um protocolo para saber que "A entidade 1004 é um Baú" ou "A entidade 1005 é uma Porta".
+- [ ] Implementar sistema de RPC Assíncrono Desacoplado: Mensagens determinísticas e confiáveis via QuanticNet (fora do `submit_state` interpolado).
+
+### PR 30 — Testes de Escalabilidade Massiva e Cloud
 
 - [ ] Criar nova suíte de testes de integração Headless simulando a conexão concorrente de dezenas de `QNClientSessions` e dezenas de entidades.
 - [ ] Validar consumo de banda em *Bytes per Second* em cima do `PriorityAccumulator`. Comprovar matematicamente que o teto de *MTU* é respeitado independente da saturação.
+- [ ] Deploy da infraestrutura autônoma em contêineres Docker / Linux Headless.
 
-### PR 30 — Separação Visual e Demos (Sessões de UI Fluff)
+### PR 31 — Separação Visual e Demos Secundárias
 
-- [ ] Desacoplar quaisquer cenários visuais pesados. Manter apenas um script base estéril "Smoke Test".
-- [ ] Iniciar um repositório secundário (ex: `quantic-net-demos`) para ilustrar mecânicas complexas em instâncias separadas.
+- [ ] Manter `demo_main.gd` como um "Smoke Test" Bare Metal.
+- [ ] Iniciar um repositório secundário (ex: `quantic-net-demos`) para ilustrar mecânicas complexas em instâncias separadas (ex: integração do HitScan determinístico com o `QNWorldHistoryBuffer`).

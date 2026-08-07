@@ -7,10 +7,10 @@
 ## para integração plug and play com a Godot Engine.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-02
+## @updated 2026-08-07
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.5.0
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 

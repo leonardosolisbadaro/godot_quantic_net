@@ -1,106 +1,120 @@
-# QuanticNet Demo: Playground & Guia de Integração
+# QuanticNet Demo: Bare Metal Playground
 
-Esta pasta contém a demonstração interativa do QuanticNet, focada na integração de rede e despida de lógicas visuais complexas. O objetivo é atuar como um **Playground Técnico** para que o desenvolvedor possa testar os limites da arquitetura, observar o comportamento sob stress e entender como o motor de rede pode ser embutido em qualquer projeto via `Autoload` de forma puramente *Plug-and-play*.
+Esta pasta contém a demonstração definitiva do **QuanticNet**.
+Mais do que uma prova de conceito, esta Demo é um **Ambiente Educacional de Clean Architecture** para jogos Multiplayer na Godot 4.7. Ela foi projetada do zero ("Bare Metal") para demonstrar como orquestrar instâncias, predição, culling de rede e interpolação, **sem poluir a lógica com acoplamentos visuais**. 
 
-## 🎯 A Filosofia da Demo
+Se você quer aprender como estruturar o netcode de um verdadeiro jogo competitivo ou MMO de mundo aberto, estude a `demo_main.gd`.
 
-O `demo_main.gd` foi desenhado para expor de maneira transparente a força bruta do QuanticNet. Não usamos otimizações visuais pesadas da Engine (como `MultiMeshInstance3D` ou *RenderingServer* diretos) para forçar o GDScript a processar as atualizações matemáticas individualmente. Isso comprova que a estabilidade de latência e sincronismo do QuanticNet não afunda mesmo sob severa pressão de CPU.
+## 🎯 A Filosofia da Demo (Zero Acoplamento)
 
-### O Servidor (Host) Autoridade
+Diferente dos tutoriais tradicionais da Godot que atrelam RPCs diretamente a nós visuais (`@rpc`), o QuanticNet separa estritamente os Dados (State) da Apresentação (View).
 
-1. Instancia um ambiente "Headless" silencioso que gera e orbita *Props* (Cubos vermelhos).
-2. O servidor aplica **Hybrid Ticking** e **Bandwidth Management**. A cada ciclo físico (60Hz), o servidor verifica o `Tick Rate` assinalado de cada prop e a distância perante os jogadores (`Spatial Culling`).
-3. Somente os objetos essenciais são selecionados para preencher o **MTU** daquele instante, sendo despachados como P-Frames (Deltas altamente comprimidos) para o cliente.
-
-### O Cliente (Join) & Interpolação
-
-1. Predição Local (`Client-Side Prediction`): Seu cubo verde obedece seus inputs instantaneamente. O resultado do seu movimento é emaranhado e despachado silenciosamente via `QuanticNet.submit_state(...)`.
-2. Interpolação de Buffer Dinâmico (`Snapshot Interpolation`): O cliente lê o estado remoto do mundo varrendo o `QuanticNet.remote_state(id)`. Como pacotes podem se perder ou atrasar, a função interpola nativamente os estados em uma janela segura do passado (geralmente de 60ms a 250ms), resultando em movimento perfeitamente liso.
+* **A Física Roda Separada:** Toda a submissão de estado do Cliente local para a rede roda isolada no `_physics_process`.
+* **O Visual Apenas Observa:** Toda a atualização dos avatares inimigos na sua tela roda de forma puramente *Event-Driven* e *Assíncrona* no `_process`, lendo os estados interpolados da rede, livres de stutterings e travamentos da física.
 
 ---
 
-## 🎮 Controles, Atalhos e UI
+## 💻 Entendendo o Código: Exemplos Reais
 
-A interface da Demo exibe, em tempo real, dois perfis críticos de medição:
+Os trechos abaixo foram extraídos diretamente da nossa `demo_main.gd`.
 
-- **System Profiler:** Taxa de Quadros (FPS: Média, Mínima e Máxima), Tempo de Física e Consumo de Memória.
-- **Network Profiler:** RTT Verdadeiro (Ping), Packet Loss Real, Offset de Clock entre Servidor/Cliente e Contagem de Entidades Vivas.
+### 1. Inicialização Híbrida e Isolada (Setup)
 
-### Atalhos Dinâmicos
+Ao rodar a cena, nós identificamos se somos o Servidor ou um Cliente, conectamos os **Sinais Puros** do QuanticNet e injetamos o roteador nativo em C++ no SceneTree:
 
-A demo permite estressar a arquitetura ao vivo usando os atalhos:
+```gdscript
+func _ready() -> void:
+    # 1. Definimos o Perfil de Rede (Ex: Jogadores = 60Hz, Props = 20Hz)
+    _entity_profile_player = QuanticNet.get_preset_profile(QuanticNet.EntityProfileType.HIGH_FREQUENCY)
+    
+    # 2. Conectamos aos sinais agnósticos do QuanticNet (Sem _process polling)
+    QuanticNet.connection_state_changed.connect(_on_connection_state_changed)
+    QuanticNet.peer_joined.connect(_on_peer_joined)
+    QuanticNet.peer_left.connect(_on_peer_left)
+    QuanticNet.snapback_received.connect(_on_snapback)
+    QuanticNet.pong_received.connect(_on_pong)
+    
+    # 3. Disparamos a conexão
+    var err = QuanticNet.join(DEFAULT_IP, DEFAULT_PORT, SECRET, _netem_active)
+    
+    # 4. Injeta a implementação nativa C++ na SceneTree, habilitando roteamento veloz
+    get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
+```
 
-- `SPACE` / `0` : Spawna 100 Props de uma vez / Remove todos os Props.
-- `+` / `-` : Adiciona ou remove 10 Props.
-- `*` / `/` : Multiplica por 2 ou divide pela metade a quantidade atual de Props.
-- `N` : Ativa/Desativa o simulador de caos **Netem** (Injeta 10% de perda de pacote e 150ms de latência/jitter forçado para provar a estabilidade do Interpolador em redes ruins).
-- `F` : Destrava/Trava o V-Sync.
-- `1` a `5` : Alterna o "Net Profile" da sua própria entidade, definindo sua taxa de atualização na rede (de 60Hz a apenas 1Hz) para testemunhar o Bandwidth Accumulator trabalhando.
+### 2. Client-Side Prediction e Envio (Zero Input Lag)
+
+No cliente local, não esperamos permissão do servidor para andar. Nós processamos os *inputs*, movemos nosso avatar na tela (`_client_predicted_position`) e informamos à rede a nossa intenção empacotada no `submit_state`. Isso ocorre no `_physics_process`:
+
+```gdscript
+func _physics_process(delta: float) -> void:
+    if QuanticNet.is_server() or QuanticNet.get_state() != QuanticNet.ConnectionState.CONNECTED:
+        return
+        
+    var input_dir := Vector3.ZERO
+    input_dir.x = Input.get_axis("ui_left", "ui_right")
+    input_dir.z = Input.get_axis("ui_up", "ui_down")
+        
+    # Client-Side Prediction: Movimenta instantaneamente o avatar local na malha visual.
+    _client_predicted_position += input_dir.normalized() * speed * delta
+    _update_visual(QuanticNet.get_unique_id(), _client_predicted_position, true)
+    
+    var custom_input = 0
+    if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+        custom_input = 1 # Dispara Hitscan sem usar RPC pesados!
+        
+    # Envia a predição otimista de forma cravada para a Engine C++ assinar e rotear
+    QuanticNet.submit_state(_client_predicted_position, Vector3.ZERO, custom_input, delta)
+```
+
+### 3. Interpolação de Buffer Dinâmico (Renderização de Inimigos)
+
+O servidor envia as coordenadas dos outros jogadores compactadas em *P-Frames* assíncronos. Se nós tentássemos desenhá-los ao recebê-los, eles "gaguejariam" na tela (Jitter).
+A solução? O QuanticNet *bufferiza* e interpola no passado C++. Nós só precisamos ler e renderizar (no `_process` destravado):
+
+```gdscript
+func _process(_delta: float) -> void:
+    # Roda livre no V-Sync. Lógica de Snapshot Interpolation puramente visual.
+    if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+        
+        for id in _active_visual_entities_map.keys():
+            if id != QuanticNet.get_unique_id(): # Pula nós mesmos (que usamos predição local)
+                
+                # Consome o estado matematicamente interpolado da DLL em C++
+                var interp_state = QuanticNet.get_remote_state(id)
+                
+                if not interp_state.is_empty():
+                    var visual = _active_visual_entities_map[id]
+                    var target_pos = interp_state.get("pos", visual.position)
+                    
+                    # Movimenta o inimigo suavemente com Lerp Visual adicional
+                    visual.position = visual.position.lerp(target_pos, LERP_SPEED)
+```
+
+### 4. Reconciliação (Server Snapback)
+
+Se a predição do cliente bater de frente com a realidade do servidor (Ex: um teletransporte não autorizado, ou uma correção por latência), o Servidor emite o `snapback`. Nós escutamos o sinal e aplicamos o choque de realidade no `_client_predicted_position`:
+
+```gdscript
+func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array) -> void:
+    # Host discordou severamente da nossa simulação.
+    _client_predicted_position = pos
+    
+    # Se fôssemos um MMO completo, aqui nós re-aplicaríamos o replay_inputs em loop 
+    # simulando os passos novamente a partir deste novo ponto âncora, mascarando a correção!
+    _update_visual(QuanticNet.get_unique_id(), _client_predicted_position, true)
+```
 
 ---
 
-## 💻 Entendendo o Código (Como Usar o Plugin)
+## 🎮 Como Testar na Prática
 
-Abaixo estão trechos chaves que demonstram como é simples operar o protocolo QuanticNet em seu jogo. Toda a orquestração complexa roda por baixo dos panos na Clean Architecture.
+Você não precisa rodar builds pesadas. O projeto possui um script inteligente para PowerShell que orquestra tudo simultaneamente para você.
 
-### 1. Inicializando a Conexão
-
-Basta chamar o Singletom global fornecendo as credenciais:
-
-```gdscript
-# No Servidor
-var err = QuanticNet.host("127.0.0.1", 20432, "MINHA_SENHA", true) # true liga o Netem na porta
-
-# No Cliente
-var err = QuanticNet.join("127.0.0.1", 20432, "MINHA_SENHA", false)
-```
-
-### 2. Enviando o Estado do Jogador (Client -> Server)
-
-Em seu `_physics_process` (ou script atrelado ao Input), você processa o movimento nativamente e então delega a nova posição:
-
-```gdscript
-# O cliente roda sua própria lógica (MoveAndSlide, RigidBody, etc)
-# ...
-if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-    # Empacota a posição confirmada localmente no Delta Serializer
-    QuanticNet.submit_state(my_player.position, my_player.rotation, 0, delta)
-```
-
-### 3. Aplicando Estados Remotos (Server -> Client)
-
-O jogo não se preocupa com perdas de pacotes. Ele apenas consome, durante o `_process` visual, o estado já resolvido e interpolado da rede.
-
-```gdscript
-func _process(delta: float) -> void:
-    for id in get_todos_inimigos_conhecidos():
-        var state = QuanticNet.remote_state(id)
-        if not state.is_empty():
-            # A posição e rotação já vêm matematicamente interpoladas para o frame visual atual!
-            inimigo[id].position = state["pos"]
-            inimigo[id].rotation = state["rot"]
-```
-
-### 4. Injetando Comandos Autoritários (Servidor)
-
-Seu Servidor é o dono do mundo. Ele registra e define o perfil de Tick de qualquer NPC ou Prop interativo.
-
-```gdscript
-# Cria um NPC no motor
-var prop_id = spawn_npc()
-# Avisa o QuanticNet sobre a existência dessa entidade usando um NetProfile customizado
-QuanticNet.register_entity(prop_id, false, true, profile_5hz)
-
-# No physics_process do servidor, atualiza a autoridade dele
-QuanticNet.get_server_registry()[prop_id].pos = Vector3(x, y, z)
-```
-
-## 🚀 Como Testar Localmente
-
-A forma mais efetiva é abrir um **Terminal (PowerShell)** na raiz do seu projeto e executar nosso script de atalho para levantar as 3 instâncias simuladas:
+Na raiz do projeto (`godot_quantic_net/`), abra o seu terminal e execute:
 
 ```powershell
-.\toggle_demo.ps1
+powershell.exe -ExecutionPolicy Bypass -File toggle_demo.ps1
 ```
 
-*(O Script lançará 1 Servidor Headless, 1 Cliente Sadio e 1 Cliente Netem Simultaneamente. Rodar o script novamente encerrará todas as instâncias limpas).*
+*(Isto lançará 1 Servidor em modo Headless e 2 Clientes automaticamente.*
+*(Rode o script novamente para finalizar com higiene os processos).*
