@@ -79,11 +79,10 @@ Dictionary QNDeltaSerializer::decode_state(const Ref<QNBitBuffer> &buf, const Di
 	d["ts"] = (int)buf->read_bits(32);
 	
 	if (buf->read_bool()) {
-		d["pos"] = Vector3(
-			buf->read_float(POS_LO, POS_HI, POS_BITS),
-			buf->read_float(POS_LO, POS_HI, POS_BITS),
-			buf->read_float(POS_LO, POS_HI, POS_BITS)
-		);
+		double x = buf->read_float(POS_LO, POS_HI, POS_BITS);
+		double y = buf->read_float(POS_LO, POS_HI, POS_BITS);
+		double z = buf->read_float(POS_LO, POS_HI, POS_BITS);
+		d["pos"] = Vector3(x, y, z);
 	} else {
 		d["pos"] = base.get("pos", Vector3());
 	}

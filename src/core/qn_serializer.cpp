@@ -49,11 +49,10 @@ Dictionary QNSerializer::decode_state_seq(const PackedByteArray &b) {
 	
 	Dictionary d;
 	d["seq"] = (int)buf->read_bits(16);
-	d["pos"] = Vector3(
-		buf->read_float(POS_LO, POS_HI, 16),
-		buf->read_float(POS_LO, POS_HI, 16),
-		buf->read_float(POS_LO, POS_HI, 16)
-	);
+	double x = buf->read_float(POS_LO, POS_HI, 16);
+	double y = buf->read_float(POS_LO, POS_HI, 16);
+	double z = buf->read_float(POS_LO, POS_HI, 16);
+	d["pos"] = Vector3(x, y, z);
 	d["rot"] = buf->read_quaternion().get_euler();
 	d["ts"] = (int)buf->read_bits(32);
 	d["custom_id"] = (int)buf->read_bits(8);
@@ -111,11 +110,10 @@ Array QNSerializer::decode_state_history(const PackedByteArray &b) {
 		
 		Dictionary d;
 		d["seq"] = (int)buf->read_bits(16);
-		d["pos"] = Vector3(
-			buf->read_float(POS_LO, POS_HI, 16),
-			buf->read_float(POS_LO, POS_HI, 16),
-			buf->read_float(POS_LO, POS_HI, 16)
-		);
+		double x = buf->read_float(POS_LO, POS_HI, 16);
+		double y = buf->read_float(POS_LO, POS_HI, 16);
+		double z = buf->read_float(POS_LO, POS_HI, 16);
+		d["pos"] = Vector3(x, y, z);
 		d["rot"] = buf->read_quaternion().get_euler();
 		d["ts"] = (int)buf->read_bits(32);
 		d["custom_id"] = (int)buf->read_bits(8);
