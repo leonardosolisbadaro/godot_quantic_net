@@ -43,6 +43,8 @@ const PERCENTILE_1_LOW := 0.01
 const CAMERA_START_POS := Vector3(0, 8, 10)
 const CAMERA_START_ROT := Vector3(-35, 0, 0)
 const FLOOR_SIZE := Vector2(40, 40)
+const SERVER_PROPS: Array[int] = [1001, 1002, 1003]
+const GENERAL_AOI_RATIO := 0.5 # A região do Grid ocupará 50% do chão atual
 
 # Constantes de Interface
 const UI_MARGIN_STD := 20
@@ -50,6 +52,13 @@ const UI_MARGIN_LARGE := 40
 const UI_SPACER := 15
 const OUTLINE_THICK := 4
 const OUTLINE_THIN := 3
+
+# Constantes de Gameplay (Valores "Mágicos" abstraídos)
+const DEFAULT_VIEW_DISTANCE := 12.0 # Raio inicial do Client Culling (FOV dinâmico)
+const CLIENT_MOVE_SPEED := 6.0 # Velocidade rígida do jogador (Blindada do validador)
+const SHOOT_COOLDOWN_MS := 200 # Tempo entre disparos
+const SERVER_CULL_TIMEOUT_MS := 500 # Tempo máximo para considerar uma entidade oculta pelo Servidor
+const INTERP_LERP_SPEED := 5.0 # Suavização visual (Client-Side Interpolation)
 
 # ==============================================================================
 # VARIÁVEIS DE REDE E CONFIGURAÇÕES DO QUANTICNET
@@ -65,7 +74,7 @@ const SECRET := "demo-secret"
 var _network_config = {
 	"max_speed": 30.0, # Tolerância elevada do Anti-Speedhack (Absorve os Jitters extremos do NETEM)
 	"hard_cap": 50.0, # Velocidade absurda (cair, teleportar) onde a interpolação é desligada e vira um "teleporte visual" (snap)
-	"world_bounds": 60.0, # Limites do mundo (anti-fly/anti-void)
+	"world_bounds": 60.0, # Retornado para 60.0 para permitir que o cliente saia do Grid (Filtro Geral) para testes
 	"max_strikes": 5, # Quantas vezes um cliente pode enviar pacotes inválidos antes de ser kickado
 	"auth_timeout": 3.0, # Tempo máximo (segundos) tolerado na fase de handshake
 	"netem_loss": 10.0, # [NETEM] % de perda de pacote forçada
@@ -112,9 +121,8 @@ var _local_pos: Vector3 = Vector3(0, 1.0, 0)
 var _auto_move: bool = false
 var _auto_move_origin: Vector3 = Vector3.ZERO
 var _auto_move_time: float = 0.0
-var _server_props: Array = [1001, 1002, 1003] # [Fase 5] Props
 var _server_props_time: float = 0.0
-var _client_view_distance: float = 12.0
+var _client_view_distance: float = DEFAULT_VIEW_DISTANCE
 var _client_cull_ring: MeshInstance3D
 var _server_cull_ring: MeshInstance3D
 var _status_lbl: Label
@@ -244,7 +252,7 @@ func _ready() -> void:
 		QuanticNet.register_entity(1, true, true, _profile_player)
 		
 		# [Fase 5] Servidor instanciando Props Autoritativos
-		for prop_id in _server_props:
+		for prop_id in SERVER_PROPS:
 			QuanticNet.register_entity(prop_id, false, true, _profile_prop)
 	else:
 		print("[DEMO] Iniciando CLIENTE QuanticNet...")
@@ -287,6 +295,11 @@ func _setup_scene() -> void:
 	floor_mesh.mesh = plane
 	add_child(floor_mesh)
 	
+	# [AoI Geral] Feedback visual do Grid System (Spatial Partitioning)
+	var aoi_size = FLOOR_SIZE * GENERAL_AOI_RATIO
+	var general_aoi = _create_aoi_grid(Color(1.0, 0.5, 0.0, 0.4), aoi_size, 0.05)
+	add_child(general_aoi)
+	
 	_world_root = Node3D.new()
 	add_child(_world_root)
 	
@@ -311,6 +324,54 @@ func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3
 	mi.material_override = mat
 	mi.position.y = y_offset
 	return mi
+
+func _create_aoi_grid(color: Color, size: Vector2, y_offset: float) -> Node3D:
+	var node = Node3D.new()
+	var thickness = 0.15
+	
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	
+	# Top edge
+	var top = MeshInstance3D.new()
+	var box_top = BoxMesh.new()
+	box_top.size = Vector3(size.x, thickness, thickness)
+	top.mesh = box_top
+	top.position = Vector3(0, 0, -size.y / 2)
+	top.material_override = mat
+	node.add_child(top)
+	
+	# Bottom edge
+	var bot = MeshInstance3D.new()
+	var box_bot = BoxMesh.new()
+	box_bot.size = Vector3(size.x, thickness, thickness)
+	bot.mesh = box_bot
+	bot.position = Vector3(0, 0, size.y / 2)
+	bot.material_override = mat
+	node.add_child(bot)
+	
+	# Left edge
+	var left = MeshInstance3D.new()
+	var box_left = BoxMesh.new()
+	box_left.size = Vector3(thickness, thickness, size.y)
+	left.mesh = box_left
+	left.position = Vector3(-size.x / 2, 0, 0)
+	left.material_override = mat
+	node.add_child(left)
+	
+	# Right edge
+	var right = MeshInstance3D.new()
+	var box_right = BoxMesh.new()
+	box_right.size = Vector3(thickness, thickness, size.y)
+	right.mesh = box_right
+	right.position = Vector3(size.x / 2, 0, 0)
+	right.material_override = mat
+	node.add_child(right)
+	
+	node.position.y = y_offset
+	return node
 
 
 # ==============================================================================
@@ -429,15 +490,39 @@ func _physics_process(delta: float) -> void:
 	if QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 		# [Fase 5] Servidor move Props Autoritativamente
 		_server_props_time += delta
-		for i in range(_server_props.size()):
-			var prop_id = _server_props[i]
+		for i in range(SERVER_PROPS.size()):
+			var prop_id = SERVER_PROPS[i]
 			var offset_time = _server_props_time + (i * 2.0)
+			
+			# Aumentei a amplitude do movimento (de 4.0 para 12.0) para forçar as caixas 
+			# a entrarem e saírem do Grid Geral, provando o funcionamento do Filtro.
 			var pos = Vector3(sin(offset_time) * 4.0, 0.5, cos(offset_time) * 4.0 + (i * 3.0))
-			QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
-			_update_visual(prop_id, pos, false) # Atualiza o visual do próprio servidor
+			
+			# A Lógica do Filtro Geral (Grid System): 
+			# Se o prop passar do limite do Grid, o Servidor SIMPLESMENTE PARA DE SINCRONIZÁ-LO!
+			# A ausência de estado fará o Client cullar o prop após o timeout (SERVER_CULL_TIMEOUT_MS)
+			var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
+			var is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
+			
+			if is_inside_aoi:
+				QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
+				
+			_update_visual(prop_id, pos, false) # Atualiza o visual do próprio servidor para feedback visual
+			
+			# Modifica a cor no Servidor para provar o estado do Filtro
+			if _entities_visuals.has(prop_id):
+				var mat = _entities_visuals[prop_id].material_override as StandardMaterial3D
+				if is_inside_aoi:
+					mat.albedo_color = Color.YELLOW
+					mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+				else:
+					mat.albedo_color = Color.DIM_GRAY
+					mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+					mat.albedo_color.a = 0.3
+			
 			
 	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-		var speed = 6.0 # Desacoplado da rede! (Player anda a 6m/s, mas o server tolera até 30m/s por conta do Jitter)
+		var speed = CLIENT_MOVE_SPEED # Desacoplado da rede! (Player anda a 6m/s, mas o server tolera até 30m/s por conta do Jitter)
 		var input_dir = Vector3.ZERO
 		
 		if not _auto_move:
@@ -465,7 +550,7 @@ func _physics_process(delta: float) -> void:
 		# [Fase 6] Combate Zero-RPC
 		var custom_input = 0
 		var now = Time.get_ticks_msec()
-		if now - _last_shot_time > 200:
+		if now - _last_shot_time > SHOOT_COOLDOWN_MS:
 			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 				custom_input = 1 # Laser Hitscan
 				_last_shot_time = now
@@ -496,16 +581,22 @@ func _process(_delta: float) -> void:
 					var rad = _profile_player.get_spatial_culling_radius() if id < 1000 else _profile_prop.get_spatial_culling_radius()
 					var dist = _local_pos.distance_to(visual.position)
 					
-					# Se passou de 0.5s sem atualizar, o servidor removeu (Server Culling)
+					# A Lógica do Filtro Geral (Grid System) simulada no Cliente para Peers:
+					# Entidades que transpassam o Grid perdem a sincronia
+					var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
+					var is_inside_aoi = absf(target_pos.x) <= aoi_limit and absf(target_pos.z) <= aoi_limit
+					
+					# Se passou de SERVER_CULL_TIMEOUT_MS sem atualizar, o servidor removeu (Server Culling)
 					# Se dist > _client_view_distance, o cliente ocultou localmente (Client Culling)
-					var is_visible = (dist <= _client_view_distance) and (now - last_up <= 500)
+					# Se não estiver na AoI (Grid), descarta a entidade
+					var is_visible = is_inside_aoi and (dist <= _client_view_distance) and (now - last_up <= SERVER_CULL_TIMEOUT_MS)
 					
 					if not visual.visible and is_visible:
 						# Acabou de entrar no raio (ou voltou a receber pacotes), não vamos patinar! 
 						visual.position = target_pos
 					else:
-						# Visual Lerp PESADO (5.0) para mascarar Buffer Underruns extremos do Netem (Elasticidade)
-						visual.position = visual.position.lerp(target_pos, _delta * 5.0)
+						# Visual Lerp PESADO para mascarar Buffer Underruns extremos do Netem (Elasticidade)
+						visual.position = visual.position.lerp(target_pos, _delta * INTERP_LERP_SPEED)
 					
 					visual.visible = is_visible
 					
@@ -666,7 +757,7 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 		else:
 			for id in _entities_visuals.keys():
 				var last_up = _entities_visuals[id].get_meta("last_update", now_ms)
-				if now_ms - last_up <= 500:
+				if now_ms - last_up <= SERVER_CULL_TIMEOUT_MS:
 					total_entities += 1
 					if id < 1000:
 						count_peers += 1
@@ -791,7 +882,7 @@ func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Arr
 	_local_pos = pos
 	
 	# [Fase 4] Re-apply pending inputs
-	var speed = 6.0 # Velocidade do client fixada em 6.0 m/s
+	var speed = CLIENT_MOVE_SPEED # Velocidade do client fixada abstratamente
 	for pending in replay:
 		var dir = pending["move"]
 		var dt = pending["dt"]
