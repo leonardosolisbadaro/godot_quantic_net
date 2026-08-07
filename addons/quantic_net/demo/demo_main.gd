@@ -748,12 +748,17 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 		
 		if QuanticNet.is_server():
 			var registry = QuanticNet.get_registry()
-			total_entities = registry.size()
+			var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
 			for k in registry:
-				if registry[k].get("is_peer", false):
-					count_peers += 1
-				else:
-					count_props += 1
+				var st = registry[k]
+				var pos = st.get("pos", Vector3.ZERO)
+				# Na UI do Servidor, contabilizamos apenas quem está ATIVO dentro do Grid
+				if absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit:
+					total_entities += 1
+					if st.get("is_peer", false):
+						count_peers += 1
+					else:
+						count_props += 1
 		else:
 			for id in _entities_visuals.keys():
 				var last_up = _entities_visuals[id].get_meta("last_update", now_ms)
@@ -840,6 +845,19 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		visual.position = pos
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
+	# [AoI Geral Simulada no Cliente]
+	# O Grid System corta a existência de pacotes indesejados. 
+	# Como o Servidor ainda emite tudo por não ter C++ Grid, simulamos o bloqueio rígido aqui no receptor.
+	var aoi_limit = (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0
+	
+	# 1. Se o próprio jogador local saiu do Grid, a rede é cortada para ele (Não vê mais nada).
+	if absf(_local_pos.x) > aoi_limit or absf(_local_pos.z) > aoi_limit:
+		return
+		
+	# 2. Se a entidade relatada (prop ou outro peer) saiu do Grid, bloqueamos a atualização do last_update.
+	if absf(pos.x) > aoi_limit or absf(pos.z) > aoi_limit:
+		return
+
 	# Recebemos o Snapshot do Servidor confirmando onde o inimigo (ou nó mesmo) está.
 	# Ignoramos a nós mesmos por ora porque usamos predição instantânea local.
 	if owner != QuanticNet.get_unique_id():
