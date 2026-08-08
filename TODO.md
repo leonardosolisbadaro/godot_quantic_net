@@ -11,7 +11,35 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 
 ---
 
-## 🚨 FASE 1: FUNDAÇÃO NETCODE AAA (Refatoração Crítica)
+## 🚀 FASE 1: ARQUITETURA V2 (Command-Based & Multithreading)
+
+*Esta fase transforma o QuanticNet num servidor autoritativo resiliente, imune a manipulações de tempo do cliente e gargalos de thread.*
+
+### PR 1 — Command-Based API & Input Jitter Buffer
+
+* [ ] Criar abstração/interface `QNCommandSession` isolada ou flag de configuração de paradigma no `project.godot`.
+* [ ] Isolar a lógica de movimento em função pura e determinística (`move(state, input, dt)`) rodando em passo fixo.
+* [ ] Implementar a nova interface pública `submit_input(sequence, input_mask, look_dir)` no `quantic_net_autoload.gd`.
+* [ ] Desenvolver o *Dynamic Input Jitter Buffer* no lado do servidor (escrevendo testes no Gut primeiro).
+* [ ] Implementar no servidor atraso dinâmico no consumo baseado no Jitter da conexão do Peer.
+* [ ] Implementar *Catch-up* no loop físico para processar backlog de inputs após picos de latência.
+
+### PR 2 — I/O Offloading em Worker Threads
+
+* [ ] Migrar rotinas de polling (`enet_host_service`) para rodar em Worker Thread dedicado C++.
+* [ ] Realizar a deserialização bruta (*Bit-Unpacking*) paralelamente no Worker Thread.
+* [ ] Criar um Lock-Free Ring Buffer para injetar os dados desserializados em memória compartilhada segura.
+* [ ] Alterar o sinal `_on_custom_packet` na Godot para apenas ler do Ring Buffer pronto na Main Thread.
+
+### PR 3 — Tick Server-Side Independente & Dormancy
+
+* [ ] Substituir o uso de `_physics_process` no servidor por um `_process` com Acumulador Determinístico (Ex: `NET_TICK_RATE = 1.0 / 20.0`).
+* [ ] Gerenciar entidades dormentes (Sleep State): Servidor parar de transmitir estados se Δ Posição e Rotação zerarem por `N` ticks.
+* [ ] Transmitir notificação explícita de pacote `TYPE_SLEEP` ao cliente para suspender a interpolação visual do prop.
+
+---
+
+## 🚨 FASE 2: FUNDAÇÃO NETCODE AAA (Refatoração Crítica)
 
 *Esta fase é bloqueante. O Core não evolui para novas features até o hotpath atual estar impecável.*
 
@@ -20,31 +48,18 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 * [ ] Implementar bitmask de 32 bits de confirmação alimentado pelo `QNLossTracker` (em memória contígua `uint32_t`, zero allocation).
 * [ ] Gerar P-Frames exclusivamente contra o último snapshot confirmado pelo cliente; emitir I-Frame automático após 32 perdas.
 
-### PR 2 — Eliminação do Double-Smoothing na Demo Bare Metal
-
-* [ ] Aplicar a saída do `QNInterpBuffer.sample()` diretamente na posição visual, removendo lerps secundários que destróem a precisão do buffer.
-
-### PR 3 — Struct POD Contígua + Diff Bitwise (Performance)
+### PR 2 — Struct POD Contígua + Diff Bitwise (Performance)
 
 * [ ] Substituir o modelo `Dictionary`/`Variant` por `struct QNEntityState` POD de tamanho fixo no C++.
 * [ ] Diff passa a ser bitwise XOR sobre memória bruta (vetorizado com SIMD quando possível).
 
-### PR 4 — Elastic Time / Clock Steering
-
-* [ ] Implementar ajuste microscópico de delta no cliente baseado no nível do `QNInputBuffer` do host, garantindo `server_time()` monotônico.
-
-### PR 5 — Predição em Passo Fixo
-
-* [ ] O integrador da prediction da demo passa a rodar no mesmo passo fixo do tick de rede, eliminando divergências de ponto flutuante.
-* [ ] Isolar o passo de movimento na função `move(state, input, dt)`.
-
 ---
 
-## 🌐 FASE 2: EXPANSÃO DO CORE (Features C++)
+## 🌐 FASE 3: EXPANSÃO DO CORE (Features C++)
 
 ### PR 1 — Networked Physics (RigidBody Sync)
 
-* [ ] Expandir o codec nativo para empacotar *Linear* e *Angular Velocity* e gerenciar *Sleeping states* para economizar banda.
+* [ ] Expandir o codec nativo para empacotar *Linear* e *Angular Velocity*.
 
 ### PR 2 — RPC Desacoplado e Object Replication
 
@@ -53,6 +68,10 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 ---
 
 ## 🧊 ICEBOX (Tarefas Congeladas)
+
+### Issue: Elastic Time / Clock Steering
+* **Status:** Congelada (Obsoleta).
+* **Escopo:** Ajuste microscópico de delta no cliente baseado no nível do buffer do host. Rejeitado pois a Arquitetura V2 com Jitter Buffer Ativo e Tick Independente já resolve a autoridade de tempo no lado do servidor.
 
 ### Issue: Solver Cinemático Stateless em C++ (`QNKinematicSolver`)
 
