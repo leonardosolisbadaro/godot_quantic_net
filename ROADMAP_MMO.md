@@ -1,46 +1,51 @@
 # ROADMAP MMO & COMPETITIVO: O Destino do QuanticNet Core
 
-Este documento decreta a visão arquitetural de longo prazo para a evolução do motor **QuanticNet**. Tendo consolidado com sucesso a base estrutural de baixo nível (Client-Side Prediction, DTLS, Memória controlada e C++ Spatial Hashing), o projeto focará intensamente em performance *Bare Metal* a partir de agora.
+Este documento não é apenas um guia técnico; é uma carta de amor à infraestrutura *Bare-Metal*. É a visão do futuro definitivo para o motor **QuanticNet**, uma declaração de guerra contra gargalos de CPU e latência.
 
-> ⚠️ **Fronteira Arquitetural:** Este repositório constrói o *Motor de Infraestrutura*. A aplicação prática em grande escala (Grid/Chunk Systems visuais, demonstrações de MMOs complexos, simulações massivas) reside agora no repositório parceiro oficial `godot_quantic_net_demos`.
+Tendo consolidado a nossa fundação com a **Versão 0.7.0** — que cravou com sucesso o *Client-Side Prediction*, o Culling Espacial em C++, a compensação de *Lag* e, acima de tudo, o novíssimo **Dual Paradigm** (com a implacável *Command-Based API* e o *Dynamic Input Jitter Buffer*) — o projeto agora levanta voo rumo à excelência bruta de performance.
 
-## Pilares Fundamentais (Concluídos e Blindados) ✅
-
-- **Delta Compression & Jitter Buffer:** Absorção elástica de latência.
-- **Tick Híbrido & Priority Accumulator:** Frequências individuais respeitando as margens do MTU.
-- **Spatial Hashing em C++ (QNSpatialGrid):** Filtragem de tráfego via Culling.
-- **Lag Compensation (World History Buffer):** Hit-registration milimétrico retroativo.
-- **Laboratório Rústico Interno:** A `demo_main.gd` foi congelada. Ela serve apenas para atestar matematicamente o funcionamento do Core end-to-end (sem o fardo de assets e game design acoplado).
+> ⚠️ **A Fronteira Arquitetural:** O QuanticNet é e sempre será o *Motor de Infraestrutura de Baixo Nível*. Toda a aplicação prática de design de jogos, inventários, magias, ou simulações visuais de um "3D Open World MMO", encontram-se isoladas no repositório parceiro oficial [godot_quantic_net_demos](https://github.com/leonardosolisbadaro/godot_quantic_net_demos). Aqui, lidamos com os elétrons, a matemática e o silício.
 
 ---
 
-## O Futuro (Os Próximos Passos do Motor) 🚀
+## 🏛️ Os Alicerces Inquebráveis (Onde Estamos Hoje) ✅
 
-### 1. Refinamento AAA e Otimização Extrema (Curto Prazo)
+O suor das trincheiras do TDD e da *Clean Architecture* nos trouxe até aqui. O ecossistema atual já domina nativamente os vilões clássicos do netcode:
 
-A prioridade absoluta e bloqueante para qualquer nova feature no GDExtension é a transformação do *hotpath* de serialização.
-O motor adotará estruturas em C++ de tamanho rigorosamente fixo (*Struct POD*), abandonando as passagens custosas do modelo `Variant`/`Dictionary`. Implementaremos comparações *Bitwise XOR* (vetorizadas com SIMD quando possível) e um sistema de rastreamento de confirmações (ACK-Tracking) alocado em memória contígua de 32 bits (zero allocation).
-No lado do cliente, a predição local dará um salto com a introdução de *Elastic Time* (Clock Steering) e passos fixos matemáticos rígidos, garantindo a aniquilação completa do jitter flutuante de delta.
-
-### 2. Networked Physics e Sleeping States (Médio Prazo)
-
-As entidades regidas puramente por cálculos físicos (RigidBodies) exigirão um protocolo de empacotamento cinemático dedicado na engine (`NetProfile.RIGID_BODY`).
-A API do QuanticNet passará a decodificar vetores otimizados de *Linear* e *Angular Velocity*, introduzindo um culling agressivo (C++) para entidades em repouso (Sleeping States). Isso entregará a capacidade bruta de sincronizar milhares de detritos físicos colidindo de forma massiva com um gasto irrisório de banda.
-
-### 3. Object Replication e RPC Desacoplado (Médio Prazo)
-
-Atualmente o QuanticNet sincroniza *estado posicional* a altíssima performance, mas o framework de MMO exige o envio garantido de contextos dinâmicos.
-A infraestrutura receberá um canal secundário de *Reliable Delivery* semântico. O servidor poderá empacotar e informar paralelamente a tipagem ou eventos únicos de objetos via spawn determinístico (ex: "Entidade 5000 é um Orc que conjurou Fireball"). Isso habilita o despache rígido de inventários e ações vitais sem sujar ou atrasar a alta frequência de varredura posicional de frames I/P.
-
-### 4. Dead Reckoning Agressivo e Extrapolação (Longo Prazo)
-
-Para viabilizar cenários mobile agressivos: quando a conexão enfraquecer e a perda de pacotes ressecar por completo o Jitter Buffer do jogador.
-Um cálculo matemático preditivo de continuidade de vetores acionado a nível de C++ manterá as entidades operando numa sobrevida ilusória autônoma no cliente, minimizando engasgos grotescos durante disrupções temporárias da camada UDP.
-
-### 5. Suporte de Base Cloud e Server Meshing (Horizonte Final)
-
-Com o C++ Core polido em seu limite prático (POD/SIMD), a engine estará pronta para prover as amarras estruturais (API e ganchos) para **Server Meshing**. A topologia da Engine suportará que o consumidor do plugin desacople o monolito autoritativo, suportando que múltiplos instanciamentos Headless externos gerenciem "Chunks" (Grids) de forma paralela e injetem dados de forma simultânea e segura no `QNSpatialGrid`.
+- **Dual Paradigm Blindado:** O desenvolvedor agora tem o poder de escolher. Do envio ágil de estados para jogos PvE (*State-Based*), até o rigor competitivo de *eSports* (*Command-Based*), onde o servidor acumula *Inputs* determinísticos e os consome através de um atraso dinâmico no tempo exato, ignorando flutuações de rede e anulando *Speedhacks*.
+- **Culling Milissegundo em C++:** O `QNSpatialGrid` resolve a vizinhança de milhares de entidades sem bloquear a *Main Thread* da Godot.
+- **História Rebobinada:** O `QNWorldHistoryBuffer` nos concede *Lag Compensation* para hitscans perfeitos, permitindo "atirar no passado" e acertar no servidor.
 
 ---
 
-O fim dessa rota consolida o motor QuanticNet como a base infraestrutural nativa (Code-First / C++) definitiva e irrefutável para jogos de altíssimo desempenho e escalonamento na Godot 4.7.
+## 🚀 O Horizonte (O Que Vamos Construir)
+
+O futuro do QuanticNet é pautado por um único lema: **"Descarregar a Main Thread e Vetorizar a Lógica"**. Eis as batalhas que já decidimos que vamos vencer.
+
+### 1. I/O Offloading e Lock-Free Ring Buffers (Curto Prazo)
+
+A rede não pode ditar o FPS da sua física. O próximo passo (como mapeado no nosso `TODO.md`) é migrar a rotina bruta de *polling* do ENet e as desserializações de bytes pesadas (*Bit-Unpacking*) inteiramente para uma **Worker Thread em C++**. Os dados mastigados serão injetados de forma cirúrgica na Godot através de filas *Lock-Free* de memória contígua. A *Main Thread* da Godot servirá apenas para "ler o jornal" já impresso.
+
+### 2. Tick Autoritativo Independente & Sleeping States (Curto Prazo)
+
+O servidor abandonará o ciclo de renderização (`_physics_process`). O motor receberá um acumulador de *Tick* independente e cristalino, ditando o ritmo real do mundo (ex: estritos 20hz ou 60hz). Junto a isso, entidades em repouso absoluto entrarão em *Dormancy* de rede, economizando colossalmente a largura de banda.
+
+### 3. Refinamento AAA e Estruturas POD (Médio Prazo)
+
+A API do QuanticNet abraçará o *hotpath* definitivo. Substituiremos empacotamentos GDScript/Variants no C++ por *Structs POD* (Plain Old Data) de tamanho fixo na memória. O sistema de confirmações de pacotes (ACK-Tracking) e os cálculos de compressão de Delta utilizarão comparações *Bitwise XOR* vetorizadas (SIMD), levando o custo de CPU a frações de milissegundo.
+
+### 4. Networked Physics e RPC Semântico (Médio Prazo)
+
+Para suportar montanhas de detritos ou veículos balísticos, introduziremos um pacote dedicado `NetProfile.RIGID_BODY`, capaz de decodificar *Linear* e *Angular Velocity* com precisão. Em paralelo, a engine ganhará um canal confiável e desacoplado (*Reliable Delivery*) para eventos semânticos e replicação pontual de inventários (ex: "RPC: Baú Aberto"), sem sujar os minúsculos e implacáveis pacotes do loop posicional UDP.
+
+### 5. Dead Reckoning Agressivo (Longo Prazo)
+
+O *Jitter Buffer* não faz milagres se o cabo for cortado. O QuanticNet adotará a extrapolação de vetores diretamente em C++. Quando a perda de pacotes ressecar o buffer, o motor cliente continuará projetando autonomamente os NPCs e inimigos numa sobrevida matemática suave e ilusória, salvando a experiência do jogador durante instabilidades agressivas de latência ou perda de pacotes.
+
+### 6. Server Meshing e Escalabilidade Massiva (O Horizonte Final)
+
+Quando as fundações acima convergirem, o monolito autoritativo do servidor será fragmentado. O QuanticNet proverá as amarras infraestruturais para **Server Meshing**, permitindo que múltiplos binários *Headless* (nós de processamento na Cloud) gerenciem "Chunks" do mapa de forma paralela, roteando e injetando entidades simultaneamente no Culling Espacial sem que o cliente sequer perceba a transição de zonas.
+
+---
+
+Este é o futuro que desenhamos. Cada linha de código em C++, cada teste unitário no GUT e cada refatoração cimentará o QuanticNet não apenas como um plugin, mas como o coração imutável e soberano do seu próximo grande jogo na Godot 4.
