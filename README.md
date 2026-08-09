@@ -22,15 +22,12 @@ A arquitetura resolve as barreiras físicas da infraestrutura multiplayer (Clien
 
 ---
 
-## 🧭 O Caminho Adiante (A Fronteira C++)
+## 🧭 O Caminho Adiante
 
-O QuanticNet adentrou a sua fase crítica de otimização estrutural (Fase 1 do [TODO.md](./TODO.md)). Os próximos objetivos incluem:
+O desenvolvimento do QuanticNet é guiado de forma transparente. Para entender para onde estamos caminhando, consulte:
 
-1. **Refatoração Crítica de Performance:** Migração para *Structs POD* de tamanho fixo no C++, comparações *Bitwise XOR* vetorizadas (SIMD) e sistema de Ack-Tracking em memória contígua `uint32_t`.
-2. **Elastic Time e Predição em Passo Fixo:** Ajuste microscópico de delta (Clock Steering) atrelado ao `QNInputBuffer` e isolamento da predição em passos rigorosamente fixos para eliminar divergências de ponto flutuante.
-3. **Expansão do Core (C++):** Sincronização avançada de *RigidBodies* (Networked Physics) com suporte a *Sleeping states*, além do desenvolvimento de RPC Desacoplado para replicação semântica.
-
-Acompanhe nossa trilha técnica no [TODO.md](./TODO.md) e o planejamento futuro no [ROADMAP_MMO.md](./ROADMAP_MMO.md).
+- **[TODO.md](./TODO.md):** Para acompanhar as fases táticas de curto prazo e os *Pull Requests* ativos (como as otimizações de *Worker Threads*).
+- **[ROADMAP_MMO.md](./ROADMAP_MMO.md):** Para compreender a visão arquitetural de longo prazo do motor em C++ (Networked Physics, Structs POD e Server Meshing).
 
 ---
 
