@@ -37,6 +37,70 @@ O desenvolvimento do QuanticNet é guiado de forma transparente. Para entender p
 
 ---
 
+## ⚙️ Instalação e Uso
+
+O QuanticNet é desenhado para ser uma caixa preta elegante. Siga as instruções abaixo de acordo com o seu perfil.
+
+### Opção A: Plug and Play (Apenas o Addon)
+
+Se você é um desenvolvedor de jogos e deseja apenas usar o motor:
+
+1. Baixe o repositório ou a última *Release*.
+2. Copie a pasta `addons/quantic_net/` inteira (que já contém as bibliotecas compiladas e os scripts) para a raiz do seu novo projeto Godot.
+3. Abra seu projeto, vá em `Project` -> `Project Settings` -> `Plugins` e ative o **QuanticNet**.
+4. O Autoload principal será injetado automaticamente. Pronto!
+
+### Opção B: Compilação Manual (Contribuidores)
+
+Se você planeja modificar a infraestrutura em C++ (GDExtension):
+
+1. Certifique-se de ter o [SCons](https://scons.org/) e um compilador C++ (MSVC no Windows ou GCC/Clang no Linux) instalados.
+2. Clone o repositório.
+3. Na raiz do projeto, execute a compilação:
+
+   ```powershell
+   scons target=template_debug debug_symbols=yes
+   ```
+
+4. Após o build, abra o projeto na Godot 4.7, vá em `Project Settings` -> `Plugins` e ative o **QuanticNet**.
+
+---
+
+## 🌍 Hello World QuanticNet
+
+Aqui está o esqueleto mínimo de integração em GDScript puro (assumindo que o plugin está ativo). Crie um script `game_manager.gd` e anexe a um Node vazio na sua cena principal:
+
+```gdscript
+extends Node
+
+const PORT = 7777
+const SECRET = "chavesecreta123"
+
+func _ready() -> void:
+    # 1. Escutamos os sinais do motor
+    QuanticNet.peer_joined.connect(_on_peer_joined)
+    
+    # 2. Escolhemos o nosso papel na rede (Host ou Cliente)
+    if "--server" in OS.get_cmdline_args():
+        print("Iniciando Servidor Autoritativo...")
+        # Inicializa em Modo 0 (State-Based)
+        QuanticNet.host(PORT, SECRET, "*", 32, {"network_mode": 0})
+    else:
+        print("Iniciando Cliente...")
+        QuanticNet.join("127.0.0.1", PORT, SECRET)
+
+func _on_peer_joined(id: int) -> void:
+    print("Novo Peer autenticado com ID: ", id)
+
+func _physics_process(delta: float) -> void:
+    if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+        # 3. (Apenas Cliente): Disparamos a nossa posição preditiva local para a rede.
+        # O motor em C++ absorve, empacota em Deltas e envia ao servidor.
+        QuanticNet.submit_state(Vector3.ZERO, Vector3.ZERO, 0, delta)
+```
+
+---
+
 ## 🏗️ Rodando o Laboratório (Client/Server)
 
 No Windows, criamos um script para gerenciar a auto-topologia de testes de forma fácil e isolada (iniciando 1 Servidor invisível em background e 2 Clientes interligados localmente):
