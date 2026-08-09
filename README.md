@@ -10,15 +10,12 @@ A arquitetura resolve as barreiras físicas da infraestrutura multiplayer (Clien
 
 ---
 
-## 🚀 O Poder do Ecossistema (Fundações Concluídas)
+## 🚀 Core Features (Os 4 Pilares do QuanticNet)
 
-- **Topologia Híbrida C++/GDScript:** Transporte seguro (DTLS), criptografia e cálculos vetoriais densos operam em milissegundos no Core (C++). A API consumida é 100% GDScript, limpa e declarativa.
-- **Client-Side Prediction (Zero Input Lag):** Colisões locais e movimentação processadas de imediato, sem aguardar respostas de RTT da rede.
-- **Delta Compression & Tick Híbrido:** Envio focado em *Deltas* (apenas o que mudou) e frequências individuais por entidade, respeitando estritamente o MTU via Priority Accumulator.
-- **Spatial Hashing C++ (AoI):** Culling de rede ultra-rápido utilizando o `QNSpatialGrid`.
-- **Lag Compensation:** Validação autoritativa e rebobinamento de *hitboxes* no passado (`QNWorldHistoryBuffer`) garantindo hitscan determinístico.
-- **Dual Paradigm (State & Command-Based):** Suporta desde abordagens simples e ágeis (envio direto de estado preditivo) até fluxos rigorosamente competitivos (*Command-Based*) ancorados em um **Dynamic Jitter Buffer** no lado do servidor para total imunidade a manipulações de tempo de rede.
-- **Anti-Cheat Determinístico:** Validação rústica de velocidade e limites, com *Snapback* absoluto ou desconexões (*Strikes*).
+- **Performance Bare-Metal (C++):** Todo o transporte via sockets (ENet/DTLS), criptografia, Culling Espacial (`QNSpatialGrid`) e cálculos vetoriais densos rodam nativamente em GDExtension. A API consumida, contudo, permanece 100% GDScript, limpa e declarativa.
+- **Dual Paradigm (State ou Command-Based):** Você tem controle absoluto. Opte pelo envio direto de estados preditivos (ideal para jogos ágeis e PvE) ou adote o fluxo rigoroso de *Inputs* blindado por um **Dynamic Jitter Buffer** autoritativo no servidor (para cenários competitivos e eSports).
+- **Sincronização de Elite:** A engine resolve nativamente as dores clássicas do netcode: *Client-Side Prediction* (Zero Input Lag), *Lag Compensation* (hitscan com rebobinamento através do `QNWorldHistoryBuffer`), e *Delta Compression* elástica guiada por prioridade visual (Priority Accumulator).
+- **Anti-Cheat Determinístico:** O servidor não é cego. Tentativas de *Speedhack* ou teletransporte fora dos limites acionam matematicamente as correções absolutas da engine (*Snapbacks* visuais) ou o banimento por infrações acumuladas (*Strikes*).
 
 ---
 
