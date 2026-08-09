@@ -389,6 +389,11 @@ void QNWirePeer::_worker_loop() {
 			
 			event = enet->service(0);
 		}
+		
+		// Constraint de CPU: Previne que a Worker Thread assuma 100% de uso do núcleo 
+		// caso o select() nativo do ENet retorne imediatamente (ex: sem pacotes entrantes mas muitos sainteis).
+		// Dormir por 1ms garante que a thread ceda tempo para a GPU e a Godot Engine (Evitando congelamentos).
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 }
 

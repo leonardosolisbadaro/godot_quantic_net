@@ -270,7 +270,8 @@ void QNHostSession::tick_broadcast(int now) {
 		
 		int ack = st.get("ack", 0);
 		Dictionary base_states;
-		for (const Dictionary &hist : _world_history) {
+		for (int k = 0; k < _world_history.size(); k++) {
+			Dictionary hist = _world_history[k];
 			if ((int)hist["seq"] == ack) {
 				base_states = hist["states"];
 				break;
@@ -280,15 +281,22 @@ void QNHostSession::tick_broadcast(int now) {
 		Dictionary peer_current_states;
 		Dictionary profiles;
 		
-		// Use spatial grid to cull entities beyond the peer's dynamic culling radius (AoI)
-		Ref<QNEntityProfile> my_profile = st.get("profile", Variant());
-		double cull_rad = my_profile.is_valid() ? my_profile->get_spatial_culling_radius() : 250.0;
-		PackedInt32Array nearby = _grid->get_entities_in_radius(st["pos"], cull_rad);
+		// O Servidor define a visibilidade baseado na Aura de Existência (AoI) do EMISSOR, não do receptor.
+		// Busca num raio máximo razoável (ex: 250m) e então filtra pela aura de cada entidade.
+		PackedInt32Array nearby = _grid->get_entities_in_radius(st["pos"], 250.0);
 		for (int j = 0; j < nearby.size(); j++) {
 			int cid = nearby[j];
 			if (current_states.has(cid)) {
-				peer_current_states[cid] = current_states[cid];
-				profiles[cid] = ((Dictionary)_registry[cid]).get("profile", Variant());
+				Ref<QNEntityProfile> cid_profile = ((Dictionary)_registry[cid]).get("profile", Variant());
+				double cid_aura = cid_profile.is_valid() ? cid_profile->get_spatial_culling_radius() : 250.0;
+				
+				Vector3 cid_pos = ((Dictionary)current_states[cid]).get("pos", Vector3());
+				Vector3 my_pos = st["pos"];
+				
+				if (cid_pos.distance_to(my_pos) <= cid_aura) {
+					peer_current_states[cid] = current_states[cid];
+					profiles[cid] = cid_profile;
+				}
 			}
 		}
 		

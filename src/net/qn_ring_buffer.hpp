@@ -37,6 +37,7 @@ public:
         }
         
         item = buffer[current_head];
+        buffer[current_head] = T(); // Libera imediatamente a referência do objeto (evita vazamento em PackedByteArrays/Dicionários)
         head.store((current_head + 1) % Capacity, std::memory_order_release);
         return true;
     }

@@ -6,7 +6,6 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
-#include <deque>
 
 #include "core/qn_priority_accumulator.hpp"
 #include "core/qn_entity_profile.hpp"
@@ -24,7 +23,7 @@ private:
 
 	Dictionary _registry;
 	int _server_seq;
-	std::deque<Dictionary> _world_history;
+	Array _world_history;
 	Ref<QNPriorityAccumulator> _accumulator;
 	Ref<QNSpatialGrid> _grid;
 	Ref<QNWorldHistoryBuffer> _rewind_buffer;

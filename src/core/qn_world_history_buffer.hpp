@@ -4,7 +4,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-#include <deque>
+#include <godot_cpp/variant/array.hpp>
 
 namespace godot {
 
@@ -16,7 +16,7 @@ private:
 	// A deque of dictionaries. Each dictionary contains:
 	// "ts" : int (timestamp)
 	// "entities" : Dictionary (key: entity_id, value: Dictionary{"pos", "radius"})
-	std::deque<Dictionary> _history;
+	Array _history;
 	
 	// Max length of history in ticks. Assuming 60Hz, 90 ticks = 1.5 seconds.
 	int _max_history_ticks;

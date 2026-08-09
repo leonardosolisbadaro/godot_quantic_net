@@ -102,19 +102,20 @@ bool QNWorldHistoryBuffer::_ray_intersects_aabb(const Vector3 &origin, const Vec
 }
 
 Dictionary QNWorldHistoryBuffer::_get_interpolated_state(int timestamp) const {
-	if (_history.empty()) {
+	if (_history.size() == 0) {
 		return Dictionary();
 	}
 	
 	if (timestamp < 0) {
-		return _history[0]["entities"]; // Present
+		Dictionary first = _history[0];
+		return first["entities"]; // Present
 	}
 
 	Dictionary state_before;
 	Dictionary state_after;
 	bool found = false;
 
-	for (size_t i = 0; i < _history.size(); ++i) {
+	for (int i = 0; i < _history.size(); ++i) {
 		Dictionary hist = _history[i];
 		int hist_ts = hist["ts"];
 
