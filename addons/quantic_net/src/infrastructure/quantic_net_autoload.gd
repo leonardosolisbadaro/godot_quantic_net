@@ -7,7 +7,7 @@
 ## para integração plug and play com a Godot Engine.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-07
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
 ## @lastModifiedIn 0.7.0
@@ -26,6 +26,7 @@ signal state_received(owner: int, pos: Vector3, rot: Vector3, custom: int)
 signal pong_received(rtt: float, offset: float)
 signal snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array)
 signal input_tick(peer_id: int, sequence: int, input_mask: int, look_dir: Vector2)
+signal peer_rejected(id: int, reason: String, strikes: int)
 
 const MODE_STATE_BASED = 0
 const MODE_COMMAND_BASED = 1
@@ -113,7 +114,8 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32,
 			input_tick.emit(id, seq, mask, dir)
 		)
 		_command_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
-			print("[SERVER] Peer %d rejected (Command). Reason: %s. Strikes: %d" % [id, r, s])
+			# print("[SERVER] Peer %d rejected (Command). Reason: %s. Strikes: %d" % [id, r, s])
+			peer_rejected.emit(id, r, s)
 			if s >= config.get("max_strikes", 5):
 				_hook.get_base().disconnect_peer(id)
 		)
@@ -125,7 +127,8 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32,
 		_host_session.snapback_requested.connect(_on_host_snapback_requested)
 		_host_session.packet_ready.connect(_on_host_packet_ready)
 		_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
-			print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
+			# print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
+			peer_rejected.emit(id, r, s)
 			if s >= config.get("max_strikes", 5):
 				_hook.get_base().disconnect_peer(id)
 		)
@@ -137,7 +140,7 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32,
 	_hook.get_base().auth_callback = Callable(self, "_on_auth_callback")
 	_hook.peer_connected.connect(func(id: int) -> void:
 		if _is_server:
-			print("HOOK PEER CONNECTED: ", id)
+			# print("HOOK PEER CONNECTED: ", id)
 			peer_joined.emit(id))
 	_hook.peer_disconnected.connect(func(id: int) -> void:
 		if _is_server:
@@ -237,7 +240,7 @@ func _physics_process(delta: float) -> void:
 			if s == ENetPacketPeer.STATE_CONNECTED and _state == ConnectionState.CONNECTING:
 				_set_state(ConnectionState.AUTHENTICATING)
 				var err = _hook.get_base().send_auth(SERVER_PEER_ID, _secret.to_utf8_buffer())
-				print("CLIENT SEND AUTH RESULT: ", err)
+				# print("CLIENT SEND AUTH RESULT: ", err)
 				# _hook.get_base().complete_auth(SERVER_PEER_ID)
 				# Wait for the server to reply with the assigned ID in _on_client_auth_callback
 
@@ -248,9 +251,9 @@ func _on_auth_callback(id: int, data: PackedByteArray) -> void:
 		_on_client_auth_callback(id, data)
 
 func _on_server_auth_callback(id: int, data: PackedByteArray) -> void:
-	print("SERVER AUTH CALLBACK TRIGGERED: ", id)
+	# print("SERVER AUTH CALLBACK TRIGGERED: ", id)
 	if data == _secret.to_utf8_buffer():
-		print("SERVER AUTH SECRET MATCH!")
+		# print("SERVER AUTH SECRET MATCH!")
 		if _host_session:
 			_host_session.on_peer_authenticated(id)
 		if _command_session:
@@ -264,11 +267,11 @@ func _on_server_auth_callback(id: int, data: PackedByteArray) -> void:
 		_hook.get_base().disconnect_peer(id)
 
 func _on_client_auth_callback(id: int, data: PackedByteArray) -> void:
-	print("CLIENT AUTH CALLBACK TRIGGERED: ", id)
+	# print("CLIENT AUTH CALLBACK TRIGGERED: ", id)
 	if data.size() >= 4:
 		var assigned_id = data.decode_u32(0)
 		_wire.set_client_id(assigned_id)
-		print("CLIENT ASSIGNED ID: ", assigned_id)
+		# print("CLIENT ASSIGNED ID: ", assigned_id)
 	_hook.get_base().complete_auth(id)
 
 func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -> void:

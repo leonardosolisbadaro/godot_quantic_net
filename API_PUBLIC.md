@@ -110,6 +110,10 @@ Despachado a cada transição no handshake mbedTLS ou Godot.
 
 Garantido apenas *após* um cliente confirmar a sua identidade e ID ao servidor (Autenticação limpa).
 
+### `peer_rejected(id: int, reason: String, strikes: int)`
+
+Emitido no Servidor quando um pacote de um cliente é barrado pela validação anti-cheat (Speedhack, formatação inválida, spoofing de sequence). Se os `strikes` ultrapassarem o limite configurado (`max_strikes`), o cliente é imediatamente banido da sessão.
+
 ### `state_received(owner: int, pos: Vector3, rot: Vector3, custom: int)`
 
 Broadcast contínuo disparado quando um pacote P-Frame / I-Frame novo chega do socket (antes de ser filtrado pela interpolação).
