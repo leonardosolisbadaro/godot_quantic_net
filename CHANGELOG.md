@@ -7,6 +7,12 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Adicionado
+
+- **I/O Offloading em Worker Threads**: Migração total das rotinas de ENet `service()`, desserialização binária (`Bit-Unpacking`) e fila do NetEmul para uma `std::thread` dedicada no core C++ (via `QNWirePeer`). O ENet agora é drenado em paralelo, e a GDScript consome os pacotes sem bloqueios via um Lock-Free SPSC Ring Buffer em C++.
+
 ## [0.7.0] - 2026-08-08
 
 ### Adicionado

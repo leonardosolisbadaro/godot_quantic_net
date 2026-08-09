@@ -40,6 +40,8 @@ void QNWirePeer::initialize(const Ref<ENetConnection> &p_enet, bool p_is_server)
 	if (p_enet.is_valid()) {
 		enet = p_enet;
 		_status = _is_server_flag ? CONNECTION_CONNECTED : CONNECTION_CONNECTING;
+		_worker_running = true;
+		_worker_thread = std::thread(&QNWirePeer::_worker_loop, this);
 	}
 }
 
@@ -130,23 +132,12 @@ PackedByteArray QNWirePeer::_decode(const PackedByteArray &wire) {
 }
 
 void QNWirePeer::_queue_netem(int vchannel, const PackedByteArray &payload, uint64_t current_ts) {
-	if (!netem_enabled) {
-		_send_packet(payload, _target_peer, vchannel);
-		return;
-	}
-		
-	bool should_drop = false;
-	if (vchannel != CH_CONTROL && netem_loss_pct > 0.0) {
-		should_drop = (UtilityFunctions::randf() < netem_loss_pct);
-	}
-		
-	if (should_drop) {
-		return;
-	}
-		
 	int copies = 1;
-	if (vchannel != CH_CONTROL && netem_dup_pct > 0.0) {
-		if (UtilityFunctions::randf() < netem_dup_pct) {
+	if (netem_enabled) {
+		if (netem_loss_pct > 0.0 && UtilityFunctions::randf() < netem_loss_pct) {
+			return;
+		}
+		if (netem_dup_pct > 0.0 && UtilityFunctions::randf() < netem_dup_pct) {
 			copies = 2;
 		}
 	}
@@ -166,15 +157,16 @@ void QNWirePeer::_queue_netem(int vchannel, const PackedByteArray &payload, uint
 		pkt.payload = payload;
 		pkt.release_ts = current_ts + delay;
 		pkt.target = _target_peer;
-		_netem_queue.push_back(pkt);
+		pkt.flag = (_transfer_mode == TRANSFER_MODE_RELIABLE) ? ENetPacketPeer::FLAG_RELIABLE : ENetPacketPeer::FLAG_UNSEQUENCED;
+		_outbound_ring.push(pkt);
 	}
 }
 
-void QNWirePeer::_drain_netem(uint64_t current_ts) {
+void QNWirePeer::_drain_worker_netem(uint64_t current_ts) {
 	std::deque<NetemPacket> ready;
 	std::deque<NetemPacket> remaining;
 	
-	for (const NetemPacket &pkt : _netem_queue) {
+	for (const NetemPacket &pkt : _worker_netem_queue) {
 		if (pkt.release_ts <= current_ts) {
 			ready.push_back(pkt);
 		} else {
@@ -182,33 +174,23 @@ void QNWirePeer::_drain_netem(uint64_t current_ts) {
 		}
 	}
 			
-	// No need to strictly sort for netem realistically, but to match GDScript:
-	// We'll just push them out. It's usually fine without sorting.
-	
 	for (const NetemPacket &pkt : ready) {
-		_send_packet(pkt.payload, pkt.target, pkt.channel);
+		_worker_send_packet(pkt.payload, pkt.target, pkt.channel, pkt.flag);
 	}
 		
-	_netem_queue = remaining;
+	_worker_netem_queue = remaining;
 }
 
-void QNWirePeer::_send_packet(const PackedByteArray &payload, int target, int channel) {
+void QNWirePeer::_worker_send_packet(const PackedByteArray &payload, int target, int channel, int flag) {
 	if (enet.is_null()) return;
-	int flag = (_transfer_mode == TRANSFER_MODE_RELIABLE) ? ENetPacketPeer::FLAG_RELIABLE : ENetPacketPeer::FLAG_UNSEQUENCED;
 	
 	if (target == 0) {
 		enet->broadcast(channel, payload, flag);
 	} else {
-		Array keys = _peer_map.keys();
-		for (int i = 0; i < keys.size(); i++) {
-			Variant ep_var = keys[i];
-			int peer_id = _peer_map[ep_var];
-			if (peer_id == target) {
-				Ref<ENetPacketPeer> ep = ep_var;
-				if (ep.is_valid()) {
-					ep->send(channel, payload, flag);
-				}
-				break;
+		if (_worker_id_to_ep.find(target) != _worker_id_to_ep.end()) {
+			Ref<ENetPacketPeer> ep = _worker_id_to_ep[target];
+			if (ep.is_valid()) {
+				ep->send(channel, payload, flag);
 			}
 		}
 	}
@@ -297,9 +279,22 @@ bool QNWirePeer::_is_server() const {
 }
 
 void QNWirePeer::_close() {
+	if (_worker_running.load()) {
+		_worker_running = false;
+		if (_worker_thread.joinable()) {
+			_worker_thread.join();
+		}
+	}
+	_worker_ep_to_id.clear();
+	_worker_id_to_ep.clear();
+	_worker_netem_queue.clear();
 }
 
 void QNWirePeer::_disconnect_peer(int32_t p_peer, bool p_force) {
+	NetemPacket pkt;
+	pkt.channel = p_force ? -10 : -11;
+	pkt.target = p_peer;
+	_outbound_ring.push(pkt);
 }
 
 int32_t QNWirePeer::_get_unique_id() const {
@@ -322,53 +317,96 @@ MultiplayerPeer::ConnectionStatus QNWirePeer::_get_connection_status() const {
 	return _status;
 }
 
-void QNWirePeer::_poll() {
-	if (enet.is_null()) return;
-	
-	Array event = enet->service(0);
-	while (event.size() > 0 && (int)event[0] != ENetConnection::EVENT_NONE) {
-		int type = event[0];
-		if (type == ENetConnection::EVENT_ERROR) break;
-		
-		Ref<ENetPacketPeer> ep = event[1];
-		
-		if (type == ENetConnection::EVENT_CONNECT) {
-			if (_is_server_flag) {
-				int id = _next_id;
-				_next_id += 1;
-				_peer_map[ep] = id;
-				emit_signal("peer_connected", id);
+void QNWirePeer::_worker_loop() {
+	while (_worker_running.load()) {
+		if (enet.is_null()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+			continue;
+		}
+
+		NetemPacket out_pkt;
+		while (_outbound_ring.pop(out_pkt)) {
+			if (out_pkt.channel == -10 || out_pkt.channel == -11) {
+				if (_worker_id_to_ep.find(out_pkt.target) != _worker_id_to_ep.end()) {
+					Ref<ENetPacketPeer> ep = _worker_id_to_ep[out_pkt.target];
+					if (ep.is_valid()) {
+						if (out_pkt.channel == -10) ep->peer_disconnect_now();
+						else ep->peer_disconnect();
+					}
+				}
 			} else {
-				_peer_map[ep] = 1;
+				_worker_netem_queue.push_back(out_pkt);
+			}
+		}
+
+		uint64_t current_ts = Time::get_singleton()->get_ticks_msec();
+		_drain_worker_netem(current_ts);
+
+		Array event = enet->service(1);
+		while (event.size() > 0 && (int)event[0] != ENetConnection::EVENT_NONE) {
+			int type = event[0];
+			if (type == ENetConnection::EVENT_ERROR) break;
+			
+			Ref<ENetPacketPeer> ep = event[1];
+			if (ep.is_valid()) {
+				uint64_t ep_id = ep->get_instance_id();
+				
+				if (type == ENetConnection::EVENT_CONNECT) {
+					int id = _is_server_flag ? _next_id++ : 1;
+					_worker_ep_to_id[ep_id] = id;
+					_worker_id_to_ep[id] = ep;
+					
+					InPacket conn_pkt;
+					conn_pkt.channel = -1;
+					conn_pkt.peer = id;
+					_inbound_ring.push(conn_pkt);
+					
+				} else if (type == ENetConnection::EVENT_DISCONNECT) {
+					if (_worker_ep_to_id.find(ep_id) != _worker_ep_to_id.end()) {
+						int id = _worker_ep_to_id[ep_id];
+						InPacket disc_pkt;
+						disc_pkt.channel = -2;
+						disc_pkt.peer = id;
+						_inbound_ring.push(disc_pkt);
+						
+						_worker_ep_to_id.erase(ep_id);
+						_worker_id_to_ep.erase(id);
+					}
+				} else if (type == ENetConnection::EVENT_RECEIVE) {
+					if (_worker_ep_to_id.find(ep_id) != _worker_ep_to_id.end()) {
+						PackedByteArray data = ep->get_packet();
+						PackedByteArray decoded = _decode(data);
+						if (decoded.size() > 0) {
+							InPacket in_pkt;
+							in_pkt.peer = _worker_ep_to_id[ep_id];
+							in_pkt.data = decoded;
+							in_pkt.channel = event[2];
+							_inbound_ring.push(in_pkt);
+						}
+					}
+				}
+			}
+			
+			event = enet->service(0);
+		}
+	}
+}
+
+void QNWirePeer::_poll() {
+	InPacket pkt;
+	while (_inbound_ring.pop(pkt)) {
+		if (pkt.channel == -1) {
+			if (!_is_server_flag) {
 				_status = CONNECTION_CONNECTED;
-				emit_signal("peer_connected", 1);
 			}
-		} else if (type == ENetConnection::EVENT_DISCONNECT) {
-			if (_peer_map.has(ep)) {
-				emit_signal("peer_disconnected", (int)_peer_map[ep]);
-				_peer_map.erase(ep);
-			}
+			emit_signal("peer_connected", pkt.peer);
+		} else if (pkt.channel == -2) {
 			if (!_is_server_flag) {
 				_status = CONNECTION_DISCONNECTED;
 			}
-		} else if (type == ENetConnection::EVENT_RECEIVE) {
-			if (_peer_map.has(ep)) {
-				PackedByteArray data = ep->get_packet();
-				PackedByteArray decoded = _decode(data);
-				if (decoded.size() > 0) {
-					InPacket in_pkt;
-					in_pkt.peer = _peer_map[ep];
-					in_pkt.data = decoded;
-					in_pkt.channel = event[2];
-					_in_queue.push_back(in_pkt);
-				}
-			}
+			emit_signal("peer_disconnected", pkt.peer);
+		} else {
+			_in_queue.push_back(pkt);
 		}
-		
-		event = enet->service(0);
-	}
-	
-	if (netem_enabled) {
-		_drain_netem(Time::get_singleton()->get_ticks_msec());
 	}
 }

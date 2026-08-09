@@ -26,10 +26,10 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 
 ### PR 2 — I/O Offloading em Worker Threads
 
-* [ ] Migrar rotinas de polling (`enet_host_service`) para rodar em Worker Thread dedicado C++.
-* [ ] Realizar a deserialização bruta (*Bit-Unpacking*) paralelamente no Worker Thread.
-* [ ] Criar um Lock-Free Ring Buffer para injetar os dados desserializados em memória compartilhada segura.
-* [ ] Alterar o sinal `_on_custom_packet` na Godot para apenas ler do Ring Buffer pronto na Main Thread.
+* [x] Migrar rotinas de polling (`enet_host_service`) para rodar em Worker Thread dedicado C++.
+* [x] Realizar a deserialização bruta (*Bit-Unpacking*) paralelamente no Worker Thread.
+* [x] Criar um Lock-Free Ring Buffer para injetar os dados desserializados em memória compartilhada segura.
+* [x] Alterar o sinal `_on_custom_packet` na Godot para apenas ler do Ring Buffer pronto na Main Thread.
 
 ### PR 3 — Tick Server-Side Independente & Dormancy
 

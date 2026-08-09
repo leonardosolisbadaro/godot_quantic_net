@@ -8,6 +8,10 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <deque>
+#include <thread>
+#include <atomic>
+#include <map>
+#include "qn_ring_buffer.hpp"
 
 namespace godot {
 
@@ -16,6 +20,7 @@ struct NetemPacket {
 	PackedByteArray payload;
 	uint64_t release_ts;
 	int target;
+	int flag;
 };
 
 struct InPacket {
@@ -48,10 +53,21 @@ private:
 	int netem_jitter_ms;
 	double netem_dup_pct;
 
-	std::deque<NetemPacket> _netem_queue;
 	std::deque<InPacket> _in_queue;
-	Dictionary _peer_map;
 	
+	// --- Worker Thread Variables ---
+	std::thread _worker_thread;
+	std::atomic<bool> _worker_running{false};
+	SPSCRingBuffer<NetemPacket, 4096> _outbound_ring;
+	SPSCRingBuffer<InPacket, 4096> _inbound_ring;
+	std::deque<NetemPacket> _worker_netem_queue;
+	std::map<uint64_t, int> _worker_ep_to_id;
+	std::map<int, Ref<ENetPacketPeer>> _worker_id_to_ep;
+	void _worker_loop();
+	void _drain_worker_netem(uint64_t current_ts);
+	void _worker_send_packet(const PackedByteArray &payload, int target, int channel, int flag);
+	// -------------------------------
+
 	int _next_id;
 	bool _is_server_flag;
 	int _client_id;
@@ -67,8 +83,6 @@ private:
 	PackedByteArray _encode(int vchannel, const PackedByteArray &payload);
 	PackedByteArray _decode(const PackedByteArray &wire);
 	void _queue_netem(int vchannel, const PackedByteArray &payload, uint64_t current_ts);
-	void _drain_netem(uint64_t current_ts);
-	void _send_packet(const PackedByteArray &payload, int target, int channel);
 
 protected:
 	static void _bind_methods();

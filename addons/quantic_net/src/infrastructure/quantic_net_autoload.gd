@@ -234,15 +234,12 @@ func _physics_process(delta: float) -> void:
 		if _command_session:
 			_command_session.tick_broadcast(Time.get_ticks_msec())
 	elif not _is_server:
-		var peers = _enet.get_peers()
-		if peers.size() > 0:
-			var s = peers[0].get_state()
-			if s == ENetPacketPeer.STATE_CONNECTED and _state == ConnectionState.CONNECTING:
-				_set_state(ConnectionState.AUTHENTICATING)
-				var err = _hook.get_base().send_auth(SERVER_PEER_ID, _secret.to_utf8_buffer())
-				# print("CLIENT SEND AUTH RESULT: ", err)
-				# _hook.get_base().complete_auth(SERVER_PEER_ID)
-				# Wait for the server to reply with the assigned ID in _on_client_auth_callback
+		if _hook.get_base().get_multiplayer_peer().get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED and _state == ConnectionState.CONNECTING:
+			_set_state(ConnectionState.AUTHENTICATING)
+			var err = _hook.get_base().send_auth(SERVER_PEER_ID, _secret.to_utf8_buffer())
+			# print("CLIENT SEND AUTH RESULT: ", err)
+			# _hook.get_base().complete_auth(SERVER_PEER_ID)
+			# Wait for the server to reply with the assigned ID in _on_client_auth_callback
 
 func _on_auth_callback(id: int, data: PackedByteArray) -> void:
 	if _is_server:
