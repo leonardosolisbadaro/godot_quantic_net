@@ -4,7 +4,7 @@
 
 O **QuanticNet** é um ecossistema de rede *plug-and-play* autoritativo e de altíssimo desempenho, construído nativamente em **C++** (GDExtension) para a **Godot Engine 4.7**.
 
-> ⚠️ **Decisão Arquitetural:** Este repositório foca ESTRITAMENTE no desenvolvimento da infraestrutura *Bare Metal*. Todo o desenvolvimento de domínios concretos, Grid Systems, Chunking e demos de "3D Open World MMO" foi migrado para o repositório externo [godot_quantic_net_demos](https://github.com/LEONARDOGUTIERREZG/godot_quantic_net_demos).
+> ⚠️ **Decisão Arquitetural:** Este repositório foca ESTRITAMENTE no desenvolvimento da infraestrutura *Bare Metal*. Todo o desenvolvimento de domínios concretos, Grid Systems, Chunking e demos de "3D Open World MMO" foi migrado para o repositório externo [godot_quantic_net_demos](https://github.com/leonardosolisbadaro/godot_quantic_net_demos).
 
 A arquitetura resolve as barreiras físicas da infraestrutura multiplayer (Client-Side Prediction, Server-Side Reconciliation, Snapshot Interpolation e Culling Espacial), permitindo a criação de domínios puros através do paradigma **Code-First** e **Clean Architecture**, sem qualquer acoplamento com a árvore visual (`SceneTree`) da Godot.
 

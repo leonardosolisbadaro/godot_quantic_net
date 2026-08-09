@@ -1,7 +1,7 @@
 # TODO: QuanticNet (Core Infrastructure)
 
 Plugin de network autoritativo (`QuanticNet`) construído em C++ (GDExtension) para Godot 4.7.
-Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay e MMOs concretos residem no repositório externo [godot_quantic_net_demos](https://github.com/LEONARDOGUTIERREZG/godot_quantic_net_demos).
+Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay e MMOs concretos residem no repositório externo [godot_quantic_net_demos](https://github.com/leonardosolisbadaro/godot_quantic_net_demos).
 
 ---
 
