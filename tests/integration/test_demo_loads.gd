@@ -17,6 +17,7 @@
 
 extends GutTest
 
+
 func test_demo_scene_loads() -> void:
 	# Arrange
 	var scene := load("res://addons/quantic_net/demo/demo_main.tscn")

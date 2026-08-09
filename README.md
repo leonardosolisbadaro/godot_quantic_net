@@ -1,10 +1,10 @@
 # QuanticNet (Core Infrastructure)
 
-**Versão Atual:** `0.6.0` (Fronteira C++ e TDD Core)
+**Versão Atual:** `0.7.0` (Command-Based API & Jitter Buffer)
 
 O **QuanticNet** é um ecossistema de rede *plug-and-play* autoritativo e de altíssimo desempenho, construído nativamente em **C++** (GDExtension) para a **Godot Engine 4.7**.
 
-> ⚠️ **Decisão Arquitetural:** Este repositório foca ESTRITAMENTE no desenvolvimento da infraestrutura *Bare Metal*. Todo o desenvolvimento de domínios concretos, Grid Systems, Chunking e demos de "3D Open World MMO" foi migrado para o repositório externo `godot_quantic_net_demos`.
+> ⚠️ **Decisão Arquitetural:** Este repositório foca ESTRITAMENTE no desenvolvimento da infraestrutura *Bare Metal*. Todo o desenvolvimento de domínios concretos, Grid Systems, Chunking e demos de "3D Open World MMO" foi migrado para o repositório externo [godot_quantic_net_demos](https://github.com/LEONARDOGUTIERREZG/godot_quantic_net_demos).
 
 A arquitetura resolve as barreiras físicas da infraestrutura multiplayer (Client-Side Prediction, Server-Side Reconciliation, Snapshot Interpolation e Culling Espacial), permitindo a criação de domínios puros através do paradigma **Code-First** e **Clean Architecture**, sem qualquer acoplamento com a árvore visual (`SceneTree`) da Godot.
 
@@ -17,6 +17,7 @@ A arquitetura resolve as barreiras físicas da infraestrutura multiplayer (Clien
 - **Delta Compression & Tick Híbrido:** Envio focado em *Deltas* (apenas o que mudou) e frequências individuais por entidade, respeitando estritamente o MTU via Priority Accumulator.
 - **Spatial Hashing C++ (AoI):** Culling de rede ultra-rápido utilizando o `QNSpatialGrid`.
 - **Lag Compensation:** Validação autoritativa e rebobinamento de *hitboxes* no passado (`QNWorldHistoryBuffer`) garantindo hitscan determinístico.
+- **Dual Paradigm (State & Command-Based):** Suporta desde abordagens simples e ágeis (envio direto de estado preditivo) até fluxos rigorosamente competitivos (*Command-Based*) ancorados em um **Dynamic Jitter Buffer** no lado do servidor para total imunidade a manipulações de tempo de rede.
 - **Anti-Cheat Determinístico:** Validação rústica de velocidade e limites, com *Snapback* absoluto ou desconexões (*Strikes*).
 
 ---

@@ -8,8 +8,8 @@
 ## @created 2026-08-08
 ## @updated 2026-08-08
 ##
-## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @since 0.7.0
+## @lastModifiedIn 0.7.0
 ##
 ## @author Leonardo S. Badaró (with Gemini 3.1 Pro - High)
 extends RefCounted

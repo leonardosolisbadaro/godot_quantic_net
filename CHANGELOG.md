@@ -7,6 +7,17 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [0.7.0] - 2026-08-08
+
+### Adicionado
+
+- **Command-Based API (Paradigma Autoritativo):** Implementação da abstração `QNCommandSession` e da nova interface pública `submit_input(sequence, input_mask, look_dir)` para o envio determinístico de inputs do cliente.
+- **Dynamic Input Jitter Buffer (Server-Side):** Motor agora absorve flutuações de rede através de um atraso dinâmico no consumo de inputs baseado no *Jitter* do Peer conectado.
+- **Catch-up Físico:** Implementação de uma mecânica de drenagem (*drain/catch-up*) no loop físico do servidor capaz de processar um backlog de inputs engasgados simultaneamente após picos abruptos de latência.
+- **TDD Rigoroso:** 100% de cobertura nos testes unitários das novas camadas de domínio (`test_qn_server_jitter_buffer.gd`) e orquestração (`test_qn_command_session.gd`), isolando a regra de ordenação e proteção contra sequências corrompidas e *wrap-around*.
+
+---
+
 ## [0.6.0] - 2026-08-07
 
 ### Adicionado
@@ -26,8 +37,7 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-<details>
-<summary>Histórico de Versões Arquivadas (0.1.0 até 0.5.0)</summary>
+Histórico de Versões Arquivadas (0.1.0 até 0.5.0)
 
 ## [0.5.0] - 2026-08-05
 

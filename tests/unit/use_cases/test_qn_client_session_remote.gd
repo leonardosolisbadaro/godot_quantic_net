@@ -17,18 +17,17 @@
 
 extends GutTest
 
-
-
-
 var _sent: Array
+
 
 func _new_session(my_id := 2) -> RefCounted:
 	_sent = []
 	var sess: RefCounted = QNClientSession.new()
 	sess.init(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
-		_sent.append({}))
+			_sent.append({ }))
 	sess.set_local_id(my_id)
 	return sess
+
 
 func _state_from(owner: int, seq: int, pos: Vector3, ts: int) -> PackedByteArray:
 	var pkt := PackedByteArray([1]) # 1 = TYPE_STATE
@@ -36,6 +35,7 @@ func _state_from(owner: int, seq: int, pos: Vector3, ts: int) -> PackedByteArray
 	pkt.encode_u32(1, owner)
 	pkt.append_array(QNSerializer.encode_state_seq(seq, pos, Vector3.ZERO, ts, 0))
 	return pkt
+
 
 func _snapshot_from(seq: int) -> PackedByteArray:
 	var buf = QNBitBuffer.new()
@@ -47,18 +47,22 @@ func _snapshot_from(seq: int) -> PackedByteArray:
 	pkt.append_array(buf.get_buffer())
 	return pkt
 
+
 func test_estado_remoto_alimenta_interp_e_sinal() -> void:
 	# Arrange
 	var sess := _new_session()
 	var received := []
-	sess.remote_state_received.connect(func(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
-		received.append({"owner": owner, "pos": pos}))
+	sess.remote_state_received.connect(
+		func(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
+			received.append({ "owner": owner, "pos": pos })
+	)
 	# Act: dois snapshots do peer 3
 	sess.handle_packet(_state_from(3, 1, Vector3.ZERO, 1000), 1100)
 	sess.handle_packet(_state_from(3, 2, Vector3(1, 0, 0), 1100), 1200)
 	# Assert
 	assert_eq(received.size(), 2, "sinal por snapshot remoto")
 	assert_eq(received[0]["owner"], 3)
+
 
 func test_remote_state_interpola_entre_snapshots() -> void:
 	# Arrange: sincroniza o clock primeiro (offset 0 para simplificar)
@@ -74,11 +78,13 @@ func test_remote_state_interpola_entre_snapshots() -> void:
 	assert_false(s.is_empty(), "ha estado interpolado")
 	assert_almost_eq(s["pos"].x, 1.0, 0.2, "lerp no meio do caminho")
 
+
 func test_remote_state_desconhecido_retorna_vazio() -> void:
 	# Arrange
 	var sess := _new_session()
 	# Act + Assert
-	assert_eq(sess.remote_state(99, 1000), {}, "peer desconhecido sem estado")
+	assert_eq(sess.remote_state(99, 1000), { }, "peer desconhecido sem estado")
+
 
 func test_loss_tracker_conta_gap_do_peer() -> void:
 	# Arrange
@@ -89,10 +95,11 @@ func test_loss_tracker_conta_gap_do_peer() -> void:
 	# Assert: 3 perdidos em 5 => 60%
 	assert_almost_eq(sess.loss_of(3), 60.0, 0.1, "gaps de seq viram perda")
 
+
 func test_pacote_corrompido_ignorado() -> void:
 	# Arrange
 	var sess := _new_session()
 	# Act
 	sess.handle_packet(PackedByteArray([1, 2]), 1000)
 	# Assert
-	assert_eq(sess.remote_state(0, 1000), {}, "nada registrado")
+	assert_eq(sess.remote_state(0, 1000), { }, "nada registrado")

@@ -18,10 +18,9 @@
 
 extends GutTest
 
-
-
 const TEST_PORT := 47901
 const HANDSHAKE_DEADLINE_MS := 3000
+
 
 ## Helper: bombeia service() nas duas pontas ate a condicao ou o deadline.
 func _pump_until(host: ENetConnection, client: ENetConnection, deadline_ms: int) -> bool:
@@ -31,6 +30,7 @@ func _pump_until(host: ENetConnection, client: ENetConnection, deadline_ms: int)
 		client.service()
 		await get_tree().process_frame
 	return true
+
 
 func test_handshake_host_client_conecta_em_loopback() -> void:
 	# Arrange: sobe host com cert dev e client com pinning do mesmo cert
@@ -58,6 +58,7 @@ func test_handshake_host_client_conecta_em_loopback() -> void:
 	client.destroy()
 	host.destroy()
 
+
 func test_client_com_cert_errado_nao_completa_handshake() -> void:
 	# Arrange: host com cert A; client forja um cert B (autoassinado distinto)
 	_cleanup_dev_certs()
@@ -65,7 +66,9 @@ func test_client_com_cert_errado_nao_completa_handshake() -> void:
 	var crypto := Crypto.new()
 	var wrong_key: CryptoKey = crypto.generate_rsa(2048)
 	var wrong_cert: X509Certificate = crypto.generate_self_signed_certificate(
-		wrong_key, "CN=quanticnet,O=Atacante,C=XX")
+		wrong_key,
+		"CN=quanticnet,O=Atacante,C=XX",
+	)
 	var client := ENetConnection.new()
 	client.create_host(1, 1, 0, 0)
 	client.dtls_client_setup("quanticnet", TLSOptions.client(wrong_cert))
@@ -90,6 +93,7 @@ func test_client_com_cert_errado_nao_completa_handshake() -> void:
 	client.destroy()
 	host.destroy()
 
+
 func test_host_com_porta_invalida_retorna_erro() -> void:
 	# Arrange + Act: porta fora do range valido
 	var err_out := [OK]
@@ -97,6 +101,7 @@ func test_host_com_porta_invalida_retorna_erro() -> void:
 	# Assert
 	assert_null(enet, "porta invalida nao sobe host")
 	assert_ne(err_out[0], OK, "erro de bind propagado")
+
 
 func _cleanup_dev_certs() -> void:
 	for p in ["user://qnet_cert.crt", "user://qnet_cert.key"]:

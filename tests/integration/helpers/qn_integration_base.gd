@@ -17,15 +17,19 @@
 
 extends GutTest
 
-const AutoloadScript = preload("res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd")
+const AutoloadScript = preload(
+	"res://addons/quantic_net/src/infrastructure/quantic_net_autoload.gd"
+)
 const SECRET := "tok-integracao"
 
 var _autoloads := []
 static var _port_counter := 47900
 
+
 func _next_test_port() -> int:
 	_port_counter += 1
 	return _port_counter
+
 
 func after_each() -> void:
 	for a in _autoloads:
@@ -42,6 +46,7 @@ func _spawn_autoload() -> Node:
 	add_child(a)
 	_autoloads.append(a)
 	return a
+
 
 func _cleanup_certs() -> void:
 	for p in ["user://qnet_cert.crt", "user://qnet_cert.key"]:

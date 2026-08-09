@@ -17,18 +17,19 @@
 
 extends GutTest
 
-
-
-
 var _sent: Array
+
 
 func _new_session(my_id := 2) -> RefCounted:
 	_sent = []
 	var sess: RefCounted = QNClientSession.new()
-	sess.init(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
-		_sent.append({"to": to, "data": data, "ch": ch, "mode": mode}))
+	sess.init(
+		func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
+			_sent.append({ "to": to, "data": data, "ch": ch, "mode": mode })
+	)
 	sess.set_local_id(my_id)
 	return sess
+
 
 func test_rate_limit_so_envia_apos_intervalo() -> void:
 	# Arrange
@@ -40,6 +41,7 @@ func test_rate_limit_so_envia_apos_intervalo() -> void:
 	assert_false(first, "dt=0.02 abaixo do intervalo")
 	assert_false(second, "acumulado 0.04 ainda abaixo de 0.05")
 	assert_eq(_sent.size(), 0)
+
 
 func test_envia_quando_acumulado_atinge_50ms() -> void:
 	# Arrange
@@ -53,6 +55,7 @@ func test_envia_quando_acumulado_atinge_50ms() -> void:
 	assert_eq(_sent.size(), 1)
 	assert_eq(_sent[0]["to"], 1, "enviado ao servidor (peer 1)")
 	assert_eq(_sent[0]["ch"], 1, "canal de estado")
+
 
 func test_pacote_tem_formato_do_protocolo_com_seq_crescente() -> void:
 	# Arrange
@@ -69,6 +72,7 @@ func test_pacote_tem_formato_do_protocolo_com_seq_crescente() -> void:
 	assert_eq(hist1[0]["seq"], 1, "primeiro envio seq=1")
 	assert_eq(hist2[0]["seq"], 2, "segundo envio seq=2")
 
+
 func test_submit_sem_id_valido_nao_envia() -> void:
 	# Arrange: id ainda nao atribuido (0)
 	var sess := _new_session(0)
@@ -77,6 +81,7 @@ func test_submit_sem_id_valido_nao_envia() -> void:
 	# Assert
 	assert_false(ok, "sem id de rede, nao transmite")
 	assert_eq(_sent.size(), 0)
+
 
 func test_record_input_alimenta_buffer_pendente() -> void:
 	# Arrange
