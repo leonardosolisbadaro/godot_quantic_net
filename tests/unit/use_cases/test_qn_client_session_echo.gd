@@ -8,29 +8,30 @@
 ## relogio deterministico; sem socket, sem SceneTree de rede.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-30
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.2.0
+## @lastModifiedIn 0.6.0
 ##
-## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+## @author Leonardo S. Badar� (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNClientSession = preload("res://addons/quantic_net/src/use_cases/qn_client_session.gd")
-const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
+
+
 
 var _sent: Array
 
 func _new_session(my_id := 2) -> RefCounted:
 	_sent = []
-	var sess: RefCounted = QNClientSession.new(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
+	var sess: RefCounted = QNClientSession.new()
+	sess.init(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
 		_sent.append({}))
 	sess.set_local_id(my_id)
 	return sess
 
 func _echo_pkt(owner: int, seq: int, server_ts: int) -> PackedByteArray:
-	var pkt := PackedByteArray([QNSerializer.TYPE_STATE])
+	var pkt := PackedByteArray([1]) # 1 = TYPE_STATE
 	pkt.resize(5)
 	pkt.encode_u32(1, owner)
 	pkt.append_array(QNSerializer.encode_state_seq(seq, Vector3.ZERO, Vector3.ZERO, server_ts, 0))

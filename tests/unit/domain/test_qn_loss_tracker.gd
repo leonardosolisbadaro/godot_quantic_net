@@ -7,16 +7,16 @@
 ## suportando wrap-around de 16-bits e calculando média móvel de perda recente.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNLossTracker = preload("res://addons/quantic_net/src/domain/qn_loss_tracker.gd")
+
 
 func test_sem_gaps_reporta_zero_perda() -> void:
 	# Arrange (Preparação): Instancia um novo medidor de perda

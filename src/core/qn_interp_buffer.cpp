@@ -23,6 +23,13 @@ void QNInterpBuffer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("update_jitter", "jitter_ms"), &QNInterpBuffer::update_jitter);
 	ClassDB::bind_method(D_METHOD("push", "ts", "pos", "rot"), &QNInterpBuffer::push);
 	ClassDB::bind_method(D_METHOD("sample", "now"), &QNInterpBuffer::sample);
+	
+	ClassDB::bind_method(D_METHOD("get_render_delay_ms"), &QNInterpBuffer::get_render_delay_ms);
+	ClassDB::bind_method(D_METHOD("get_target_delay_ms"), &QNInterpBuffer::get_target_delay_ms);
+	ClassDB::bind_method(D_METHOD("get_snaps_size"), &QNInterpBuffer::get_snaps_size);
+	
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "render_delay_ms"), "", "get_render_delay_ms");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "_target_delay_ms"), "", "get_target_delay_ms");
 }
 
 void QNInterpBuffer::update_jitter(double jitter_ms) {

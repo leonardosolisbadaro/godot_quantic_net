@@ -45,6 +45,10 @@ public:
 	void update_jitter(double jitter_ms);
 	void push(int ts, const Vector3 &pos, const Vector3 &rot);
 	Dictionary sample(int now);
+	
+	int get_render_delay_ms() const { return render_delay_ms; }
+	double get_target_delay_ms() const { return _target_delay_ms; }
+	int get_snaps_size() const { return snaps.size(); }
 };
 
 } // namespace godot

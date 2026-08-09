@@ -1,4 +1,4 @@
-﻿## @file test_server_two_clients.gd
+## @file test_server_two_clients.gd
 ## @path res://tests/integration/test_server_two_clients.gd
 ##
 ## @description
@@ -26,7 +26,7 @@ func test_integracao_dois_clientes_sob_netem_pesado() -> void:
 	var srv := _spawn_autoload()
 	var err_host = srv.host(port, SECRET, "127.0.0.1", 8)
 	assert_eq(err_host, OK)
-	srv._host_session.validator = _DummyValidator.new()
+	srv.set_server_validator(_DummyValidator.new())
 	
 	var cli1 := _spawn_autoload()
 	var err_join1 = cli1.join("127.0.0.1", port, SECRET)
@@ -35,7 +35,7 @@ func test_integracao_dois_clientes_sob_netem_pesado() -> void:
 	var cli2 := _spawn_autoload()
 	var err_join2 = cli2.join("127.0.0.1", port, SECRET)
 	assert_eq(err_join2, OK)
-	cli2._wire._client_id = 3
+
 	
 	# Aguardar autenticação de ambos
 	var elapsed := 0
@@ -50,17 +50,13 @@ func test_integracao_dois_clientes_sob_netem_pesado() -> void:
 	assert_eq(cli2.get_state(), srv.ConnectionState.CONNECTED, "cli2 autenticado")
 	
 	# Descobre os IDs
-	var c1_id = cli1._hook.get_unique_id()
-	var c2_id = cli2._hook.get_unique_id()
+	var c1_id = cli1.get_unique_id()
+	var c2_id = cli2.get_unique_id()
 	
 	# Ativa netem no srv (para drop e jitter afetando ambos os clients)
 	# Vamos aplicar o netem de forma agressiva nos canais 0 e 1, com latencia de 60ms, jitter 25ms, perda 10%
 	for peer in [srv, cli1, cli2]:
-		if peer._wire:
-			peer._wire.netem_latency_ms = 60
-			peer._wire.netem_jitter_ms = 25
-			peer._wire.netem_loss_pct = 0.1
-			peer._wire.netem_enabled = true
+		peer.set_netem_config(10.0, 60, 25, 0.0)
 	
 	# Simulaçao 5s
 	# A cada frame, os clients andam e submetem estado.
@@ -124,14 +120,14 @@ func test_isolamento_netem_entre_dois_clientes() -> void:
 	
 	var srv := _spawn_autoload()
 	srv.host(port, SECRET, "127.0.0.1", 8)
-	srv._host_session.validator = _DummyValidator.new()
+	srv.set_server_validator(_DummyValidator.new())
 	
 	var cli_lat := _spawn_autoload()
 	cli_lat.join("127.0.0.1", port, SECRET)
 	
 	var cli_fast := _spawn_autoload()
 	cli_fast.join("127.0.0.1", port, SECRET)
-	cli_fast._wire._client_id = 3
+
 	
 	var elapsed := 0
 	var dt = 0.016
@@ -144,11 +140,7 @@ func test_isolamento_netem_entre_dois_clientes() -> void:
 	assert_eq(cli_lat.get_state(), srv.ConnectionState.CONNECTED)
 	assert_eq(cli_fast.get_state(), srv.ConnectionState.CONNECTED)
 	
-	if cli_lat._wire:
-		cli_lat._wire.netem_latency_ms = 200
-		cli_lat._wire.netem_jitter_ms = 0
-		cli_lat._wire.netem_loss_pct = 0.0
-		cli_lat._wire.netem_enabled = true
+	cli_lat.set_netem_config(0.0, 200, 0, 0.0)
 	
 	# Marcamos o tempo, damos tick no clock e esperamos PONG no client
 	var t0 = Time.get_ticks_msec()

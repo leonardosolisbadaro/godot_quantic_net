@@ -1,4 +1,4 @@
-﻿## @file test_quantic_net_api.gd
+## @file test_quantic_net_api.gd
 ## @path res://tests/integration/test_quantic_net_api.gd
 ##
 ## @description
@@ -26,7 +26,7 @@ func test_host_sobe_imediato_em_estado_connected() -> void:
 	assert_true(srv.is_server())
 
 func test_join_sem_servidor_falha_com_estado_failed_ou_connecting() -> void:
-	_cleanup_certs()
+
 	var srv := _spawn_autoload()
 	var port = _next_test_port()
 	var err_host = srv.host(port, SECRET, "127.0.0.1", 8)
@@ -39,7 +39,7 @@ func test_join_sem_servidor_falha_com_estado_failed_ou_connecting() -> void:
 	assert_true(state == cli.ConnectionState.CONNECTING or state == cli.ConnectionState.AUTHENTICATING, "sem servidor, permanece em tentativa (nao CONNECTED)")
 
 func test_cliente_transita_ate_connected_em_loopback() -> void:
-	_cleanup_certs()
+
 	var srv := _spawn_autoload()
 	srv.host(TEST_PORT + 1, SECRET, "127.0.0.1", 8)
 	
@@ -65,7 +65,7 @@ func test_host_com_porta_invalida_retorna_erro() -> void:
 	assert_eq(failed.size(), 1, "sinal de falha emitido com o Error")
 
 func test_peer_joined_e_left_propagados() -> void:
-	_cleanup_certs()
+
 	var srv := _spawn_autoload()
 	srv.host(TEST_PORT + 2, SECRET, "127.0.0.1", 8)
 	var joined_srv := []

@@ -15,6 +15,12 @@ QNLossTracker::~QNLossTracker() {
 void QNLossTracker::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("on_packet", "seq"), &QNLossTracker::on_packet);
 	ClassDB::bind_method(D_METHOD("loss_pct"), &QNLossTracker::loss_pct);
+	
+	ClassDB::bind_method(D_METHOD("get_received"), &QNLossTracker::get_received);
+	ClassDB::bind_method(D_METHOD("get_lost"), &QNLossTracker::get_lost);
+	
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "received"), "", "get_received");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "lost"), "", "get_lost");
 }
 
 void QNLossTracker::on_packet(int seq) {

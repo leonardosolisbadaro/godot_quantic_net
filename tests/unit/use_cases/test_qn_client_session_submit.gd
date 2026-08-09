@@ -8,23 +8,24 @@
 ## relogio deterministico; sem socket, sem SceneTree de rede.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-01
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0
+## @lastModifiedIn 0.6.0
 ##
-## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+## @author Leonardo S. Badar� (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNClientSession = preload("res://addons/quantic_net/src/use_cases/qn_client_session.gd")
-const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
+
+
 
 var _sent: Array
 
 func _new_session(my_id := 2) -> RefCounted:
 	_sent = []
-	var sess: RefCounted = QNClientSession.new(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
+	var sess: RefCounted = QNClientSession.new()
+	sess.init(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
 		_sent.append({"to": to, "data": data, "ch": ch, "mode": mode}))
 	sess.set_local_id(my_id)
 	return sess
@@ -51,7 +52,7 @@ func test_envia_quando_acumulado_atinge_50ms() -> void:
 	assert_true(third, "acumulado >= 0.05 envia")
 	assert_eq(_sent.size(), 1)
 	assert_eq(_sent[0]["to"], 1, "enviado ao servidor (peer 1)")
-	assert_eq(_sent[0]["ch"], QNClientSession.CH_STATE, "canal de estado")
+	assert_eq(_sent[0]["ch"], 1, "canal de estado")
 
 func test_pacote_tem_formato_do_protocolo_com_seq_crescente() -> void:
 	# Arrange
@@ -62,7 +63,7 @@ func test_pacote_tem_formato_do_protocolo_com_seq_crescente() -> void:
 			sess.submit_state(Vector3(i, 0, 0), Vector3.ZERO, 0, 0.02, 1000 + (i * 3 + j) * 20)
 	# Assert: seq 1 e 2, tipo STATE, posicao quantizada
 	assert_eq(_sent.size(), 2)
-	assert_eq(_sent[0]["data"].decode_u8(0), QNSerializer.TYPE_STATE)
+	assert_eq(_sent[0]["data"].decode_u8(0), 1) # TYPE_STATE
 	var hist1: Array = QNSerializer.decode_state_history(_sent[0]["data"].slice(3))
 	var hist2: Array = QNSerializer.decode_state_history(_sent[1]["data"].slice(3))
 	assert_eq(hist1[0]["seq"], 1, "primeiro envio seq=1")

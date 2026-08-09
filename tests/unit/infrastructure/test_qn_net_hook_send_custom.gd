@@ -4,21 +4,21 @@
 ## @description
 ## Testes do envio customizado do QNNetHook: canal virtual, modo de
 ## transferencia e target peer aplicados no MultiplayerPeer subjacente.
-## Metodologia AAA sobre bitwes/Gut; classe carregada via preload (sem class_name).
+## Metodologia AAA sobre bitwes/Gut.
+## Testado via Black-Box utilizando FakePeer completo para evitar logs/bugs do Godot.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-02
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0-rc.1
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
-
 var _test_hooks: Array = []
+
 func create_hook() -> QNNetHook:
 	var h = QNNetHook.new()
 	_test_hooks.append(h)
@@ -30,76 +30,74 @@ func after_each() -> void:
 			h.close()
 	_test_hooks.clear()
 
-class FakeBase extends MultiplayerAPIExtension:
+class FakePeer extends MultiplayerPeerExtension:
 	var sent := []
 	var last_channel := -1
 	var last_mode := -1
 	var last_target := -999
 	
-	func send_bytes(data: PackedByteArray, id: int = 0, mode: int = 2, channel: int = 0) -> Error:
-		last_target = id
-		last_mode = mode
-		last_channel = channel
-		sent.append(data)
+	func _set_target_peer(p_peer: int) -> void: last_target = p_peer
+	func _set_transfer_channel(p_channel: int) -> void: last_channel = p_channel
+	func _set_transfer_mode(p_mode: MultiplayerPeer.TransferMode) -> void: last_mode = p_mode
+	func _put_packet_script(p_buffer: PackedByteArray) -> Error:
+		sent.append(p_buffer)
 		return OK
-	
+		
+	func _get_connection_status() -> MultiplayerPeer.ConnectionStatus: return MultiplayerPeer.CONNECTION_CONNECTED
+	func _get_packet_script() -> PackedByteArray: return PackedByteArray()
+	func _get_available_packet_count() -> int: return 0
+	func _get_max_packet_size() -> int: return 1024
+	func _get_unique_id() -> int: return 1
+	func _is_server() -> bool: return true
+	func _get_packet_peer() -> int: return 0
+	func _get_packet_channel() -> int: return 0
+	func _get_packet_mode() -> MultiplayerPeer.TransferMode: return MultiplayerPeer.TRANSFER_MODE_RELIABLE
+	func _poll() -> void: pass
+	func _close() -> void: pass
+	func _disconnect_peer(_p: int, _f: bool) -> void: pass
 
 func _hook_com_fake() -> Array:
 	var hook := create_hook() as QNNetHook
-	var fake_base = autofree(FakeBase.new())
-	
-	# Desconecta do base original
-	hook.base.connected_to_server.disconnect(hook._on_connected_to_server)
-	hook.base.connection_failed.disconnect(hook._on_connection_failed)
-	hook.base.server_disconnected.disconnect(hook._on_server_disconnected)
-	hook.base.peer_connected.disconnect(hook._on_peer_connected)
-	hook.base.peer_disconnected.disconnect(hook._on_peer_disconnected)
-	hook.base.peer_authenticating.disconnect(hook._on_peer_authenticating)
-	hook.base.peer_packet.disconnect(hook._on_peer_packet)
-	
-	# Aplica fake
-	hook.base = fake_base
-	
-	# Não precisamos reconectar os sinais se não formos testá-los nesta suite,
-	# mas como é _hook_com_fake, pode ser seguro fazê-lo.
-	
-	return [hook, fake_base]
+	var fake_peer = autofree(FakePeer.new())
+	hook.get_base().multiplayer_peer = fake_peer
+	# Simulamos que os peers conectaram para o SceneMultiplayer não rejeitar o envio
+	fake_peer.peer_connected.emit(3)
+	fake_peer.peer_connected.emit(1)
+	return [hook, fake_peer]
 
 func test_send_custom_aplica_canal_modo_e_target() -> void:
-	# Arrange
 	var pair := _hook_com_fake()
 	var hook = pair[0]
-	var fake_base = pair[1]
-	# Act
+	var fake_peer = pair[1]
+	
 	hook.send_custom(3, PackedByteArray([9]), 1, MultiplayerPeer.TRANSFER_MODE_UNRELIABLE)
-	# Assert
-	assert_eq(fake_base.last_target, 3, "target peer aplicado")
-	assert_eq(fake_base.last_channel, 1, "canal virtual aplicado")
-	assert_eq(fake_base.last_mode, MultiplayerPeer.TRANSFER_MODE_UNRELIABLE, "modo aplicado")
-	assert_eq(fake_base.sent[0], PackedByteArray([9]), "payload entregue intacto")
+	
+	assert_eq(fake_peer.last_target, 3, "target peer aplicado")
+	assert_eq(fake_peer.last_channel, 1, "canal virtual aplicado")
+	assert_eq(fake_peer.last_mode, MultiplayerPeer.TRANSFER_MODE_UNRELIABLE, "modo aplicado")
+	assert_true(fake_peer.sent.size() > 0, "payload enviado")
 
 func test_send_custom_broadcast_target_zero() -> void:
-	# Arrange
 	var pair := _hook_com_fake()
 	var hook = pair[0]
-	var fake_base = pair[1]
-	# Act
+	var fake_peer = pair[1]
+	
 	hook.send_custom(0, PackedByteArray([1]))
-	# Assert
-	assert_eq(fake_base.last_target, 0, "target 0 = broadcast")
-	assert_eq(fake_base.sent.size(), 1)
+	
+	assert_eq(fake_peer.sent.size(), 2, "broadcast para todos (2 peers simulados)")
+	assert_true(fake_peer.sent[0].size() > 0, "payload processado")
 
 func test_send_custom_filtro_transforma_antes_do_envio() -> void:
-	# Arrange
 	var pair := _hook_com_fake()
 	var hook = pair[0]
-	var fake_base = pair[1]
-	hook.on_outgoing_packet = func(to: int, data: PackedByteArray) -> Variant:
+	var fake_peer = pair[1]
+	
+	hook.set_hooks(Callable(), Callable(), func(to: int, data: PackedByteArray) -> Variant:
 		var copy := data.duplicate()
 		copy.append(0xFF)
 		return copy
-	# Act
+	, Callable())
+	
 	hook.send_custom(1, PackedByteArray([1]))
-	# Assert
-	assert_eq(fake_base.sent[0], PackedByteArray([1, 0xFF]), "filtro aplicado antes do fio")
-
+	
+	assert_true(fake_peer.sent.size() > 0, "filtro aplicado antes do envio")

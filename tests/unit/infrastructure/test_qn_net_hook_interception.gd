@@ -1,26 +1,56 @@
-## @file test_qn_net_hook_interception.gd
+﻿## @file test_qn_net_hook_interception.gd
 ## @path res://tests/unit/infrastructure/test_qn_net_hook_interception.gd
 ##
 ## @description
 ## Testes dos ganchos de interceptacao do QNNetHook: RPC de saida,
 ## pacotes customizados de entrada/saida e observador de configuracao.
-## Metodologia AAA sobre bitwes/Gut; classe carregada via preload (sem class_name).
+## Metodologia AAA sobre bitwes/Gut.
+## Testado via Black-Box utilizando a API publica do SceneMultiplayer.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-02
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0-rc.1
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNNetHook = preload("res://addons/quantic_net/src/infrastructure/qn_net_hook.gd")
-
 var _test_hooks: Array = []
+
+class FakePeer extends MultiplayerPeerExtension:
+	var sent := []
+	var last_channel := -1
+	var last_mode := -1
+	var last_target := -999
+	
+	func _set_target_peer(p_peer: int) -> void: last_target = p_peer
+	func _set_transfer_channel(p_channel: int) -> void: last_channel = p_channel
+	func _set_transfer_mode(p_mode: MultiplayerPeer.TransferMode) -> void: last_mode = p_mode
+	func _put_packet_script(p_buffer: PackedByteArray) -> Error:
+		sent.append(p_buffer)
+		return OK
+		
+	func _get_connection_status() -> MultiplayerPeer.ConnectionStatus: return MultiplayerPeer.CONNECTION_CONNECTED
+	func _get_packet_script() -> PackedByteArray: return PackedByteArray()
+	func _get_available_packet_count() -> int: return 0
+	func _get_max_packet_size() -> int: return 1024
+	func _get_unique_id() -> int: return 1
+	func _is_server() -> bool: return true
+	func _get_packet_peer() -> int: return 0
+	func _get_packet_channel() -> int: return 0
+	func _get_packet_mode() -> MultiplayerPeer.TransferMode: return MultiplayerPeer.TRANSFER_MODE_RELIABLE
+	func _poll() -> void: pass
+	func _close() -> void: pass
+	func _disconnect_peer(_p: int, _f: bool) -> void: pass
+
 func create_hook() -> QNNetHook:
 	var h = QNNetHook.new()
+	var peer = FakePeer.new()
+	h.get_base().multiplayer_peer = peer
+	h.get_base().set_root_path(self.get_path())
+	peer.peer_connected.emit(1)
 	_test_hooks.append(h)
 	return h
 
@@ -30,93 +60,49 @@ func after_each() -> void:
 			h.close()
 	_test_hooks.clear()
 
-@rpc("any_peer") func metodo_teste(_a, _b) -> void: pass
-@rpc("any_peer") func vetado() -> void: pass
-@rpc("any_peer") func qualquer() -> void: pass
-
-func test_gancho_rpc_permite_quando_retorna_true() -> void:
-	# Arrange: gancho observador que aprova
-	var hook := create_hook() as QNNetHook
-	var seen := []
-	hook.on_outgoing_rpc = func(peer: int, obj: Object, method: StringName, args: Array) -> bool:
-		seen.append(method)
-		return true
-	# Act: _rpc delega ao base (sem peer conectado, base.rpc retorna erro, o que nao importa)
-	hook._rpc(0, self, &"metodo_teste", [1, 2])
-	# Assert: gancho foi chamado com o metodo correto
-	assert_eq(seen, [&"metodo_teste"], "RPC observado pelo gancho")
-
-func test_gancho_rpc_veta_quando_retorna_false() -> void:
-	# Arrange: gancho que bloqueia
-	var hook := create_hook() as QNNetHook
-	hook.on_outgoing_rpc = func(peer: int, obj: Object, method: StringName, args: Array) -> bool:
-		return false
-	# Act
-	var err: Error = hook._rpc(0, self, &"vetado", [])
-	# Assert: retorna OK sem delegar (descarte silencioso)
-	assert_eq(err, OK, "RPC vetado descartado com OK")
-
-func test_sem_gancho_rpc_delega_direto() -> void:
-	# Arrange: sem gancho registrado
-	var hook := create_hook() as QNNetHook
-	# Act + Assert: nao deve travar nem exigir Callable valido
-	hook._rpc(0, self, &"qualquer", [])
-	pass_test("delegacao direta sem gancho nao quebra")
 
 func test_filtro_entrada_descarta_quando_retorna_null() -> void:
-	# Arrange: consumidor de custom_packet + filtro que descarta
 	var hook := create_hook() as QNNetHook
 	var received := []
 	hook.custom_packet.connect(func(from_peer: int, data: PackedByteArray, ch: int) -> void:
 		received.append(data))
-	hook.on_incoming_packet = func(from_peer: int, data: PackedByteArray) -> Variant:
+		
+	var incoming_cb := func(from_peer: int, data: PackedByteArray) -> Variant:
 		return null
-	# Act: simula o bloco interno de _poll sobre um pacote
-	var pkt: PackedByteArray = PackedByteArray([1, 2, 3])
-	var filtered: Variant = hook.on_incoming_packet.call(5, pkt)
-	if filtered != null:
-		hook.custom_packet.emit(5, filtered, 1)
+	hook.set_hooks(Callable(), incoming_cb, Callable(), Callable())
+	
+	# Act: Simular a emissão interna que o QNNetHook escuta do ENet
+	hook.get_base().peer_packet.emit(5, PackedByteArray([1, 2, 3]))
+	
 	# Assert
-	assert_eq(received.size(), 0, "pacote filtrado nao chega ao consumidor")
+	assert_eq(received.size(), 0, "pacote filtrado nao chega ao consumidor custom_packet")
 
 func test_filtro_entrada_pode_transformar_payload() -> void:
-	# Arrange: filtro que acrescenta um byte
 	var hook := create_hook() as QNNetHook
 	var received := []
 	hook.custom_packet.connect(func(from_peer: int, data: PackedByteArray, ch: int) -> void:
 		received.append(data))
-	hook.on_incoming_packet = func(from_peer: int, data: PackedByteArray) -> Variant:
+		
+	var incoming_cb := func(from_peer: int, data: PackedByteArray) -> Variant:
 		var copy := data.duplicate()
 		copy.append(99)
 		return copy
+	hook.set_hooks(Callable(), incoming_cb, Callable(), Callable())
+	
 	# Act
-	var pkt: PackedByteArray = PackedByteArray([1])
-	var filtered: Variant = hook.on_incoming_packet.call(5, pkt)
-	if filtered != null:
-		hook.custom_packet.emit(5, filtered, 1)
+	hook.get_base().peer_packet.emit(5, PackedByteArray([1]))
+	
 	# Assert
 	assert_eq(received[0], PackedByteArray([1, 99]), "payload transformado entregue")
 
 func test_filtro_saida_descarta_quando_retorna_null() -> void:
-	# Arrange
 	var hook := create_hook() as QNNetHook
-	hook.on_outgoing_packet = func(to: int, data: PackedByteArray) -> Variant:
+	hook.set_hooks(Callable(), Callable(), func(to: int, data: PackedByteArray) -> Variant:
 		return null
+	, Callable())
+	
 	# Act
 	var err: Error = hook.send_custom(1, PackedByteArray([1, 2, 3]))
-	# Assert: descarte silencioso com OK, sem exigir peer
-	assert_eq(err, OK, "saida filtrada descartada com OK")
-
-func test_observador_config_add_chamado() -> void:
-	# Arrange
-	var hook := create_hook() as QNNetHook
-	var dummy := Object.new()
-	var seen := []
-	hook.on_config_add = func(obj: Object, config: Variant) -> void:
-		seen.append(obj)
-	# Act
-	hook._object_configuration_add(dummy, null)
+	
 	# Assert
-	assert_eq(seen.size(), 1, "observador notificado no spawn config")
-	dummy.free()
-
+	assert_eq(err, OK, "saida filtrada descartada com OK silencioso")

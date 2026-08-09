@@ -6,11 +6,11 @@
 ## Verifica endianness, carry over e leitura de dados compactados (Boolean, Int, Float).
 ##
 ## @created 2026-07-31
-## @updated 2026-07-31
+## @updated 2026-08-08
 
 extends "res://addons/gut/test.gd"
 
-const QNBitBuffer = preload("res://addons/quantic_net/src/domain/qn_bit_buffer.gd")
+
 
 func test_write_read_bool() -> void:
 	var buf = QNBitBuffer.new()

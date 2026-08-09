@@ -17,12 +17,12 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 
 ### PR 1 — Command-Based API & Input Jitter Buffer
 
-* [ ] Criar abstração/interface `QNCommandSession` isolada ou flag de configuração de paradigma no `project.godot`.
-* [ ] Isolar a lógica de movimento em função pura e determinística (`move(state, input, dt)`) rodando em passo fixo.
-* [ ] Implementar a nova interface pública `submit_input(sequence, input_mask, look_dir)` no `quantic_net_autoload.gd`.
-* [ ] Desenvolver o *Dynamic Input Jitter Buffer* no lado do servidor (escrevendo testes no Gut primeiro).
-* [ ] Implementar no servidor atraso dinâmico no consumo baseado no Jitter da conexão do Peer.
-* [ ] Implementar *Catch-up* no loop físico para processar backlog de inputs após picos de latência.
+* [x] Criar abstração/interface `QNCommandSession` isolada ou flag de configuração de paradigma no `project.godot`.
+* [x] Isolar a lógica de movimento em função pura e determinística (`move(state, input, dt)`) rodando em passo fixo.
+* [x] Implementar a nova interface pública `submit_input(sequence, input_mask, look_dir)` no `quantic_net_autoload.gd`.
+* [x] Desenvolver o *Dynamic Input Jitter Buffer* no lado do servidor (escrevendo testes no Gut primeiro).
+* [x] Implementar no servidor atraso dinâmico no consumo baseado no Jitter da conexão do Peer.
+* [x] Implementar *Catch-up* no loop físico para processar backlog de inputs após picos de latência.
 
 ### PR 2 — I/O Offloading em Worker Threads
 
@@ -70,6 +70,7 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 ## 🧊 ICEBOX (Tarefas Congeladas)
 
 ### Issue: Elastic Time / Clock Steering
+
 * **Status:** Congelada (Obsoleta).
 * **Escopo:** Ajuste microscópico de delta no cliente baseado no nível do buffer do host. Rejeitado pois a Arquitetura V2 com Jitter Buffer Ativo e Tick Independente já resolve a autoridade de tempo no lado do servidor.
 

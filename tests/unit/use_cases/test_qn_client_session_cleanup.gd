@@ -1,4 +1,4 @@
-## @file test_qn_client_session_cleanup.gd
+﻿## @file test_qn_client_session_cleanup.gd
 ## @path tests/unit/use_cases/test_qn_client_session_cleanup.gd
 ##
 ## @description
@@ -6,16 +6,14 @@
 ## de interpolação e perda de pacotes quando uma entidade é desregistrada pelo servidor.
 ##
 ## @created 2026-08-04
-## @updated 2026-08-04
+## @updated 2026-08-08
 ##
 ## @since 0.3.0
-## @lastModifiedIn 0.3.0-rc.3
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
-
-const QNClientSession = preload("res://addons/quantic_net/src/use_cases/qn_client_session.gd")
 
 var sut: QNClientSession
 var _submitted: Array
@@ -25,11 +23,11 @@ func _submit(to: int, pkt: PackedByteArray, ch: int, mode: int) -> void:
 
 func before_each():
 	_submitted.clear()
-	sut = QNClientSession.new(Callable(self, "_submit"))
+	sut = QNClientSession.new()
+	sut.init(Callable(self, "_submit"))
 	sut.set_local_id(2)
 
 func _state_from(owner: int, seq: int, pos: Vector3, ts: int) -> PackedByteArray:
-	var QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
 	var pkt := PackedByteArray([QNSerializer.TYPE_STATE])
 	pkt.resize(5)
 	pkt.encode_u32(1, owner)
@@ -44,11 +42,11 @@ func test_must_cleanup_entity_when_requested():
 	sut.handle_packet(_state_from(owner, 1, Vector3.ZERO, now - 100), now - 100)
 	sut.handle_packet(_state_from(owner, 2, Vector3.ZERO, now), now)
 	
-	# Verify that the interpolator holds the state
-	assert_true(sut._interp.has(owner), "A entidade deve ter sido alocada no dicionário.")
+	# Verify that the interpolator holds the state (remote_state doesn't return empty dict)
+	assert_false(sut.remote_state(owner, now).is_empty(), "A entidade deve ter sido alocada e retornar estado.")
 	
 	# Act: Limpar a entidade
 	sut.cleanup_entity(owner)
 	
 	# Assert: A entidade não deve mais existir na interpolação
-	assert_false(sut._interp.has(owner), "A entidade deve ter sido apagada dos buffers.")
+	assert_true(sut.remote_state(owner, now).is_empty(), "A entidade deve ter sido apagada dos buffers.")

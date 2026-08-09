@@ -7,16 +7,16 @@
 ## a partir de confirmações do servidor, suportando wrap-around de 16-bits.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNInputBuffer = preload("res://addons/quantic_net/src/domain/qn_input_buffer.gd")
+
 
 func test_drain_remove_confirmados_e_retorna_pendentes() -> void:
 	# Arrange (Preparação): Instancia o buffer
@@ -27,7 +27,7 @@ func test_drain_remove_confirmados_e_retorna_pendentes() -> void:
 		buf.record(seq, Vector2.ONE, 0.0, 0.05)
 	
 	# Simula que o servidor confirmou (snapback) até a sequence 2. Drena o buffer a partir dela.
-	var replay: Array[Dictionary] = buf.drain_after(2)
+	var replay: Array = buf.drain_after(2)
 	
 	# Assert (Verificação): O buffer deve limpar do 0 ao 2, restando apenas o 3 e 4 para re-predição
 	assert_eq(replay.size(), 2, "Devem sobrar apenas as sequencias 3 e 4 para repredicao")
@@ -46,7 +46,7 @@ func test_drain_com_wrap_around_limpa_corretamente() -> void:
 	buf.record(1, Vector2.ZERO, 0.0, 0.05)
 	
 	# O servidor confirma ter recebido até a seq 0.
-	var replay: Array[Dictionary] = buf.drain_after(0)
+	var replay: Array = buf.drain_after(0)
 	
 	# Assert (Verificação): Deve drenar 65534, 65535 e 0. Restando apenas a 1.
 	assert_eq(replay.size(), 1, "Wrap-around (65535 -> 0) deve ser tolerado matematicamente na comparacao")
@@ -59,22 +59,20 @@ func test_drain_com_seq_alem_de_todos_esvazia() -> void:
 	buf.record(2, Vector2.ZERO, 0.0, 0.05)
 	
 	# Act (Ação): O servidor confirma uma seq absurda lá no futuro
-	var replay: Array[Dictionary] = buf.drain_after(99)
+	var replay: Array = buf.drain_after(99)
 	
 	# Assert (Verificação): A lista de pendentes devolvida deve ser vazia e o buffer resetado
 	assert_eq(replay.size(), 0, "Nenhum pendente sobrevive se o servidor confirmar pacote futuro")
 	assert_eq(buf.size(), 0, "O buffer de inputs interno deve estar zerado")
 
-func test_cap_descarta_mais_antigos() -> void:
-	# Arrange (Preparação): Instancia buffer e tenta sobrecarregar sua memória
-	var buf := QNInputBuffer.new()
+func test_buffer_nao_cresce_infinitamente():
+	var buf = QNInputBuffer.new()
+	for i in 300:
+		buf.record(i, Vector2.ZERO, 0, 0.016, 0)
+	assert_eq(buf.size(), 256)
 	
-	# Act (Ação): Injeta 10 pacotes acima do limite máximo permitido
-	for seq: int in (QNInputBuffer.MAX_PENDING + 10):
-		buf.record(seq, Vector2.ZERO, 0.0, 0.05)
-		
-	# Assert (Verificação): O tamanho precisa travar no MAX_PENDING, dropando os velhos em favor dos novos
-	assert_eq(buf.size(), QNInputBuffer.MAX_PENDING, "Nao deve exceder o limite de alocação de memória")
+	var remaining = buf.drain_after(300)
+	assert_eq(remaining.size(), 0, "Nao deve exceder o limite de alocação de memória")
 
 func test_get_sent_ts_retorna_tempo_de_envio() -> void:
 	# Arrange (Preparação)

@@ -27,7 +27,7 @@ func test_must_store_and_retrieve_past_states():
 	# Arrange: Mover uma entidade ao longo do tempo (1 tick por 10ms)
 	for i in range(10):
 		var snapshot = {
-			101: {"pos": Vector3(i, 0, 0), "radius": 1.0}
+			101: {"pos": Vector3(i, 0, 0), "hitbox_extents": Vector3(1.0, 1.0, 1.0)}
 		}
 		buffer.push_state(i * 10, snapshot)
 	
@@ -35,7 +35,7 @@ func test_must_store_and_retrieve_past_states():
 	# No timestamp 50 (i=5), a entidade estava em X=5.
 	var origin = Vector3(5, 0, 10)
 	var direction = Vector3(0, 0, -1) # Aponta pro Norte
-	var hit = buffer.raycast_past(origin, direction, 50)
+	var hit = buffer.query_raycast(origin, direction, 100.0, 50)
 	
 	# Assert
 	assert_true(hit.has("entity_id"), "O tiro deve acertar a entidade 101 no passado")
@@ -45,14 +45,14 @@ func test_must_miss_if_timestamp_is_wrong():
 	# Arrange
 	for i in range(10):
 		var snapshot = {
-			101: {"pos": Vector3(i, 0, 0), "radius": 1.0}
+			101: {"pos": Vector3(i, 0, 0), "hitbox_extents": Vector3(1.0, 1.0, 1.0)}
 		}
 		buffer.push_state(i * 10, snapshot)
 	
 	# Act: Atira na posicao 5 (onde ele esteve em ts=50), mas passando ts=90
 	var origin = Vector3(5, 0, 10)
 	var direction = Vector3(0, 0, -1)
-	var hit = buffer.raycast_past(origin, direction, 90)
+	var hit = buffer.query_raycast(origin, direction, 100.0, 90)
 	
 	# Assert
 	assert_false(hit.has("entity_id"), "O tiro DEVE FALHAR porque em ts=90 o alvo ja estava na posicao X=9")
@@ -62,12 +62,12 @@ func test_must_interpolate_between_ticks():
 	# entre X=5 e X=6 (X=5.5).
 	for i in range(10):
 		var snapshot = {
-			101: {"pos": Vector3(i, 0, 0), "radius": 1.0}
+			101: {"pos": Vector3(i, 0, 0), "hitbox_extents": Vector3(1.0, 1.0, 1.0)}
 		}
 		buffer.push_state(i * 10, snapshot)
 	
 	var origin = Vector3(5.5, 0, 10)
 	var direction = Vector3(0, 0, -1)
-	var hit = buffer.raycast_past(origin, direction, 55)
+	var hit = buffer.query_raycast(origin, direction, 100.0, 55)
 	
 	assert_true(hit.has("entity_id"), "O tiro deve acertar a entidade 101 interpolada no ts=55")

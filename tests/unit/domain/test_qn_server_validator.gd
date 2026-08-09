@@ -7,10 +7,10 @@
 ## e posições inválidas (out-of-bounds), aplicando tolerâncias (clamps) ou rejeições.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-29
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.1.0
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
@@ -96,7 +96,7 @@ func test_strikes_acumulam_ate_kick() -> void:
 	v.validate(player_id, Vector3.ZERO, Vector3.ZERO, 0)
 	
 	# Act (Ação): O jogador insiste num teletransporte repetidas vezes
-	for i: int in QNServerValidator.MAX_STRIKES:
+	for i: int in v.max_strikes:
 		v.validate(player_id, Vector3(50, 0, 0), Vector3.ZERO, 50 + i * 50)
 		
 	# Assert (Verificação): A quantidade de strikes deve acionar o flag de ban/kick do servidor

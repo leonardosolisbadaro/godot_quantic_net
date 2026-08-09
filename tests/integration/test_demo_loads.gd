@@ -1,4 +1,4 @@
-﻿## @file test_demo_loads.gd
+## @file test_demo_loads.gd
 ## @path res://tests/integration/test_demo_loads.gd
 ##
 ## @description
@@ -23,6 +23,7 @@ func test_demo_scene_loads() -> void:
 	# Act
 	assert_not_null(scene, "Cena demo deve ser carregavel.")
 	var inst: Node = scene.instantiate()
+	inst.auto_spawn_clients = false
 	add_child(inst)
 	await get_tree().process_frame
 	# Assert: se chegamos aqui sem erro, a demo esta integrada ao projeto

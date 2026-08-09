@@ -1,23 +1,25 @@
-## @file test_qn_host_session.gd
+﻿## @file test_qn_host_session.gd
 ## @path res://tests/unit/use_cases/test_qn_host_session.gd
 ##
 ## @description
 ## Testes unitários para QNHostSession, responsável pela orquestração autoritativa.
 ##
 ## @created 2026-07-30
-## @updated 2026-08-01
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNHostSession = preload("res://addons/quantic_net/src/use_cases/qn_host_session.gd")
-const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
 const QNServerValidator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd")
-const QNEntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
+
+
+
+
+
 
 func test_peer_autenticado_aloca_entidade_com_perfil_mmo() -> void:
 	# Arrange
@@ -31,10 +33,10 @@ func test_peer_autenticado_aloca_entidade_com_perfil_mmo() -> void:
 	assert_true(registry.has(42), "Entidade deve ser registrada no dicionario de sessoes.")
 	
 	var entity = registry[42]
-	assert_eq(entity.id, 42)
-	assert_eq(entity.pos, Vector3.ZERO)
-	assert_eq(entity.rot, Vector3.ZERO)
-	assert_true(entity.profile != null, "Perfil alocado como objeto QNNetProfile")
+	assert_eq(entity["id"], 42)
+	assert_eq(entity["pos"], Vector3.ZERO)
+	assert_eq(entity["rot"], Vector3.ZERO)
+	assert_true(entity["profile"] != null, "Perfil alocado como objeto QNNetProfile")
 
 func test_snapshot_valido_aceito_e_atualiza_registry() -> void:
 	# Arrange
@@ -50,7 +52,7 @@ func test_snapshot_valido_aceito_e_atualiza_registry() -> void:
 	
 	# Assert
 	var entity = session.get_registry()[10]
-	assert_true(entity.pos.distance_to(pos) < 0.05, "Posicao legitima deve atualizar a entidade")
+	assert_true(entity["pos"].distance_to(pos) < 0.05, "Posicao legitima deve atualizar a entidade")
 
 func test_snapshot_com_speedhack_gera_clamp_e_snapback() -> void:
 	# Arrange
@@ -75,7 +77,7 @@ func test_snapshot_com_speedhack_gera_clamp_e_snapback() -> void:
 	
 	# Assert
 	var entity = session.get_registry()[10]
-	assert_true(abs(entity.pos.z - 6.0) < 0.05, "Speedhack gera clamp na capacidade maxima permitida")
+	assert_true(abs(entity["pos"].z - 6.0) < 0.05, "Speedhack gera clamp na capacidade maxima permitida")
 	
 	assert_eq(sent_snapbacks.size(), 1, "Deve despachar pacote de correcao (snapback)")
 	var snap_data = QNSerializer.decode_state_seq(sent_snapbacks[0].pkt)
@@ -102,7 +104,7 @@ func test_snapshot_fora_do_mundo_gera_reject_e_kick() -> void:
 	
 	# Assert
 	var entity = session.get_registry()[10]
-	assert_eq(entity.pos, Vector3.ZERO, "Reject nao altera a posicao da entidade")
+	assert_eq(entity["pos"], Vector3.ZERO, "Reject nao altera a posicao da entidade")
 	assert_eq(sent_snapbacks.size(), 1, "Deve despachar snapback forçando a voltar")
 	var snap_data = QNSerializer.decode_state_seq(sent_snapbacks[0].pkt)
 	assert_eq(snap_data["custom_id"], 2, "Motivo do snapback = reject (2)")
@@ -115,8 +117,8 @@ func test_tick_broadcast_emite_array_de_estados() -> void:
 	session.on_peer_authenticated(20)
 	
 	# Força has_state para entrar no broadcast sem depender de pacotes e validadores
-	session.get_registry()[10].has_state = true
-	session.get_registry()[20].has_state = true
+	session.get_registry()[10]["has_state"] = true
+	session.get_registry()[20]["has_state"] = true
 	
 	var sent_packets := []
 	session.packet_ready.connect(func(id: int, pkt: PackedByteArray): sent_packets.append({"id": id, "pkt": pkt}))

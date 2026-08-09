@@ -9,6 +9,7 @@
 #include "core/qn_delta_serializer.hpp"
 #include "core/qn_interp_buffer.hpp"
 #include "core/qn_input_buffer.hpp"
+#include "core/qn_server_jitter_buffer.hpp"
 
 #include "net/qn_wire_peer.hpp"
 #include "net/qn_dtls_bootstrap.hpp"
@@ -35,6 +36,7 @@ void initialize_quantic_net_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(QNDeltaSerializer);
 	GDREGISTER_CLASS(QNInterpBuffer);
 	GDREGISTER_CLASS(QNInputBuffer);
+	GDREGISTER_CLASS(QNServerJitterBuffer);
 
 	GDREGISTER_CLASS(QNWirePeer);
 	GDREGISTER_CLASS(QNDTLSBootstrap);

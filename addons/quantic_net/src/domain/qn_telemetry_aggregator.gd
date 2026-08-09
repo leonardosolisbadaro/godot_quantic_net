@@ -23,6 +23,7 @@ var _rtt_min: float = INF
 var _rtt_max: float = -INF
 
 var _current_loss: float = 0.0
+var _loss_samples: Array[float] = []
 var _loss_max: float = -INF
 
 func _init(window: int = 128) -> void:
@@ -33,14 +34,29 @@ func push_rtt(ms: float) -> void:
 	_rtt_samples.append(ms)
 	if _rtt_samples.size() > _window_size:
 		_rtt_samples.pop_front()
-	
-	if ms < _rtt_min: _rtt_min = ms
-	if ms > _rtt_max: _rtt_max = ms
+		
+		# Recalculate min/max
+		_rtt_min = INF
+		_rtt_max = -INF
+		for v in _rtt_samples:
+			if v < _rtt_min: _rtt_min = v
+			if v > _rtt_max: _rtt_max = v
+	else:
+		if ms < _rtt_min: _rtt_min = ms
+		if ms > _rtt_max: _rtt_max = ms
 
 func push_loss(pct: float) -> void:
 	_current_loss = pct
-	
-	if pct > _loss_max: _loss_max = pct
+	_loss_samples.append(pct)
+	if _loss_samples.size() > _window_size:
+		_loss_samples.pop_front()
+		
+		# Recalculate max
+		_loss_max = -INF
+		for v in _loss_samples:
+			if v > _loss_max: _loss_max = v
+	else:
+		if pct > _loss_max: _loss_max = pct
 
 func get_current_rtt() -> float:
 	if _rtt_samples.is_empty(): return 0.0

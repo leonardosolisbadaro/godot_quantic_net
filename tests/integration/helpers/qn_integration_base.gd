@@ -1,4 +1,4 @@
-﻿## @file qn_integration_base.gd
+## @file qn_integration_base.gd
 ## @path res://tests/integration/helpers/qn_integration_base.gd
 ##
 ## @description
@@ -31,12 +31,11 @@ func after_each() -> void:
 	for a in _autoloads:
 		if is_instance_valid(a):
 			# Forca teardown do netem caso algum assert tenha quebrado no meio do teste
-			if a._wire:
-				a._wire.netem_enabled = false
+			a.set_netem_config(0.0, 0, 0, 0.0)
 			remove_child(a)
 			a.free()
 	_autoloads.clear()
-	_cleanup_certs()
+
 
 func _spawn_autoload() -> Node:
 	var a: Node = AutoloadScript.new()

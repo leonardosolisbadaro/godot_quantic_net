@@ -1,22 +1,22 @@
-## @file test_qn_priority_accumulator.gd
+﻿## @file test_qn_priority_accumulator.gd
 ## @path res://addons/quantic_net/tests/domain/test_qn_priority_accumulator.gd
 ##
 ## @description
-## Testes unitários para o despachante de rede QNPriorityAccumulator, validando o rank 
-## baseado em MTU, distância, profile e debito de pacotes (prevenção de starvation).
+## Testes unitÃ¡rios para o despachante de rede QNPriorityAccumulator, validando o rank 
+## baseado em MTU, distÃ¢ncia, profile e debito de pacotes (prevenÃ§Ã£o de starvation).
 ##
 ## @created 2026-08-01
-## @updated 2026-08-01
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.4.0
+## @lastModifiedIn 0.6.0
 ##
-## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+## @author Leonardo S. BadarÃ³ (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNPriorityAccumulator = preload("res://addons/quantic_net/src/domain/qn_priority_accumulator.gd")
-const QNEntityProfile = preload("res://addons/quantic_net/src/domain/qn_entity_profile.gd")
+
+
 
 func test_must_prioritize_closest_entities():
 	var acc = QNPriorityAccumulator.new()
@@ -26,7 +26,7 @@ func test_must_prioritize_closest_entities():
 	var candidates = {
 		2: {"pos": Vector3(10, 0, 0)}, # Entidade Longe
 		3: {"pos": Vector3(2, 0, 0)}, # Entidade Perto
-		4: {"pos": Vector3(5, 0, 0)} # Entidade Intermediária
+		4: {"pos": Vector3(5, 0, 0)} # Entidade IntermediÃ¡ria
 	}
 	
 	var profiles = {
@@ -37,11 +37,11 @@ func test_must_prioritize_closest_entities():
 	
 	var selected = acc.select_entities(1, candidates, profiles, observer_pos, mtu_budget, 19)
 	
-	# Cabe 2 entidades. As mais próximas devem ganhar (3 e 4)
+	# Cabe 2 entidades. As mais prÃ³ximas devem ganhar (3 e 4)
 	assert_eq(selected.size(), 2, "Apenas duas entidades devem caber no budget do MTU")
-	assert_true(selected.has(3), "A entidade 3 (mais próxima) deve estar inclusa")
-	assert_true(selected.has(4), "A entidade 4 (intermediária) deve estar inclusa")
-	assert_false(selected.has(2), "A entidade 2 (longe) deve ser descartada por falta de espaço")
+	assert_true(selected.has(3), "A entidade 3 (mais prÃ³xima) deve estar inclusa")
+	assert_true(selected.has(4), "A entidade 4 (intermediÃ¡ria) deve estar inclusa")
+	assert_false(selected.has(2), "A entidade 2 (longe) deve ser descartada por falta de espaÃ§o")
 
 func test_must_accumulate_debt_and_prevent_starvation():
 	var acc = QNPriorityAccumulator.new()
@@ -58,13 +58,13 @@ func test_must_accumulate_debt_and_prevent_starvation():
 		3: QNEntityProfile.preset_standard()
 	}
 	
-	# Tick 1: A entidade 3 ganha pois está mais perto
+	# Tick 1: A entidade 3 ganha pois estÃ¡ mais perto
 	var sel_1 = acc.select_entities(1, candidates, profiles, observer_pos, mtu_budget, 19)
 	assert_true(sel_1.has(3))
 	assert_false(sel_1.has(2))
 	
 	# Para simular "passagem do tempo sem mover", rodamos novamente. 
-	# A Entidade 2 acumulou débito, então o score dela sobe a cada iteração!
+	# A Entidade 2 acumulou dÃ©bito, entÃ£o o score dela sobe a cada iteraÃ§Ã£o!
 	var sel_final = null
 	var loops = 0
 	
@@ -75,8 +75,8 @@ func test_must_accumulate_debt_and_prevent_starvation():
 			sel_final = sel
 			break
 			
-	assert_not_null(sel_final, "Eventualmente a Entidade 2 deve ganhar devido ao acúmulo de débito")
-	assert_true(loops < 10, "A Entidade 2 não deve morrer de fome; venceu após %d ticks" % loops)
+	assert_not_null(sel_final, "Eventualmente a Entidade 2 deve ganhar devido ao acÃºmulo de dÃ©bito")
+	assert_true(loops < 10, "A Entidade 2 nÃ£o deve morrer de fome; venceu apÃ³s %d ticks" % loops)
 
 func test_must_cull_entities_outside_radius():
 	var acc = QNPriorityAccumulator.new()

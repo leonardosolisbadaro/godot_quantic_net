@@ -27,6 +27,9 @@ public:
 
 	void on_packet(int seq);
 	double loss_pct();
+	
+	int get_received() const { return received; }
+	int get_lost() const { return lost; }
 };
 
 } // namespace godot

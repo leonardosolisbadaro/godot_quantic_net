@@ -6,16 +6,15 @@
 ## Focado em garantir a quantização de dados em 19 Bytes (Posição, Rotação, Timestamp, etc).
 ##
 ## @created 2026-07-29
-## @updated 2026-08-01
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
 
 func test_roundtrip_preserva_valores_dentro_da_precisao() -> void:
 	# Arrange (Preparação): Dados de posição e rotação simulados, e a classe alvo
@@ -48,8 +47,8 @@ func test_posicao_fora_do_range_satura_nos_limites() -> void:
 	var d: Dictionary = QNSerializer.decode_state_seq(b)
 	
 	# Assert (Verificação): Os valores devem ser grampeados (clamped) aos extremos permitidos
-	assert_almost_eq(d.get("pos", Vector3.ZERO).x, QNSerializer.POS_HI, 0.01, "Posicao X excedente deve saturar no limite superior")
-	assert_almost_eq(d.get("pos", Vector3.ZERO).z, QNSerializer.POS_LO, 0.01, "Posicao Z excedente deve saturar no limite inferior")
+	assert_almost_eq(d.get("pos", Vector3.ZERO).x, 64.0, 0.01, "Posicao X excedente deve saturar no limite superior")
+	assert_almost_eq(d.get("pos", Vector3.ZERO).z, -64.0, 0.01, "Posicao Z excedente deve saturar no limite inferior")
 
 func test_seq_faz_wrap_em_16_bits() -> void:
 	# Arrange (Preparação): Uma sequência acima do limite de 16 bits (65535)

@@ -1,4 +1,4 @@
-﻿## @file test_qn_dtls_bootstrap_handshake.gd
+## @file test_qn_dtls_bootstrap_handshake.gd
 ## @path res://tests/integration/test_qn_dtls_bootstrap_handshake.gd
 ##
 ## @description
@@ -18,7 +18,7 @@
 
 extends GutTest
 
-const QNDTLSBootstrap = preload("res://addons/quantic_net/src/infrastructure/qn_dtls_bootstrap.gd")
+
 
 const TEST_PORT := 47901
 const HANDSHAKE_DEADLINE_MS := 3000
@@ -39,7 +39,7 @@ func test_handshake_host_client_conecta_em_loopback() -> void:
 	var err_c := [OK]
 	var host: ENetConnection = QNDTLSBootstrap.host(TEST_PORT, "127.0.0.1", 8, err_h)
 	assert_not_null(host, "host DTLS sobe (err=%d)" % err_h[0])
-	var client: ENetConnection = QNDTLSBootstrap.join("127.0.0.1", TEST_PORT, QNDTLSBootstrap.CERT_HOSTNAME, err_c)
+	var client: ENetConnection = QNDTLSBootstrap.join("127.0.0.1", TEST_PORT, "quanticnet", err_c)
 	assert_not_null(client, "client DTLS criado (err=%d)" % err_c[0])
 	# Act: bombeia ate o client reportar conectado (ou deadline)
 	var t0: int = Time.get_ticks_msec()
@@ -68,7 +68,7 @@ func test_client_com_cert_errado_nao_completa_handshake() -> void:
 		wrong_key, "CN=quanticnet,O=Atacante,C=XX")
 	var client := ENetConnection.new()
 	client.create_host(1, 1, 0, 0)
-	client.dtls_client_setup(QNDTLSBootstrap.CERT_HOSTNAME, TLSOptions.client(wrong_cert))
+	client.dtls_client_setup("quanticnet", TLSOptions.client(wrong_cert))
 	client.connect_to_host("127.0.0.1", TEST_PORT + 1)
 	# Act: bombeia pelo deadline inteiro
 	var t0: int = Time.get_ticks_msec()
@@ -99,6 +99,6 @@ func test_host_com_porta_invalida_retorna_erro() -> void:
 	assert_ne(err_out[0], OK, "erro de bind propagado")
 
 func _cleanup_dev_certs() -> void:
-	for p in [QNDTLSBootstrap.DEV_CERT_PATH, QNDTLSBootstrap.DEV_KEY_PATH]:
+	for p in ["user://qnet_cert.crt", "user://qnet_cert.key"]:
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))

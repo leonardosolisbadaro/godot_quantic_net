@@ -7,16 +7,16 @@
 ## de RTT (Round Trip Time) através de janelas móveis (EMA), isolado da engine.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-01
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.3.0
+## @lastModifiedIn 0.6.0
 ##
 ## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNClockSync = preload("res://addons/quantic_net/src/domain/qn_clock_sync.gd")
+
 
 func test_converge_para_offset_real_com_jitter() -> void:
 	# Arrange (Preparação): Instancia o sincronizador e define um offset alvo de 500ms simulando latência com jitter

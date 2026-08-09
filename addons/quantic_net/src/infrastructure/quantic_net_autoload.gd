@@ -25,6 +25,10 @@ signal peer_left(id: int)
 signal state_received(owner: int, pos: Vector3, rot: Vector3, custom: int)
 signal pong_received(rtt: float, offset: float)
 signal snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array)
+signal input_tick(peer_id: int, sequence: int, input_mask: int, look_dir: Vector2)
+
+const MODE_STATE_BASED = 0
+const MODE_COMMAND_BASED = 1
 
 enum ConnectionState {DISCONNECTED, CONNECTING, AUTHENTICATING, CONNECTED, FAILED}
 
@@ -39,6 +43,7 @@ var _enet: ENetConnection = null
 var _hook: Object = null # QNNetHook
 var _wire: Object = null # QNWirePeer
 var _host_session: RefCounted = null # QNHostSession
+var _command_session: RefCounted = null # QNCommandSession
 var _client_session: RefCounted = null # QNClientSession
 var _secret: String = ""
 var _is_server: bool = false
@@ -77,6 +82,7 @@ func disconnect_net(is_exiting: bool = false) -> void:
 	_enet = null
 	_hook = null
 	_host_session = null
+	_command_session = null
 	_client_session = null
 	_is_server = false
 	_secret = ""
@@ -99,19 +105,33 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32,
 	_hook.get_base().multiplayer_peer = _wire
 	_hook.get_base().server_relay = true
 	
-	_host_session = QNHostSession.new()
-	var validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
-	validator.configure(config)
-	_host_session.set_validator(validator)
-	_host_session.snapback_requested.connect(_on_host_snapback_requested)
-	_host_session.packet_ready.connect(_on_host_packet_ready)
-	_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
-		print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
-		if s >= config.get("max_strikes", 5):
-			_hook.get_base().disconnect_peer(id)
-	)
+	var net_mode = config.get("network_mode", MODE_STATE_BASED)
+	if net_mode == MODE_COMMAND_BASED:
+		_command_session = preload("res://addons/quantic_net/src/use_cases/qn_command_session.gd").new()
+		_command_session.init(Callable(self, "_on_host_packet_ready"), config.get("tick_rate_ms", 50))
+		_command_session.input_tick.connect(func(id: int, seq: int, mask: int, dir: Vector2) -> void:
+			input_tick.emit(id, seq, mask, dir)
+		)
+		_command_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
+			print("[SERVER] Peer %d rejected (Command). Reason: %s. Strikes: %d" % [id, r, s])
+			if s >= config.get("max_strikes", 5):
+				_hook.get_base().disconnect_peer(id)
+		)
+	else:
+		_host_session = QNHostSession.new()
+		var validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
+		validator.configure(config)
+		_host_session.set_validator(validator)
+		_host_session.snapback_requested.connect(_on_host_snapback_requested)
+		_host_session.packet_ready.connect(_on_host_packet_ready)
+		_host_session.peer_rejected.connect(func(id: int, r: String, s: int) -> void:
+			print("[SERVER] Peer %d rejected. Reason: %s. Strikes: %d" % [id, r, s])
+			if s >= config.get("max_strikes", 5):
+				_hook.get_base().disconnect_peer(id)
+		)
 		
 	_hook.custom_packet.connect(_on_custom_packet)
+
 	_hook.get_base().auth_timeout = config.get("auth_timeout", 3.0)
 	_hook.get_base().allow_object_decoding = false
 	_hook.get_base().auth_callback = Callable(self, "_on_auth_callback")
@@ -121,8 +141,10 @@ func host(port: int, secret: String, bind_ip: String = "*", max_peers: int = 32,
 			peer_joined.emit(id))
 	_hook.peer_disconnected.connect(func(id: int) -> void:
 		if _is_server:
-			if _host_session.has_method("on_peer_disconnected"):
+			if _host_session and _host_session.has_method("on_peer_disconnected"):
 				_host_session.on_peer_disconnected(id)
+			if _command_session and _command_session.has_method("on_peer_disconnected"):
+				_command_session.on_peer_disconnected(id)
 			
 			var pkt := PackedByteArray([QNSerializer.TYPE_PEER_LEFT])
 			var id_bytes := PackedByteArray()
@@ -204,7 +226,10 @@ func _physics_process(delta: float) -> void:
 	if _hook == null:
 		return
 	if _is_server and _state == ConnectionState.CONNECTED:
-		_host_session.tick_broadcast(Time.get_ticks_msec())
+		if _host_session:
+			_host_session.tick_broadcast(Time.get_ticks_msec())
+		if _command_session:
+			_command_session.tick_broadcast(Time.get_ticks_msec())
 	elif not _is_server:
 		var peers = _enet.get_peers()
 		if peers.size() > 0:
@@ -226,7 +251,10 @@ func _on_server_auth_callback(id: int, data: PackedByteArray) -> void:
 	print("SERVER AUTH CALLBACK TRIGGERED: ", id)
 	if data == _secret.to_utf8_buffer():
 		print("SERVER AUTH SECRET MATCH!")
-		_host_session.on_peer_authenticated(id)
+		if _host_session:
+			_host_session.on_peer_authenticated(id)
+		if _command_session:
+			_command_session.on_peer_authenticated(id)
 		var b = PackedByteArray()
 		b.resize(4)
 		b.encode_u32(0, id)
@@ -245,8 +273,10 @@ func _on_client_auth_callback(id: int, data: PackedByteArray) -> void:
 
 func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -> void:
 	if _is_server:
-		if data.size() >= 20 and data[0] == QNSerializer.TYPE_STATE:
+		if _host_session and data.size() >= 20 and data[0] == QNSerializer.TYPE_STATE:
 			_host_session.on_client_snapshot(peer_id, data.slice(1), Time.get_ticks_msec())
+		elif _command_session and data.size() >= 1 and data[0] == preload("res://addons/quantic_net/src/use_cases/qn_command_session.gd").TYPE_INPUT:
+			_command_session.on_client_input(peer_id, data, Time.get_ticks_msec())
 	else:
 		if data.size() >= 1:
 			if data[0] == QNSerializer.TYPE_PEER_LEFT and data.size() >= 5:
@@ -292,10 +322,25 @@ func submit_state(pos: Vector3, rot: Vector3, custom: int, dt: float) -> void:
 	if not _is_server and _client_session:
 		_client_session.submit_state(pos, rot, custom, dt, Time.get_ticks_msec())
 
+func submit_input(sequence: int, input_mask: int, look_dir: Vector2) -> void:
+	if not _is_server and _client_session:
+		var pkt := PackedByteArray()
+		pkt.resize(13)
+		pkt.encode_u8(0, preload("res://addons/quantic_net/src/use_cases/qn_command_session.gd").TYPE_INPUT)
+		pkt.encode_u16(1, sequence)
+		pkt.encode_u16(3, input_mask)
+		pkt.encode_float(5, look_dir.x)
+		pkt.encode_float(9, look_dir.y)
+		_hook.send_custom(SERVER_PEER_ID, pkt, CH_STATE, TRANSFER_UNRELIABLE)
+
 func get_remote_state(entity_id: int) -> Dictionary:
 	if not _is_server and _client_session:
 		return _client_session.remote_state(entity_id, Time.get_ticks_msec())
 	return {}
+
+func set_server_validator(validator: RefCounted) -> void:
+	if _is_server and _host_session:
+		_host_session.set_validator(validator)
 
 func cleanup_entity(entity_id: int) -> void:
 	if not _is_server and _client_session:

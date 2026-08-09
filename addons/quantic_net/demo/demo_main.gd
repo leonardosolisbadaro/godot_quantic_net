@@ -98,6 +98,7 @@ var _global_network_parameters = {
 }
 
 # Controle de estado da topologia local
+var auto_spawn_clients: bool = true
 var _is_acting_as_server: bool = false
 var _local_peer_id: int = 0
 
@@ -211,7 +212,7 @@ func _ready() -> void:
 	if use_netem:
 		_is_network_emulation_active = true
 		
-	if not is_server and not is_client:
+	if auto_spawn_clients and not is_server and not is_client:
 		print("[DEMO] Iniciando topologia automática: 1 Servidor, 2 Clientes...")
 		is_server = true
 		

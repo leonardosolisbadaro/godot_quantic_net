@@ -8,29 +8,30 @@
 ## relogio deterministico; sem socket, sem SceneTree de rede.
 ##
 ## @created 2026-07-29
-## @updated 2026-07-30
+## @updated 2026-08-08
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.2.0
+## @lastModifiedIn 0.6.0
 ##
-## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+## @author Leonardo S. Badar� (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
 
 extends GutTest
 
-const QNClientSession = preload("res://addons/quantic_net/src/use_cases/qn_client_session.gd")
-const QNSerializer = preload("res://addons/quantic_net/src/domain/qn_serializer.gd")
+
+
 
 var _sent: Array
 
 func _new_session(my_id := 2) -> RefCounted:
 	_sent = []
-	var sess: RefCounted = QNClientSession.new(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
+	var sess: RefCounted = QNClientSession.new()
+	sess.init(func(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
 		_sent.append({}))
 	sess.set_local_id(my_id)
 	return sess
 
 func _snapback_pkt(seq: int, pos: Vector3, reason: int) -> PackedByteArray:
-	var pkt := PackedByteArray([QNSerializer.TYPE_SNAPBACK])
+	var pkt := PackedByteArray([2]) # 2 = TYPE_SNAPBACK
 	pkt.append_array(QNSerializer.encode_snapback(seq, pos, Vector3.ZERO, 2000, reason))
 	return pkt
 
@@ -74,6 +75,6 @@ func test_snapback_corrompido_ignorado() -> void:
 	var sess := _new_session()
 	sess.local_pos = Vector3(5, 0, 5)
 	# Act
-	sess.handle_packet(PackedByteArray([QNSerializer.TYPE_SNAPBACK, 1]), 1500)
+	sess.handle_packet(PackedByteArray([2, 1]), 1500) # TYPE_SNAPBACK
 	# Assert
 	assert_eq(sess.local_pos, Vector3(5, 0, 5), "estado local intocado")
