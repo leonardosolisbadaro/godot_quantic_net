@@ -5,7 +5,16 @@ Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
 [DEMO] Peer Joined: 2
 [DEMO] Peer Joined: 3
 [DEMO] Server RAM (Static): 61.14 MB | FPS: 60
-[QNHostSession] Bandwidth Stats (Peer 2): 2 entities sent out of 6. Savings so far: 38418 bytes
-[QNHostSession] Bandwidth Stats (Peer 2): 2 entities sent out of 6. Savings so far: 78375 bytes
-[DEMO] Server RAM (Static): 61.23 MB | FPS: 59
-[QNHostSession] Bandwidth Stats (Peer 2): 2 entities sent out of 6. Savings so far: 119035 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 0 entities sent out of 6. Savings so far: 45486 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 2 entities sent out of 6. Savings so far: 93727 bytes
+[DEMO] Server RAM (Static): 61.24 MB | FPS: 59
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 141797 bytes
+[DEMO] Server RAM (Static): 61.31 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 3): 2 entities sent out of 6. Savings so far: 189639 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 0 entities sent out of 6. Savings so far: 237747 bytes
+[DEMO] Server RAM (Static): 61.39 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 3): 2 entities sent out of 6. Savings so far: 285057 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 0 entities sent out of 6. Savings so far: 333564 bytes
+[DEMO] Server RAM (Static): 61.47 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 3): 2 entities sent out of 6. Savings so far: 381368 bytes
+[DEMO] Server RAM (Static): 61.55 MB | FPS: 59

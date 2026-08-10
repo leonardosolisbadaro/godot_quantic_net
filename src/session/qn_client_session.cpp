@@ -42,6 +42,8 @@ void QNClientSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("remote_state", "owner", "now"), &QNClientSession::remote_state);
 	ClassDB::bind_method(D_METHOD("loss_of", "owner"), &QNClientSession::loss_of);
 	ClassDB::bind_method(D_METHOD("cleanup_entity", "owner"), &QNClientSession::cleanup_entity);
+	ClassDB::bind_method(D_METHOD("get_registry"), &QNClientSession::get_registry);
+	ClassDB::bind_method(D_METHOD("get_registry_keys"), &QNClientSession::get_registry_keys);
 	
 	ClassDB::bind_method(D_METHOD("set_local_pos", "pos"), &QNClientSession::set_local_pos);
 	ClassDB::bind_method(D_METHOD("get_local_pos"), &QNClientSession::get_local_pos);
@@ -305,3 +307,5 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 	
 	_last_server_seq = server_seq;
 }
+Dictionary QNClientSession::get_registry() const { return _interp; }
+Array QNClientSession::get_registry_keys() const { return _interp.keys(); }

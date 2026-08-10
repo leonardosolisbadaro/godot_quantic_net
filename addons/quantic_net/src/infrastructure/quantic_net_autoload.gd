@@ -384,11 +384,15 @@ func is_clock_synced() -> bool:
 func get_registry() -> Dictionary:
 	if _is_server and _host_session:
 		return _host_session.get_registry()
+	elif not _is_server and _client_session:
+		return _client_session.get_registry()
 	return {}
 
 func get_registry_keys() -> Array:
 	if _is_server and _host_session:
 		return _host_session.get_registry_keys()
+	elif not _is_server and _client_session:
+		return _client_session.get_registry_keys()
 	return []
 
 func get_entity_position(entity_id: int) -> Vector3:

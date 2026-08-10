@@ -80,6 +80,9 @@ public:
 	Dictionary remote_state(int owner, int now);
 	double loss_of(int owner);
 	void cleanup_entity(int owner);
+	
+	Dictionary get_registry() const;
+	Array get_registry_keys() const;
 };
 
 } // namespace godot
