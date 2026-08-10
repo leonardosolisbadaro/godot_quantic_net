@@ -174,8 +174,9 @@ void QNWirePeer::_drain_worker_netem(uint64_t current_ts) {
 		}
 	}
 			
-	for (const NetemPacket &pkt : ready) {
+	for (NetemPacket &pkt : ready) {
 		_worker_send_packet(pkt.payload, pkt.target, pkt.channel, pkt.flag);
+		pkt.payload.clear(); // Fix memory leak
 	}
 		
 	_worker_netem_queue = remaining;
@@ -220,6 +221,7 @@ Error QNWirePeer::_get_packet(const uint8_t **r_buffer, int32_t *r_buffer_size) 
 PackedByteArray QNWirePeer::_get_packet_script() {
 	if (_in_queue.size() > 0) {
 		InPacket pkt = _in_queue.front();
+		_in_queue.front().data.clear(); // Explicitly clear before pop to prevent leak
 		_in_queue.pop_front();
 		_current_packet_peer = pkt.peer;
 		_current_packet_channel = pkt.channel;

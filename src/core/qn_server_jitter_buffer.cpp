@@ -76,6 +76,8 @@ void QNServerJitterBuffer::push(int seq, int input_mask, const Vector2 &look_dir
 	}
 	
 	if (pending.size() > MAX_PENDING) {
+		Dictionary first = pending[0];
+		first.clear();
 		pending.pop_front(); // drop oldest if full
 	}
 }

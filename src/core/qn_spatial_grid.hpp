@@ -16,8 +16,10 @@ private:
 	double cell_size;
 	std::unordered_map<uint64_t, std::vector<int>> cells;
 	std::unordered_map<int, uint64_t> entity_cells;
-
 	uint64_t _get_cell_key(const Vector3 &pos) const;
+
+	bool _bounds_active = false;
+	Vector3 _world_extents = Vector3(9999.0, 9999.0, 9999.0);
 
 protected:
 	static void _bind_methods();
@@ -32,8 +34,15 @@ public:
 	void insert_entity(int id, const Vector3 &pos);
 	void update_entity(int id, const Vector3 &pos);
 	void remove_entity(int id);
-	
 	PackedInt32Array get_entities_in_radius(const Vector3 &pos, double radius) const;
+	
+	// --- MMO World & Chunk System API ---
+	void set_world_bounds(const Vector3 &extents, bool active);
+	bool is_in_bounds(const Vector3 &pos) const;
+	
+	PackedInt32Array get_entities_in_chunk(const Vector3 &pos) const;
+	Vector3 get_chunk_coord(const Vector3 &pos) const;
+	
 	void clear();
 };
 

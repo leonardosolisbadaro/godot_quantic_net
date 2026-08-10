@@ -42,6 +42,8 @@ void QNWorldHistoryBuffer::push_state(int timestamp, const Dictionary &world_sna
 
 	_history.push_front(entry);
 	if (_history.size() > _max_history_ticks) {
+		Dictionary last = _history[_history.size() - 1];
+		last.clear();
 		_history.pop_back();
 	}
 }

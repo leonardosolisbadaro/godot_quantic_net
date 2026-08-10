@@ -338,6 +338,11 @@ func get_remote_state(entity_id: int) -> Dictionary:
 		return _client_session.remote_state(entity_id, Time.get_ticks_msec())
 	return {}
 
+func get_server_grid() -> Object:
+	if _is_server and _host_session:
+		return _host_session.get_grid()
+	return null
+
 func set_server_validator(validator: RefCounted) -> void:
 	if _is_server and _host_session:
 		_host_session.set_validator(validator)

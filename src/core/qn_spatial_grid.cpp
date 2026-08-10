@@ -20,6 +20,10 @@ void QNSpatialGrid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("update_entity", "id", "pos"), &QNSpatialGrid::update_entity);
 	ClassDB::bind_method(D_METHOD("remove_entity", "id"), &QNSpatialGrid::remove_entity);
 	ClassDB::bind_method(D_METHOD("get_entities_in_radius", "pos", "radius"), &QNSpatialGrid::get_entities_in_radius);
+	ClassDB::bind_method(D_METHOD("set_world_bounds", "extents", "active"), &QNSpatialGrid::set_world_bounds);
+	ClassDB::bind_method(D_METHOD("is_in_bounds", "pos"), &QNSpatialGrid::is_in_bounds);
+	ClassDB::bind_method(D_METHOD("get_entities_in_chunk", "pos"), &QNSpatialGrid::get_entities_in_chunk);
+	ClassDB::bind_method(D_METHOD("get_chunk_coord", "pos"), &QNSpatialGrid::get_chunk_coord);
 	ClassDB::bind_method(D_METHOD("clear"), &QNSpatialGrid::clear);
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cell_size"), "set_cell_size", "get_cell_size");
@@ -43,7 +47,20 @@ double QNSpatialGrid::get_cell_size() const {
 	return cell_size;
 }
 
+void QNSpatialGrid::set_world_bounds(const Vector3 &extents, bool active) {
+	_world_extents = extents;
+	_bounds_active = active;
+}
+
+bool QNSpatialGrid::is_in_bounds(const Vector3 &pos) const {
+	if (!_bounds_active) return true;
+	return (std::abs(pos.x) <= _world_extents.x) &&
+		   (std::abs(pos.y) <= _world_extents.y) &&
+		   (std::abs(pos.z) <= _world_extents.z);
+}
+
 void QNSpatialGrid::insert_entity(int id, const Vector3 &pos) {
+	if (!is_in_bounds(pos)) return; // Ignore entities out of bounds
 	uint64_t key = _get_cell_key(pos);
 	cells[key].push_back(id);
 	entity_cells[id] = key;
@@ -65,8 +82,12 @@ void QNSpatialGrid::update_entity(int id, const Vector3 &pos) {
 		old_vec.erase(std::remove(old_vec.begin(), old_vec.end(), id), old_vec.end());
 
 		// Insert into new cell
-		cells[new_key].push_back(id);
-		entity_cells[id] = new_key;
+		if (is_in_bounds(pos)) {
+			cells[new_key].push_back(id);
+			entity_cells[id] = new_key;
+		} else {
+			entity_cells.erase(id); // Effectively removed from grid due to bounds
+		}
 	}
 }
 
@@ -101,6 +122,24 @@ PackedInt32Array QNSpatialGrid::get_entities_in_radius(const Vector3 &pos, doubl
 	}
 
 	return result;
+}
+
+PackedInt32Array QNSpatialGrid::get_entities_in_chunk(const Vector3 &pos) const {
+	PackedInt32Array result;
+	uint64_t key = _get_cell_key(pos);
+	auto it = cells.find(key);
+	if (it != cells.end()) {
+		for (int id : it->second) {
+			result.push_back(id);
+		}
+	}
+	return result;
+}
+
+Vector3 QNSpatialGrid::get_chunk_coord(const Vector3 &pos) const {
+	int32_t cx = static_cast<int32_t>(std::floor(pos.x / cell_size));
+	int32_t cz = static_cast<int32_t>(std::floor(pos.z / cell_size));
+	return Vector3(cx, 0, cz);
 }
 
 void QNSpatialGrid::clear() {

@@ -529,17 +529,11 @@ func _physics_process(delta: float) -> void:
 				cos(offset_time) * PROP_ORBIT_RADIUS + (i * PROP_ORBIT_SPACING),
 			)
 
-			var is_inside_aoi = true
-			if _global_network_parameters.get("grid_culling_enabled", false):
-				var aoi_limit = _global_network_parameters.get("grid_culling_size", 9999.0)
-				is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
-
-			if is_inside_aoi:
-				QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
+			QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
 
 			if _active_visual_entities_map.has(prop_id):
 				var mat = _active_visual_entities_map[prop_id].material_override as StandardMaterial3D
-				if is_inside_aoi:
+				if QuanticNet.get_server_grid().is_in_bounds(pos):
 					mat.albedo_color = Color.YELLOW
 					mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 				else:
@@ -616,21 +610,10 @@ func _process(_delta: float) -> void:
 					var rad = _entity_profile_player.get_spatial_culling_radius() if id < 1000 else _entity_profile_prop.get_spatial_culling_radius()
 					var dist = _client_predicted_position.distance_to(visual.position)
 
-					# Filtro Geral de Mundo (Grid System) no Client:
-					# Entidades que escorregam para fora da malha virtual de Grid são descartadas da renderização local.
-					var is_inside_aoi = true
-					if _global_network_parameters.get("grid_culling_enabled", false):
-						var aoi_limit = _global_network_parameters.get("grid_culling_size", 9999.0)
-						is_inside_aoi = (
-							absf(target_pos.x) <= aoi_limit and absf(target_pos.z) <= aoi_limit
-						)
-
-					# Três pilares de oclusão (Culling):
-					# 1. Grid Culling: Fora da fronteira absoluta? Oculta.
-					# 2. Client Culling: Muito longe da Câmera local? Oculta (Economiza Draw Calls).
-					# 3. Server Culling: O pacote UDP mais recente é muito antigo? O servidor parou de enviar porque a entidade saiu da AoI dele. Oculta.
+					# O Servidor define a malha absoluta, então se a entidade chegou no pacote, ela está visível no servidor.
+					# Só precisamos nos preocupar com o culling local e se há atualização recente.
 					var is_visible = (
-						is_inside_aoi and (dist <= _client_local_culling_radius)
+						(dist <= _client_local_culling_radius)
 						and (now - last_up <= SERVER_CULL_TIMEOUT_MS)
 					)
 
@@ -684,9 +667,8 @@ func _process(_delta: float) -> void:
 			vis.position = vis.position.lerp(target_pos, _delta * INTERP_LERP_SPEED)
 
 			# Feedback visual do Filtro Geral renderizado nativamente no Host
-			var is_inside_aoi = true
-			if grid_enabled:
-				is_inside_aoi = absf(target_pos.x) <= aoi_limit and absf(target_pos.z) <= aoi_limit
+			var grid = QuanticNet.get_server_grid()
+			var is_inside_aoi = grid.is_in_bounds(target_pos) if grid else true
 
 			# Identificamos se é peer pelo ID, já que o remote_state não empacota flags internas
 			var is_peer = (id < 1000)
@@ -1256,17 +1238,16 @@ func _request_profile_change(tick: float, culling: float) -> void:
 		server_update_profile(tick, culling)
 
 
-
 @rpc("any_peer", "call_local")
 func server_update_profile(new_tick: float, new_culling: float) -> void:
 	if not QuanticNet.is_server():
 		return
-		
+
 	# Identifica o autor do pedido de forma segura (impede spoofing de ID)
 	var peer_id = multiplayer.get_remote_sender_id()
 	if peer_id == 0:
 		peer_id = 1
-		
+
 	var registry = QuanticNet.get_registry()
 	if registry.has(peer_id):
 		var old_prof = registry[peer_id].get("profile")
@@ -1280,6 +1261,7 @@ func server_update_profile(new_tick: float, new_culling: float) -> void:
 			print(
 				"[DEMO] Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c]
 			)
+
 
 @rpc("authority", "call_local")
 func client_update_visual_radius(peer_id: int, new_radius: float) -> void:

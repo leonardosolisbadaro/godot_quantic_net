@@ -28,6 +28,8 @@ void QNInputBuffer::record(int seq, const Vector2 &move, double rot_delta, doubl
 	pending.push_back(d);
 	
 	if (pending.size() > MAX_PENDING) {
+		Dictionary first = pending[0];
+		first.clear();
 		pending.pop_front();
 	}
 }

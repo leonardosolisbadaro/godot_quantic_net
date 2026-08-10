@@ -59,6 +59,7 @@ public:
 	Array query_sphere(const Vector3 &center, double radius, int timestamp) const;
 
 	Dictionary get_registry();
+	Ref<QNSpatialGrid> get_grid() const;
 };
 
 } // namespace godot

@@ -99,11 +99,15 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 	
 	_state_history.push_front(state_dict);
 	if (_state_history.size() > 3) {
+		Dictionary last = _state_history[_state_history.size() - 1];
+		last.clear();
 		_state_history.pop_back();
 	}
 	
 	Array hist_array;
-	for (const Dictionary &d : _state_history) hist_array.push_back(d);
+	for (int i = 0; i < _state_history.size(); i++) {
+		hist_array.push_back(_state_history[i]);
+	}
 	
 	PackedByteArray raw = QNSerializer::encode_state_history(hist_array);
 	
@@ -224,7 +228,8 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 	int num_entities = buf->read_bits(8);
 	
 	Dictionary base_states;
-	for (const Dictionary &hist : _world_history) {
+	for (int i = 0; i < _world_history.size(); i++) {
+		Dictionary hist = _world_history[i];
 		if ((int)hist["seq"] == ack) {
 			base_states = hist["states"];
 			break;
@@ -232,8 +237,9 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 	}
 	
 	Dictionary parsed_states;
-	if (!_world_history.empty()) {
-		Dictionary recent_states = _world_history.front()["states"];
+	if (_world_history.size() > 0) {
+		Dictionary front_hist = _world_history[0];
+		Dictionary recent_states = front_hist["states"];
 		Array keys = recent_states.keys();
 		for (int i = 0; i < keys.size(); i++) {
 			int id = keys[i];
@@ -281,6 +287,8 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 	hist_entry["states"] = parsed_states;
 	_world_history.push_front(hist_entry);
 	if (_world_history.size() > 60) {
+		Dictionary last = _world_history[_world_history.size() - 1];
+		last.clear();
 		_world_history.pop_back();
 	}
 	

@@ -46,6 +46,7 @@ void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("on_client_snapshot", "peer_id", "data", "now"), &QNHostSession::on_client_snapshot);
 	ClassDB::bind_method(D_METHOD("tick_broadcast", "now"), &QNHostSession::tick_broadcast);
 	ClassDB::bind_method(D_METHOD("get_registry"), &QNHostSession::get_registry);
+	ClassDB::bind_method(D_METHOD("get_grid"), &QNHostSession::get_grid);
 	
 	ADD_SIGNAL(MethodInfo("snapback_requested", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::PACKED_BYTE_ARRAY, "pkt")));
 	ADD_SIGNAL(MethodInfo("peer_rejected", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::STRING, "reason"), PropertyInfo(Variant::INT, "strikes")));
@@ -233,6 +234,8 @@ void QNHostSession::tick_broadcast(int now) {
 	hist_entry["states"] = world_snapshot;
 	_world_history.push_front(hist_entry);
 	if (_world_history.size() > 60) {
+		Dictionary last = _world_history[_world_history.size() - 1];
+		last.clear();
 		_world_history.pop_back();
 	}
 	
@@ -381,4 +384,8 @@ Array QNHostSession::query_sphere(const Vector3 &center, double radius, int time
 
 Dictionary QNHostSession::get_registry() {
 	return _registry;
+}
+
+Ref<QNSpatialGrid> QNHostSession::get_grid() const {
+	return _grid;
 }
