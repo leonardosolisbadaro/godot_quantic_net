@@ -1,15 +1,9 @@
 #include "qn_client_session.hpp"
-#include "../core/qn_clock_sync.hpp"
-#include "../core/qn_input_buffer.hpp"
-#include "qn_loss_tracker.hpp"
-#include "../core/qn_interp_buffer.hpp"
-#include "../core/qn_serializer.hpp"
 #include <godot_cpp/core/class_db.hpp>
-#include <algorithm>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include "core/qn_serializer.hpp"
 #include "core/qn_delta_serializer.hpp"
-#include "core/qn_bit_buffer.hpp"
+#include <algorithm>
 
 using namespace godot;
 
@@ -17,18 +11,18 @@ QNClientSession::QNClientSession() {
 	_clock.instantiate();
 	_input_buf.instantiate();
 	_loss_tracker.instantiate();
+	
 	_read_buf.instantiate();
 	_write_buf.instantiate();
-	local_pos = Vector3();
-	local_rot = Vector3();
 }
 
 QNClientSession::~QNClientSession() {
 }
 
 void QNClientSession::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("init", "p_send_callable"), &QNClientSession::init);
+	ClassDB::bind_method(D_METHOD("init", "send_callable"), &QNClientSession::init);
 	ClassDB::bind_method(D_METHOD("set_local_id", "id"), &QNClientSession::set_local_id);
+	
 	ClassDB::bind_method(D_METHOD("is_clock_synced"), &QNClientSession::is_clock_synced);
 	ClassDB::bind_method(D_METHOD("clock_rtt"), &QNClientSession::clock_rtt);
 	ClassDB::bind_method(D_METHOD("clock_offset"), &QNClientSession::clock_offset);
@@ -42,20 +36,21 @@ void QNClientSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("remote_state", "owner", "now"), &QNClientSession::remote_state);
 	ClassDB::bind_method(D_METHOD("loss_of", "owner"), &QNClientSession::loss_of);
 	ClassDB::bind_method(D_METHOD("cleanup_entity", "owner"), &QNClientSession::cleanup_entity);
+	
+	ClassDB::bind_method(D_METHOD("set_local_pos", "p_pos"), &QNClientSession::set_local_pos);
+	ClassDB::bind_method(D_METHOD("get_local_pos"), &QNClientSession::get_local_pos);
+	ClassDB::bind_method(D_METHOD("set_local_rot", "p_rot"), &QNClientSession::set_local_rot);
+	ClassDB::bind_method(D_METHOD("get_local_rot"), &QNClientSession::get_local_rot);
+
 	ClassDB::bind_method(D_METHOD("get_registry"), &QNClientSession::get_registry);
 	ClassDB::bind_method(D_METHOD("get_registry_keys"), &QNClientSession::get_registry_keys);
 	
-	ClassDB::bind_method(D_METHOD("set_local_pos", "pos"), &QNClientSession::set_local_pos);
-	ClassDB::bind_method(D_METHOD("get_local_pos"), &QNClientSession::get_local_pos);
-	ClassDB::bind_method(D_METHOD("set_local_rot", "rot"), &QNClientSession::set_local_rot);
-	ClassDB::bind_method(D_METHOD("get_local_rot"), &QNClientSession::get_local_rot);
-
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "local_pos"), "set_local_pos", "get_local_pos");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "local_rot"), "set_local_rot", "get_local_rot");
 	
-	ADD_SIGNAL(MethodInfo("pong_received", PropertyInfo(Variant::FLOAT, "rtt_ms"), PropertyInfo(Variant::FLOAT, "offset_ms")));
 	ADD_SIGNAL(MethodInfo("remote_state_received", PropertyInfo(Variant::INT, "owner"), PropertyInfo(Variant::VECTOR3, "pos"), PropertyInfo(Variant::VECTOR3, "rot"), PropertyInfo(Variant::INT, "custom_id")));
-	ADD_SIGNAL(MethodInfo("snapback_received", PropertyInfo(Variant::INT, "seq"), PropertyInfo(Variant::VECTOR3, "pos"), PropertyInfo(Variant::VECTOR3, "rot"), PropertyInfo(Variant::INT, "reason"), PropertyInfo(Variant::ARRAY, "replay_inputs")));
+	ADD_SIGNAL(MethodInfo("snapback_received", PropertyInfo(Variant::INT, "seq"), PropertyInfo(Variant::VECTOR3, "pos"), PropertyInfo(Variant::VECTOR3, "rot"), PropertyInfo(Variant::INT, "custom_id"), PropertyInfo(Variant::ARRAY, "replay")));
+	ADD_SIGNAL(MethodInfo("pong_received", PropertyInfo(Variant::FLOAT, "rtt"), PropertyInfo(Variant::FLOAT, "offset")));
 }
 
 void QNClientSession::init(Callable p_send_callable) {
@@ -95,15 +90,16 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 	_send_seq = (_send_seq + 1) & 0xFFFF;
 	_input_buf->record(_send_seq, Vector2(), 0.0, dt, now);
 	
-	Dictionary state_dict;
-	state_dict["seq"] = _send_seq;
-	state_dict["pos"] = pos;
-	state_dict["rot"] = rot;
-	state_dict["ts"] = server_time(now);
-	state_dict["custom_id"] = custom_id;
+	QNClientInputState input_state;
+	input_state.seq = _send_seq;
+	input_state.pos = pos;
+	input_state.rot = rot;
+	input_state.ts = server_time(now);
+	input_state.custom_id = custom_id;
+	input_state.ack = _last_server_seq;
 	
-	_state_history.push_front(state_dict);
-	if (_state_history.size() > 3) {
+	_state_history.push_front(input_state);
+	if (_state_history.size() > 60) {
 		_state_history.pop_back();
 	}
 	
@@ -113,19 +109,18 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 	_write_buf->write_bits(_last_server_seq, 16);
 	_write_buf->write_bits(pending_inputs(), 8);
 	
-	int count = std::min((int)_state_history.size(), 255);
+	int count = std::min((int)_state_history.size(), 3);
 	_write_buf->write_bits(count, 8);
 	
 	for (int i = 0; i < count; i++) {
-		Dictionary h = _state_history[i];
-		_write_buf->write_bits((int)h["seq"] & 0xFFFF, 16);
-		Vector3 p = h["pos"];
-		_write_buf->write_float(p.x, -64.0, 64.0, 16);
-		_write_buf->write_float(p.y, 0.0, 10.0, 16);
-		_write_buf->write_float(p.z, -64.0, 64.0, 16);
-		_write_buf->write_quaternion(Quaternion::from_euler(h["rot"]));
-		_write_buf->write_bits((int)h["ts"] & 0xFFFFFFFF, 32);
-		_write_buf->write_bits((int)h["custom_id"] & 0xFF, 5);
+		const QNClientInputState &h = _state_history[i];
+		_write_buf->write_bits(h.seq & 0xFFFF, 16);
+		_write_buf->write_float(h.pos.x, -64.0, 64.0, 16);
+		_write_buf->write_float(h.pos.y, 0.0, 10.0, 16);
+		_write_buf->write_float(h.pos.z, -64.0, 64.0, 16);
+		_write_buf->write_quaternion(Quaternion::from_euler(h.rot));
+		_write_buf->write_bits(h.ts & 0xFFFFFFFF, 32);
+		_write_buf->write_bits(h.custom_id & 0xFF, 5);
 	}
 	
 	PackedByteArray pkt = _write_buf->get_buffer();
@@ -239,35 +234,56 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 		return;
 	}
 	
-	int ack = _read_buf->read_bits(16);
+	int client_seq_ack = _read_buf->read_bits(16);
 	int server_now = _read_buf->read_bits(32);
 	int num_entities = _read_buf->read_bits(8);
 	
-	Dictionary base_states;
-	for (int i = 0; i < _world_history.size(); i++) {
-		Dictionary hist = _world_history[i];
-		if ((int)hist["seq"] == ack) {
-			base_states = hist["states"];
+	int base_server_seq = -1;
+	for (int i = 0; i < _state_history.size(); i++) {
+		if (_state_history[i].seq == client_seq_ack) {
+			base_server_seq = _state_history[i].ack;
 			break;
 		}
 	}
+	if (base_server_seq == -1) {
+		base_server_seq = _last_server_seq;
+	}
 	
-	Dictionary parsed_states;
+	std::unordered_map<int, QNEntityState> parsed_states;
 	if (_world_history.size() > 0) {
-		Dictionary front_hist = _world_history[0];
-		parsed_states = ((Dictionary)front_hist["states"]).duplicate();
+		parsed_states = _world_history[0].states;
 	}
 	
 	for (int i = 0; i < num_entities; i++) {
 		if ((_read_buf->get_position() + 32) / 8 > body.size()) break;
 		
 		int entity_id = _read_buf->read_bits(32);
-		Dictionary base = base_states.get(entity_id, Dictionary());
-		Dictionary st = QNDeltaSerializer::decode_state(_read_buf, base);
+		
+		const QNEntityState* base_state = nullptr;
+		if (server_seq == _last_server_seq + 1 && base_server_seq == _last_server_seq) {
+			// Fast path
+			if (_world_history.size() > 0) {
+				const auto &old_states = _world_history[0].states;
+				if (old_states.find(entity_id) != old_states.end()) {
+					base_state = &old_states.at(entity_id);
+				}
+			}
+		} else {
+			for (int j = 0; j < _world_history.size(); j++) {
+				if (_world_history[j].seq == base_server_seq) {
+					const auto &old_states = _world_history[j].states;
+					if (old_states.find(entity_id) != old_states.end()) {
+						base_state = &old_states.at(entity_id);
+					}
+					break;
+				}
+			}
+		}
+		
+		QNEntityState st = QNDeltaSerializer::decode_state(_read_buf, base_state);
 		parsed_states[entity_id] = st;
 		
 		int owner = entity_id;
-		Dictionary d = st;
 		
 		if (!_interp.has(owner)) {
 			Ref<QNInterpBuffer> ib; ib.instantiate();
@@ -276,9 +292,9 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 		}
 		
 		if (owner == _my_id) {
-			int sent_ts = _input_buf->get_sent_ts(d["seq"]);
+			int sent_ts = _input_buf->get_sent_ts(st.seq);
 			_clock->on_pong(sent_ts, server_now, now);
-			_input_buf->drain_after(d["seq"]);
+			_input_buf->drain_after(st.seq);
 			
 			double current_jitter = _clock->jitter_ms;
 			for (int j = 0; j < _active_interps.size(); j++) {
@@ -292,20 +308,22 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 			emit_signal("pong_received", _clock->rtt_ms, _clock->offset_ms);
 		} else {
 			Ref<QNInterpBuffer> owner_interp = _interp[owner];
-			owner_interp->push(d["ts"], d["pos"], d["rot"]);
-			emit_signal("remote_state_received", owner, d["pos"], d["rot"], d.get("custom_id", 0));
+			owner_interp->push(st.ts, st.pos, st.rot);
+			emit_signal("remote_state_received", owner, st.pos, st.rot, st.custom_id);
 		}
 	}
 	
-	Dictionary hist_entry;
-	hist_entry["seq"] = server_seq;
-	hist_entry["states"] = parsed_states;
-	_world_history.push_front(hist_entry);
+	QNWorldSnapshot world_snapshot;
+	world_snapshot.seq = server_seq;
+	world_snapshot.states = parsed_states;
+	
+	_world_history.push_front(world_snapshot);
 	if (_world_history.size() > 60) {
 		_world_history.pop_back();
 	}
 	
 	_last_server_seq = server_seq;
 }
+
 Dictionary QNClientSession::get_registry() const { return _interp; }
 Array QNClientSession::get_registry_keys() const { return _interp.keys(); }

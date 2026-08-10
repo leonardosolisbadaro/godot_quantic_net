@@ -14,6 +14,7 @@
 #include "core/qn_spatial_grid.hpp"
 #include "core/qn_bit_buffer.hpp"
 #include "core/qn_world_history_buffer.hpp"
+#include "core/qn_types.hpp"
 
 namespace godot {
 
@@ -28,15 +29,15 @@ private:
 		AABB aabb;
 	};
 
-	Dictionary _registry;
+	std::unordered_map<int, QNEntityState> _registry;
+	std::unordered_map<int, Ref<QNEntityProfile>> _profiles;
 	std::vector<int> _active_entities;
 	std::map<int, RegionData> _regions; // Region ID -> RegionData
 	int _server_seq;
-	std::deque<Dictionary> _world_history;
+	std::deque<QNWorldSnapshot> _world_history;
 	Ref<QNPriorityAccumulator> _accumulator;
 	Ref<QNSpatialGrid> _grid;
 	Ref<QNWorldHistoryBuffer> _rewind_buffer;
-	std::vector<Dictionary> _dict_pool;
 	
 	Dictionary _stats;
 	Ref<RefCounted> validator;
@@ -46,7 +47,6 @@ private:
 
 protected:
 	static void _bind_methods();
-	Dictionary _get_pooled_dict();
 
 public:
 	QNHostSession();

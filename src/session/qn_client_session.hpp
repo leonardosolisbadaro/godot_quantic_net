@@ -14,6 +14,7 @@
 #include "core/qn_bit_buffer.hpp"
 #include "core/qn_interp_buffer.hpp"
 #include "session/qn_loss_tracker.hpp"
+#include "core/qn_types.hpp"
 #include <vector>
 
 namespace godot {
@@ -31,8 +32,8 @@ private:
 	Dictionary _interp; // owner -> Ref<QNInterpBuffer>
 	Ref<QNLossTracker> _loss_tracker;
 	
-	std::deque<Dictionary> _state_history;
-	std::deque<Dictionary> _world_history;
+	std::deque<QNClientInputState> _state_history;
+	std::deque<QNWorldSnapshot> _world_history;
 	int _last_server_seq = 0;
 	
 	double _send_accum = 0.0;
