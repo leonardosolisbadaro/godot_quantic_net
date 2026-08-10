@@ -308,7 +308,7 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 			emit_signal("pong_received", _clock->rtt_ms, _clock->offset_ms);
 		} else {
 			Ref<QNInterpBuffer> owner_interp = _interp[owner];
-			owner_interp->push(st.ts, st.pos, st.rot);
+			owner_interp->push(server_now, st.pos, st.rot);
 			emit_signal("remote_state_received", owner, st.pos, st.rot, st.custom_id);
 		}
 	}

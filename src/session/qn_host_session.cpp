@@ -152,11 +152,9 @@ void QNHostSession::on_peer_disconnected(int peer_id) {
 
 void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data, int now) {
 	if (_registry.find(peer_id) == _registry.end() || validator.is_null() || data.size() < 3) return;
-	
+
 	_read_buf->set_buffer(data);
-	int msg_type = _read_buf->read_bits(8);
-	if (msg_type != 1) return;
-	
+
 	int client_seq = _read_buf->read_bits(16);
 	int ack = _read_buf->read_bits(16);
 	int pending = _read_buf->read_bits(8);
