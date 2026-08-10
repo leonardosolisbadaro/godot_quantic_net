@@ -166,6 +166,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 	
 	Dictionary peer_st = _registry[peer_id];
 	peer_st["ack"] = client_ack;
+	peer_st["client_seq"] = client_seq;
 	_registry[peer_id] = peer_st;
 	
 	int count = _read_buf->read_bits(8);
@@ -412,7 +413,10 @@ void QNHostSession::tick_broadcast(int now) {
 		
 		_write_buf->seek(0);
 		_write_buf->write_bits(_server_seq, 16);
-		_write_buf->write_bits(ack, 16);
+		
+		int client_seq_ack = st.get("client_seq", 0);
+		_write_buf->write_bits(client_seq_ack, 16);
+		
 		_write_buf->write_bits(now & 0xFFFFFFFF, 32);
 		_write_buf->write_bits(selected_states.size(), 8);
 		
