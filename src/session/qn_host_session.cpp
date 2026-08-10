@@ -160,7 +160,10 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 	
 	_read_buf->set_buffer(data);
 	
+	int client_seq = _read_buf->read_bits(16);
 	int client_ack = _read_buf->read_bits(16);
+	int pending_inputs = _read_buf->read_bits(8);
+	
 	Dictionary peer_st = _registry[peer_id];
 	peer_st["ack"] = client_ack;
 	_registry[peer_id] = peer_st;
@@ -256,6 +259,10 @@ void QNHostSession::tick_broadcast(int now) {
 			ws["custom_id"] = st.get("custom_id", 0);
 			ws["ts"] = now;
 			
+			// Clear custom_id so events (like firing a laser) are only broadcast once
+			st["custom_id"] = 0;
+			_registry[id] = st;
+			
 			Ref<QNEntityProfile> profile = st.get("profile", Variant());
 			if (profile.is_valid()) {
 				ws["hitbox_type"] = profile->get_hitbox_type();
@@ -308,8 +315,13 @@ void QNHostSession::tick_broadcast(int now) {
 			}
 		}
 		
+		if (!st.has("has_state") || !(bool)st["has_state"] || !st.has("pos")) {
+			continue;
+		}
 		if (should_broadcast) {
-			current_states[id] = world_snapshot[id];
+			if (world_snapshot.has(id)) {
+				current_states[id] = world_snapshot[id];
+			}
 			st["last_broadcast_ts"] = now;
 			_registry[id] = st;
 		}
@@ -341,7 +353,10 @@ void QNHostSession::tick_broadcast(int now) {
 		
 		// O Servidor define a visibilidade baseado na Aura de Existência (AoI) do EMISSOR, não do receptor.
 		// Busca num raio máximo razoável (ex: 250m) e então filtra pela aura de cada entidade.
-		_grid->get_entities_in_radius_internal(st["pos"], 250.0, candidates);
+		double cull_radius = 250.0;
+		if (_grid.is_valid()) {
+			_grid->get_entities_in_radius_internal(st["pos"], cull_radius, candidates);
+		}
 		
 		auto it = candidates.begin();
 		while (it != candidates.end()) {
@@ -438,8 +453,6 @@ void QNHostSession::tick_broadcast(int now) {
 	}
 	
 	_rewind_buffer->push_state_internal(now, current_states, _active_entities);
-	
-	_dict_pool.push_back(current_states);
 }
 
 Dictionary QNHostSession::query_raycast(const Vector3 &origin, const Vector3 &direction, double max_dist, int timestamp) const {

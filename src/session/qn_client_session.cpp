@@ -106,7 +106,7 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 	}
 	
 	_write_buf->seek(0);
-	_write_buf->write_bits(2, 8); // MsgType::STATE
+	_write_buf->write_bits(1, 8); // MsgType::STATE
 	_write_buf->write_bits(_send_seq, 16);
 	_write_buf->write_bits(_last_server_seq, 16);
 	_write_buf->write_bits(pending_inputs(), 8);
