@@ -58,7 +58,7 @@ const OUTLINE_THIN := 3
 const DEFAULT_VIEW_DISTANCE := 12.0 # Raio dinâmico no qual o Cliente decide renderizar ou ocultar entidades locais.
 const CLIENT_MOVE_SPEED := 6.0 # Deslocamento cravado do avatar. Variável blindada que o Servidor usará no Anti-Speedhack.
 const SHOOT_COOLDOWN_MS := 200 # Limita o spam de "Zero-RPC" para evitar overhead na predição de inputs.
-const SERVER_CULL_TIMEOUT_MS := 500 # Define quanto tempo o Client aguarda antes de "matar" uma entidade visualmente por inanição de pacotes.
+const SERVER_CULL_TIMEOUT_MS := 2000 # Define quanto tempo o Client aguarda antes de "matar" uma entidade visualmente por inanição de pacotes.
 const INTERP_LERP_SPEED := 5.0 # Suavização visual (Client-Side Interpolation)
 
 # Constantes de Padrão de Movimento (Auto-Move e Props)

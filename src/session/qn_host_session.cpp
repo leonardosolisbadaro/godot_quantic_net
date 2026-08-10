@@ -9,7 +9,8 @@
 #include "core/qn_serializer.hpp"
 #include "core/qn_delta_serializer.hpp"
 #include "core/qn_bit_buffer.hpp"
-
+#include <algorithm>
+#include <vector>
 using namespace godot;
 
 QNHostSession::QNHostSession() {
@@ -21,6 +22,9 @@ QNHostSession::QNHostSession() {
 	_stats["entities_sent_this_tick"] = 0;
 	_stats["bytes_saved_by_hybrid_ticking"] = 0;
 	_stats["ticks_since_log"] = 0;
+	
+	_read_buf.instantiate();
+	_write_buf.instantiate();
 }
 
 QNHostSession::~QNHostSession() {
@@ -92,6 +96,9 @@ void QNHostSession::register_entity(int entity_id, bool is_peer, bool has_initia
 	st["is_peer"] = is_peer;
 	
 	_registry[entity_id] = st;
+	if (std::find(_active_entities.begin(), _active_entities.end(), entity_id) == _active_entities.end()) {
+		_active_entities.push_back(entity_id);
+	}
 }
 
 void QNHostSession::on_peer_authenticated(int peer_id, Ref<QNEntityProfile> profile) {
@@ -101,6 +108,10 @@ void QNHostSession::on_peer_authenticated(int peer_id, Ref<QNEntityProfile> prof
 void QNHostSession::unregister_entity(int entity_id) {
 	if (_registry.has(entity_id)) {
 		_registry.erase(entity_id);
+	}
+	auto it = std::find(_active_entities.begin(), _active_entities.end(), entity_id);
+	if (it != _active_entities.end()) {
+		_active_entities.erase(it);
 	}
 	_accumulator->cleanup_entity(entity_id);
 	_grid->remove_entity(entity_id);
@@ -131,6 +142,10 @@ void QNHostSession::on_peer_disconnected(int peer_id) {
 	if (_registry.has(peer_id)) {
 		_registry.erase(peer_id);
 	}
+	auto it = std::find(_active_entities.begin(), _active_entities.end(), peer_id);
+	if (it != _active_entities.end()) {
+		_active_entities.erase(it);
+	}
 	_accumulator->_cleanup_peer(peer_id);
 	_grid->remove_entity(peer_id);
 	if (validator.is_valid() && validator->has_method("peer_left")) {
@@ -139,65 +154,75 @@ void QNHostSession::on_peer_disconnected(int peer_id) {
 }
 
 void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data, int now) {
-	if (!_registry.has(peer_id) || validator.is_null() || data.size() < 2) {
+	if (!_registry.has(peer_id) || validator.is_null() || data.size() < 3) {
 		return;
 	}
 	
-	int client_ack = data.decode_u16(0);
+	_read_buf->set_buffer(data);
+	
+	int client_ack = _read_buf->read_bits(16);
 	Dictionary peer_st = _registry[peer_id];
 	peer_st["ack"] = client_ack;
 	_registry[peer_id] = peer_st;
 	
-	Array history = QNSerializer::decode_state_history(data.slice(2));
-	if (history.is_empty()) return;
+	int count = _read_buf->read_bits(8);
+	if (count == 0) return;
 	
-	for (int i = history.size() - 1; i >= 0; i--) {
-		Dictionary state = history[i];
-		Vector3 pos = state.get("pos", Vector3());
-		Vector3 rot = state.get("rot", Vector3());
-		int seq = state.get("seq", 0);
-		int client_ts = state.get("ts", 0);
-		int custom_id = state.get("custom_id", 0);
+	Vector3 last_pos;
+	Vector3 last_rot;
+	int last_pkt_seq = 0;
+	int last_ts = 0;
+	int last_custom_id = 0;
+	
+	for (int i = 0; i < count; i++) {
+		if ((_read_buf->get_position() + 133) / 8 > data.size()) break;
 		
-		int last_seq = peer_st["seq"];
-		int diff = seq - last_seq;
-		if (diff < -32768) diff += 65536;
-		else if (diff > 32768) diff -= 65536;
+		last_pkt_seq = (int)_read_buf->read_bits(16);
+		double x = _read_buf->read_float(-64.0, 64.0, 16);
+		double y = _read_buf->read_float(0.0, 10.0, 16);
+		double z = _read_buf->read_float(-64.0, 64.0, 16);
+		last_pos = Vector3(x, y, z);
+		last_rot = _read_buf->read_quaternion().get_euler();
+		last_ts = (int)_read_buf->read_bits(32);
+		last_custom_id = (int)_read_buf->read_bits(5);
+	}
+	
+	int peer_last_seq = peer_st["seq"];
+	int diff = last_pkt_seq - peer_last_seq;
+	if (diff < -32768) diff += 65536;
+	else if (diff > 32768) diff -= 65536;
+	
+	if (peer_last_seq != 0 && diff <= 0) {
+		return;
+	}
+	
+	Dictionary result = validator->call("validate", peer_id, last_pos, last_rot, last_ts);
+	String action = result.get("action", "");
+	
+	if (action == "accept") {
+		peer_st["pos"] = result["pos"];
+		peer_st["rot"] = result["rot"];
+		peer_st["seq"] = last_pkt_seq;
+		peer_st["ts"] = now;
+		peer_st["custom_id"] = last_custom_id;
+		peer_st["has_state"] = true;
+		_registry[peer_id] = peer_st;
+		_grid->update_entity(peer_id, peer_st["pos"]);
+	} else if (action == "clamp") {
+		peer_st["pos"] = result["pos"];
+		peer_st["rot"] = result["rot"];
+		peer_st["seq"] = last_pkt_seq;
+		peer_st["ts"] = now;
+		peer_st["custom_id"] = last_custom_id;
+		peer_st["has_state"] = true;
+		_registry[peer_id] = peer_st;
+		_grid->update_entity(peer_id, peer_st["pos"]);
 		
-		if (last_seq != 0 && diff <= 0) {
-			continue;
-		}
-		
-		Dictionary result = validator->call("validate", peer_id, pos, rot, client_ts);
-		String action = result.get("action", "");
-		
-		if (action == "accept") {
-			peer_st["pos"] = result["pos"];
-			peer_st["rot"] = result["rot"];
-			peer_st["seq"] = seq;
-			peer_st["ts"] = now;
-			peer_st["custom_id"] = custom_id;
-			peer_st["has_state"] = true;
-			_registry[peer_id] = peer_st;
-			_grid->update_entity(peer_id, peer_st["pos"]);
-		} else if (action == "clamp") {
-			peer_st["pos"] = result["pos"];
-			peer_st["rot"] = result["rot"];
-			peer_st["seq"] = seq;
-			peer_st["ts"] = now;
-			peer_st["custom_id"] = custom_id;
-			peer_st["has_state"] = true;
-			_registry[peer_id] = peer_st;
-			_grid->update_entity(peer_id, peer_st["pos"]);
-			
-			PackedByteArray snap = QNSerializer::encode_snapback(seq, result["pos"], result["rot"], client_ts, SNAPBACK_REASON_CLAMP);
-			emit_signal("snapback_requested", peer_id, snap);
-			break;
-		} else if (action == "reject") {
-			PackedByteArray snap = QNSerializer::encode_snapback(seq, result["pos"], result["rot"], client_ts, SNAPBACK_REASON_REJECT);
-			emit_signal("snapback_requested", peer_id, snap);
-			break;
-		}
+		PackedByteArray snap = QNSerializer::encode_snapback(last_pkt_seq, result["pos"], result["rot"], last_ts, SNAPBACK_REASON_CLAMP);
+		emit_signal("snapback_requested", peer_id, snap);
+	} else if (action == "reject") {
+		PackedByteArray snap = QNSerializer::encode_snapback(last_pkt_seq, result["pos"], result["rot"], last_ts, SNAPBACK_REASON_REJECT);
+		emit_signal("snapback_requested", peer_id, snap);
 	}
 }
 
@@ -219,9 +244,8 @@ void QNHostSession::tick_broadcast(int now) {
 	_server_seq = (_server_seq + 1) & 0xFFFF;
 	Dictionary world_snapshot = _get_pooled_dict();
 	
-	Array keys = _registry.keys();
-	for (int i = 0; i < keys.size(); i++) {
-		int id = keys[i];
+	for (int i = 0; i < _active_entities.size(); i++) {
+		int id = _active_entities[i];
 		Dictionary st = _registry[id];
 		if ((bool)st["has_state"]) {
 			Dictionary ws = _get_pooled_dict();
@@ -263,8 +287,8 @@ void QNHostSession::tick_broadcast(int now) {
 	}
 	
 	Dictionary current_states = _get_pooled_dict();
-	for (int i = 0; i < keys.size(); i++) {
-		int id = keys[i];
+	for (int i = 0; i < _active_entities.size(); i++) {
+		int id = _active_entities[i];
 		Dictionary st = _registry[id];
 		if (!(bool)st["has_state"]) continue;
 		
@@ -285,18 +309,20 @@ void QNHostSession::tick_broadcast(int now) {
 		}
 		
 		if (should_broadcast) {
-			Dictionary inner_clone = _get_pooled_dict();
-			Dictionary orig = world_snapshot[id];
-			Array orig_keys = orig.keys();
-			for (int k = 0; k < orig_keys.size(); k++) {
-				inner_clone[orig_keys[k]] = orig[orig_keys[k]];
-			}
-			current_states[id] = inner_clone;
+			current_states[id] = world_snapshot[id];
+			st["last_broadcast_ts"] = now;
+			_registry[id] = st;
 		}
 	}
 	
-	for (int i = 0; i < keys.size(); i++) {
-		int id = keys[i];
+	static Dictionary empty_dict;
+	std::vector<int> candidates;
+	candidates.reserve(128);
+	std::vector<int> selected_states;
+	selected_states.reserve(128);
+
+	for (int i = 0; i < _active_entities.size(); i++) {
+		int id = _active_entities[i];
 		Dictionary st = _registry[id];
 		if (!(bool)st.get("is_peer", false)) continue;
 		
@@ -310,43 +336,51 @@ void QNHostSession::tick_broadcast(int now) {
 			}
 		}
 		
-		PackedInt32Array candidates;
+		candidates.clear();
+		selected_states.clear();
 		
 		// O Servidor define a visibilidade baseado na Aura de Existência (AoI) do EMISSOR, não do receptor.
 		// Busca num raio máximo razoável (ex: 250m) e então filtra pela aura de cada entidade.
-		PackedInt32Array nearby = _grid->get_entities_in_radius(st["pos"], 250.0);
-		for (int j = 0; j < nearby.size(); j++) {
-			int cid = nearby[j];
+		_grid->get_entities_in_radius_internal(st["pos"], 250.0, candidates);
+		
+		auto it = candidates.begin();
+		while (it != candidates.end()) {
+			int cid = *it;
 			if (current_states.has(cid)) {
-				Ref<QNEntityProfile> cid_profile = ((Dictionary)_registry[cid]).get("profile", Variant());
-				double cid_aura = cid_profile.is_valid() ? cid_profile->get_spatial_culling_radius() : 250.0;
+				double cid_aura = 250.0;
+				if (_registry.has(cid)) {
+					Dictionary reg_st = _registry[cid];
+					Ref<QNEntityProfile> cid_profile = reg_st.get("profile", Variant());
+					if (cid_profile.is_valid()) cid_aura = cid_profile->get_spatial_culling_radius();
+				}
 				
 				Vector3 cid_pos = ((Dictionary)current_states[cid]).get("pos", Vector3());
 				Vector3 my_pos = st["pos"];
 				
-				if (cid_pos.distance_to(my_pos) <= cid_aura) {
-					candidates.push_back(cid);
+				if (cid_pos.distance_to(my_pos) > cid_aura) {
+					it = candidates.erase(it);
+				} else {
+					++it;
 				}
+			} else {
+				it = candidates.erase(it);
 			}
 		}
 		
 		// Ensure peer itself is included
 		if (current_states.has(id)) {
-			bool found = false;
-			for (int j = 0; j < candidates.size(); j++) {
-				if (candidates[j] == id) { found = true; break; }
+			if (std::find(candidates.begin(), candidates.end(), id) == candidates.end()) {
+				candidates.push_back(id);
 			}
-			if (!found) candidates.push_back(id);
 		}
 		
-		PackedInt32Array selected_states = _accumulator->select_entities(id, candidates, _registry, current_states, st["pos"], 1200, 19);
+		_accumulator->select_entities(id, candidates, _registry, current_states, st["pos"], 1200, 19, selected_states);
 		
 		for (int j = 0; j < selected_states.size(); j++) {
 			int selected_id = selected_states[j];
 			if (_registry.has(selected_id)) {
 				Dictionary sel_st = _registry[selected_id];
 				sel_st["last_broadcast_ts"] = now;
-				_registry[selected_id] = sel_st;
 			}
 		}
 		
@@ -361,43 +395,51 @@ void QNHostSession::tick_broadcast(int now) {
 			_stats["ticks_since_log"] = 0;
 		}
 		
-		Ref<QNBitBuffer> buf; buf.instantiate();
-		buf->write_bits(_server_seq, 16);
-		buf->write_bits(ack, 16);
-		buf->write_bits(now & 0xFFFFFFFF, 32);
-		buf->write_bits(selected_states.size(), 8);
+		_write_buf->seek(0);
+		_write_buf->write_bits(_server_seq, 16);
+		_write_buf->write_bits(ack, 16);
+		_write_buf->write_bits(now & 0xFFFFFFFF, 32);
+		_write_buf->write_bits(selected_states.size(), 8);
 		
 		for (int j = 0; j < selected_states.size(); j++) {
 			int entity_id = selected_states[j];
-			buf->write_bits(entity_id, 32);
-			Dictionary base = base_states.get(entity_id, Dictionary());
+			_write_buf->write_bits(entity_id, 32);
 			
-			if (!base.is_empty()) {
-				Dictionary peer_base = base_states.get(id, Dictionary());
-				if (!peer_base.is_empty()) {
-					double cull_radius = 50.0;
-					Dictionary reg_st = _registry.get(entity_id, Dictionary());
-					if (!reg_st.is_empty()) {
-						Ref<QNEntityProfile> p = reg_st.get("profile", Variant());
-						if (p.is_valid()) cull_radius = p->get_spatial_culling_radius();
-					}
-					
-					Vector3 pb_pos = peer_base["pos"];
-					Vector3 b_pos = base["pos"];
-					double old_dist = pb_pos.distance_to(b_pos);
-					if (old_dist > cull_radius) {
-						base = Dictionary();
+			Dictionary base = empty_dict;
+			if (base_states.has(entity_id)) {
+				base = base_states[entity_id];
+				if (!base.is_empty()) {
+					Dictionary peer_base = empty_dict;
+					if (base_states.has(id)) {
+						peer_base = base_states[id];
+						if (!peer_base.is_empty()) {
+							double cull_radius = 50.0;
+							if (_registry.has(entity_id)) {
+								Dictionary reg_st = _registry[entity_id];
+								Ref<QNEntityProfile> p = reg_st.get("profile", Variant());
+								if (p.is_valid()) cull_radius = p->get_spatial_culling_radius();
+							}
+							
+							Vector3 pb_pos = peer_base.get("pos", Vector3());
+							Vector3 b_pos = base.get("pos", Vector3());
+							if (pb_pos.distance_to(b_pos) > cull_radius) {
+								base = empty_dict;
+							}
+						}
 					}
 				}
 			}
 			
-			QNDeltaSerializer::encode_state(buf, base, current_states[entity_id]);
+			Dictionary c_state = current_states[entity_id];
+			QNDeltaSerializer::encode_state(_write_buf, base, c_state);
 		}
 		
-		emit_signal("packet_ready", id, buf->get_buffer());
+		emit_signal("packet_ready", id, _write_buf->get_buffer());
 	}
 	
-	_rewind_buffer->push_state(now, current_states);
+	_rewind_buffer->push_state_internal(now, current_states, _active_entities);
+	
+	_dict_pool.push_back(current_states);
 }
 
 Dictionary QNHostSession::query_raycast(const Vector3 &origin, const Vector3 &direction, double max_dist, int timestamp) const {

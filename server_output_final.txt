@@ -1,0 +1,21 @@
+Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
+
+[DEMO] Iniciando topologia automática: 1 Servidor, 2 Clientes...
+[DEMO] Iniciando SERVIDOR QuanticNet (Porta 4242)...
+[DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.
+[DEMO] Server RAM (Static): 60.18 MB | FPS: 36
+[DEMO] Server RAM (Static): 60.18 MB | FPS: 24
+[QNHostSession] Bandwidth Stats (Peer 1): 1 entities sent out of 4. Savings so far: 38513 bytes
+[DEMO] Server RAM (Static): 60.19 MB | FPS: 21
+[DEMO] Server RAM (Static): 60.18 MB | FPS: 14
+[DEMO] Server RAM (Static): 60.20 MB | FPS: 32
+[DEMO] Server RAM (Static): 60.20 MB | FPS: 27
+[DEMO] Server RAM (Static): 60.21 MB | FPS: 24
+[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 4. Savings so far: 77615 bytes
+[DEMO] Server RAM (Static): 60.20 MB | FPS: 26
+[DEMO] Server RAM (Static): 60.20 MB | FPS: 36
+[DEMO] Server RAM (Static): 60.21 MB | FPS: 21
+[DEMO] Server RAM (Static): 60.20 MB | FPS: 30
+[DEMO] Server RAM (Static): 60.20 MB | FPS: 7
+[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 4. Savings so far: 115444 bytes
+[DEMO] Server RAM (Static): 60.20 MB | FPS: 13

@@ -38,10 +38,28 @@ int QNWorldHistoryBuffer::get_max_history_ticks() const {
 void QNWorldHistoryBuffer::push_state(int timestamp, const Dictionary &world_snapshot) {
 	QNWorldSnapshot snap;
 	snap.ts = timestamp;
-	
 	Array keys = world_snapshot.keys();
 	for (int i = 0; i < keys.size(); i++) {
 		int id = keys[i];
+		Dictionary ent = world_snapshot[id];
+		QNEntitySnapshot es;
+		es.pos = ent.get("pos", Vector3());
+		es.extents = ent.get("hitbox_extents", Vector3(1.0, 1.0, 1.0));
+		es.type = ent.get("hitbox_type", 0);
+		snap.entities[id] = es;
+	}
+	_history.push_front(snap);
+	if (_history.size() > _max_history_ticks) {
+		_history.pop_back();
+	}
+}
+
+void QNWorldHistoryBuffer::push_state_internal(int timestamp, const Dictionary &world_snapshot, const std::vector<int> &active_entities) {
+	QNWorldSnapshot snap;
+	snap.ts = timestamp;
+	for (int i = 0; i < active_entities.size(); i++) {
+		int id = active_entities[i];
+		if (!world_snapshot.has(id)) continue;
 		Dictionary ent = world_snapshot[id];
 		QNEntitySnapshot es;
 		es.pos = ent.get("pos", Vector3());

@@ -12,6 +12,7 @@
 #include "core/qn_priority_accumulator.hpp"
 #include "core/qn_entity_profile.hpp"
 #include "core/qn_spatial_grid.hpp"
+#include "core/qn_bit_buffer.hpp"
 #include "core/qn_world_history_buffer.hpp"
 
 namespace godot {
@@ -28,6 +29,7 @@ private:
 	};
 
 	Dictionary _registry;
+	std::vector<int> _active_entities;
 	std::map<int, RegionData> _regions; // Region ID -> RegionData
 	int _server_seq;
 	std::deque<Dictionary> _world_history;
@@ -38,6 +40,9 @@ private:
 	
 	Dictionary _stats;
 	Ref<RefCounted> validator;
+	
+	Ref<QNBitBuffer> _read_buf;
+	Ref<QNBitBuffer> _write_buf;
 
 protected:
 	static void _bind_methods();

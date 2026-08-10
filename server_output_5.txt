@@ -1,0 +1,143 @@
+Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
+
+[DEMO] Iniciando SERVIDOR QuanticNet (Porta 4242)...
+[DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.
+[DEMO] Server RAM (Static): 60.17 MB | FPS: 60
+[DEMO] Server RAM (Static): 60.19 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 1 entities sent out of 5. Savings so far: 32433 bytes
+[DEMO] Peer Joined: 2
+[DEMO] Server RAM (Static): 60.69 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 70433 bytes
+[DEMO] Server RAM (Static): 60.73 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 108281 bytes
+[DEMO] Server RAM (Static): 60.77 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 145502 bytes
+[DEMO] Server RAM (Static): 60.80 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 184433 bytes
+[DEMO] Server RAM (Static): 60.84 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 221996 bytes
+[DEMO] Server RAM (Static): 60.88 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 260129 bytes
+[DEMO] Server RAM (Static): 60.91 MB | FPS: 59
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 297749 bytes
+[DEMO] Server RAM (Static): 60.96 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 334970 bytes
+[DEMO] Server RAM (Static): 60.99 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 373730 bytes
+[DEMO] Server RAM (Static): 61.03 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 410837 bytes
+[DEMO] Server RAM (Static): 61.07 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 448001 bytes
+[DEMO] Server RAM (Static): 61.10 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 485393 bytes
+[DEMO] Server RAM (Static): 61.14 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 522500 bytes
+[DEMO] Server RAM (Static): 61.18 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 561146 bytes
+[DEMO] Server RAM (Static): 61.21 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 598481 bytes
+[DEMO] Server RAM (Static): 61.25 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 635702 bytes
+[DEMO] Server RAM (Static): 61.28 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 673493 bytes
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 710714 bytes
+[DEMO] Server RAM (Static): 61.32 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 748562 bytes
+[DEMO] Server RAM (Static): 61.36 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 5 entities sent out of 5. Savings so far: 785726 bytes
+[DEMO] Server RAM (Static): 61.40 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 823118 bytes
+[DEMO] Server RAM (Static): 61.44 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 860510 bytes
+[DEMO] Server RAM (Static): 61.47 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 897788 bytes
+[DEMO] Server RAM (Static): 61.51 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 935636 bytes
+[DEMO] Server RAM (Static): 61.55 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 972743 bytes
+[DEMO] Server RAM (Static): 61.58 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1010648 bytes
+[DEMO] Server RAM (Static): 61.62 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1047926 bytes
+[DEMO] Server RAM (Static): 61.65 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1085033 bytes
+[DEMO] Server RAM (Static): 61.69 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1122140 bytes
+[DEMO] Server RAM (Static): 61.73 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1159874 bytes
+[DEMO] Server RAM (Static): 61.77 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1197038 bytes
+[DEMO] Server RAM (Static): 61.80 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1234316 bytes
+[DEMO] Server RAM (Static): 61.84 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1271423 bytes
+[DEMO] Server RAM (Static): 61.88 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1308872 bytes
+[DEMO] Server RAM (Static): 61.92 MB | FPS: 61
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1346150 bytes
+[DEMO] Server RAM (Static): 61.95 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1383371 bytes
+[DEMO] Server RAM (Static): 61.99 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 5 entities sent out of 5. Savings so far: 1421276 bytes
+[DEMO] Server RAM (Static): 62.02 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1458839 bytes
+[DEMO] Server RAM (Static): 62.06 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1496117 bytes
+[DEMO] Server RAM (Static): 62.10 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1533395 bytes
+[DEMO] Server RAM (Static): 62.14 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1570844 bytes
+[DEMO] Server RAM (Static): 62.17 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1608293 bytes
+[DEMO] Server RAM (Static): 62.21 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 5 entities sent out of 5. Savings so far: 1646540 bytes
+[DEMO] Server RAM (Static): 62.25 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1684331 bytes
+[DEMO] Server RAM (Static): 62.28 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 5. Savings so far: 1728202 bytes
+[DEMO] Server RAM (Static): 62.32 MB | FPS: 52
+[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 5. Savings so far: 1768444 bytes
+[DEMO] Server RAM (Static): 62.36 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1806425 bytes
+[DEMO] Server RAM (Static): 62.39 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1844330 bytes
+[DEMO] Server RAM (Static): 62.44 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1881950 bytes
+[DEMO] Server RAM (Static): 62.47 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1919912 bytes
+[DEMO] Server RAM (Static): 62.51 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1957589 bytes
+[DEMO] Server RAM (Static): 62.55 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 1994753 bytes
+[DEMO] Server RAM (Static): 62.58 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2032031 bytes
+[DEMO] Server RAM (Static): 62.62 MB | FPS: 59
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2069708 bytes
+[DEMO] Server RAM (Static): 62.66 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2107043 bytes
+[DEMO] Server RAM (Static): 62.69 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2146430 bytes
+[DEMO] Server RAM (Static): 62.73 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 5 entities sent out of 5. Savings so far: 2183993 bytes
+[DEMO] Server RAM (Static): 62.76 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2222240 bytes
+[DEMO] Server RAM (Static): 62.80 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2259689 bytes
+[DEMO] Server RAM (Static): 62.84 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2296967 bytes
+[DEMO] Server RAM (Static): 62.88 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 5 entities sent out of 5. Savings so far: 2335328 bytes
+[DEMO] Server RAM (Static): 62.91 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2376140 bytes
+[DEMO] Server RAM (Static): 62.95 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 5. Savings so far: 2414083 bytes
+[DEMO] Server RAM (Static): 62.98 MB | FPS: 52
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2457650 bytes
+[DEMO] Server RAM (Static): 63.03 MB | FPS: 43
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2502110 bytes
+[DEMO] Server RAM (Static): 63.06 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2540756 bytes
+[DEMO] Server RAM (Static): 63.10 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2578832 bytes
+[DEMO] Server RAM (Static): 63.14 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 1): 2 entities sent out of 5. Savings so far: 2616224 bytes

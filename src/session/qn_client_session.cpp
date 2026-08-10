@@ -5,6 +5,7 @@
 #include "../core/qn_interp_buffer.hpp"
 #include "../core/qn_serializer.hpp"
 #include <godot_cpp/core/class_db.hpp>
+#include <algorithm>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include "core/qn_serializer.hpp"
 #include "core/qn_delta_serializer.hpp"
@@ -16,6 +17,8 @@ QNClientSession::QNClientSession() {
 	_clock.instantiate();
 	_input_buf.instantiate();
 	_loss_tracker.instantiate();
+	_read_buf.instantiate();
+	_write_buf.instantiate();
 	local_pos = Vector3();
 	local_rot = Vector3();
 }
@@ -102,21 +105,28 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 		_state_history.pop_back();
 	}
 	
-	Array hist_array;
-	for (int i = 0; i < _state_history.size(); i++) {
-		hist_array.push_back(_state_history[i]);
+	_write_buf->seek(0);
+	_write_buf->write_bits(2, 8); // MsgType::STATE
+	_write_buf->write_bits(_send_seq, 16);
+	_write_buf->write_bits(_last_server_seq, 16);
+	_write_buf->write_bits(pending_inputs(), 8);
+	
+	int count = std::min((int)_state_history.size(), 255);
+	_write_buf->write_bits(count, 8);
+	
+	for (int i = 0; i < count; i++) {
+		Dictionary h = _state_history[i];
+		_write_buf->write_bits((int)h["seq"] & 0xFFFF, 16);
+		Vector3 p = h["pos"];
+		_write_buf->write_float(p.x, -64.0, 64.0, 16);
+		_write_buf->write_float(p.y, 0.0, 10.0, 16);
+		_write_buf->write_float(p.z, -64.0, 64.0, 16);
+		_write_buf->write_quaternion(Quaternion::from_euler(h["rot"]));
+		_write_buf->write_bits((int)h["ts"] & 0xFFFFFFFF, 32);
+		_write_buf->write_bits((int)h["custom_id"] & 0xFF, 5);
 	}
 	
-	PackedByteArray raw = QNSerializer::encode_state_history(hist_array);
-	
-	PackedByteArray pkt;
-	pkt.push_back(QNSerializer::TYPE_STATE);
-	
-	PackedByteArray ack_bytes;
-	ack_bytes.resize(2);
-	ack_bytes.encode_u16(0, _last_server_seq);
-	pkt.append_array(ack_bytes);
-	pkt.append_array(raw);
+	PackedByteArray pkt = _write_buf->get_buffer();
 	
 	if (send_callable.is_valid()) {
 		send_callable.call(1, pkt, CH_STATE, TRANSFER_UNRELIABLE);
@@ -156,6 +166,7 @@ void QNClientSession::handle_packet(const PackedByteArray &data, int now) {
 	if (!_interp.has(owner)) {
 		Ref<QNInterpBuffer> ib; ib.instantiate();
 		_interp[owner] = ib;
+		_active_interps.push_back(owner);
 	}
 	
 	if (owner == _my_id) {
@@ -164,11 +175,12 @@ void QNClientSession::handle_packet(const PackedByteArray &data, int now) {
 		_input_buf->drain_after(d["seq"]);
 		
 		double current_jitter = _clock->jitter_ms;
-		Array keys = _interp.keys();
-		for (int i = 0; i < keys.size(); i++) {
-			int owner_id = keys[i];
-			Ref<QNInterpBuffer> ib = _interp[owner_id];
-			if (ib.is_valid()) ib->update_jitter(current_jitter);
+		for (int i = 0; i < _active_interps.size(); i++) {
+			int owner_id = _active_interps[i];
+			if (_interp.has(owner_id)) {
+				Ref<QNInterpBuffer> ib = _interp[owner_id];
+				if (ib.is_valid()) ib->update_jitter(current_jitter);
+			}
 		}
 		
 		emit_signal("pong_received", _clock->rtt_ms, _clock->offset_ms);
@@ -193,6 +205,11 @@ double QNClientSession::loss_of(int owner) {
 void QNClientSession::cleanup_entity(int owner) {
 	if (_interp.has(owner)) {
 		_interp.erase(owner);
+		
+		auto it = std::find(_active_interps.begin(), _active_interps.end(), owner);
+		if (it != _active_interps.end()) {
+			_active_interps.erase(it);
+		}
 	}
 }
 
@@ -207,10 +224,9 @@ void QNClientSession::_handle_snapback(const PackedByteArray &body) {
 }
 
 void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
-	Ref<QNBitBuffer> buf; buf.instantiate();
-	buf->set_buffer(body);
+	_read_buf->set_buffer(body);
 	
-	int server_seq = buf->read_bits(16);
+	int server_seq = _read_buf->read_bits(16);
 	_loss_tracker->on_packet(server_seq);
 	
 	int diff = server_seq - _last_server_seq;
@@ -221,9 +237,9 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 		return;
 	}
 	
-	int ack = buf->read_bits(16);
-	int server_now = buf->read_bits(32);
-	int num_entities = buf->read_bits(8);
+	int ack = _read_buf->read_bits(16);
+	int server_now = _read_buf->read_bits(32);
+	int num_entities = _read_buf->read_bits(8);
 	
 	Dictionary base_states;
 	for (int i = 0; i < _world_history.size(); i++) {
@@ -237,18 +253,15 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 	Dictionary parsed_states;
 	if (_world_history.size() > 0) {
 		Dictionary front_hist = _world_history[0];
-		Dictionary recent_states = front_hist["states"];
-		Array keys = recent_states.keys();
-		for (int i = 0; i < keys.size(); i++) {
-			int id = keys[i];
-			parsed_states[id] = recent_states[id];
-		}
+		parsed_states = ((Dictionary)front_hist["states"]).duplicate();
 	}
 	
 	for (int i = 0; i < num_entities; i++) {
-		int entity_id = buf->read_bits(32);
+		if ((_read_buf->get_position() + 32) / 8 > body.size()) break;
+		
+		int entity_id = _read_buf->read_bits(32);
 		Dictionary base = base_states.get(entity_id, Dictionary());
-		Dictionary st = QNDeltaSerializer::decode_state(buf, base);
+		Dictionary st = QNDeltaSerializer::decode_state(_read_buf, base);
 		parsed_states[entity_id] = st;
 		
 		int owner = entity_id;
@@ -257,6 +270,7 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 		if (!_interp.has(owner)) {
 			Ref<QNInterpBuffer> ib; ib.instantiate();
 			_interp[owner] = ib;
+			_active_interps.push_back(owner);
 		}
 		
 		if (owner == _my_id) {
@@ -265,11 +279,12 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 			_input_buf->drain_after(d["seq"]);
 			
 			double current_jitter = _clock->jitter_ms;
-			Array keys = _interp.keys();
-			for (int j = 0; j < keys.size(); j++) {
-				int owner_id = keys[j];
-				Ref<QNInterpBuffer> ib = _interp[owner_id];
-				if (ib.is_valid()) ib->update_jitter(current_jitter);
+			for (int j = 0; j < _active_interps.size(); j++) {
+				int owner_id = _active_interps[j];
+				if (_interp.has(owner_id)) {
+					Ref<QNInterpBuffer> ib = _interp[owner_id];
+					if (ib.is_valid()) ib->update_jitter(current_jitter);
+				}
 			}
 			
 			emit_signal("pong_received", _clock->rtt_ms, _clock->offset_ms);

@@ -11,8 +11,10 @@
 
 #include "core/qn_clock_sync.hpp"
 #include "core/qn_input_buffer.hpp"
+#include "core/qn_bit_buffer.hpp"
 #include "core/qn_interp_buffer.hpp"
 #include "session/qn_loss_tracker.hpp"
+#include <vector>
 
 namespace godot {
 
@@ -36,6 +38,11 @@ private:
 	double _send_accum = 0.0;
 	int _send_seq = 0;
 	int _my_id = 0;
+	
+	Ref<QNBitBuffer> _read_buf;
+	Ref<QNBitBuffer> _write_buf;
+	
+	std::vector<int> _active_interps;
 
 	Callable send_callable;
 

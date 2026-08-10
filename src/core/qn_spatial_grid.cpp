@@ -130,6 +130,23 @@ PackedInt32Array QNSpatialGrid::get_entities_in_radius(const Vector3 &pos, doubl
 	return result;
 }
 
+void QNSpatialGrid::get_entities_in_radius_internal(const Vector3 &pos, double radius, std::vector<int> &out_entities) const {
+	int32_t min_cx = static_cast<int32_t>(std::floor((pos.x - radius) / cell_size));
+	int32_t max_cx = static_cast<int32_t>(std::floor((pos.x + radius) / cell_size));
+	int32_t min_cz = static_cast<int32_t>(std::floor((pos.z - radius) / cell_size));
+	int32_t max_cz = static_cast<int32_t>(std::floor((pos.z + radius) / cell_size));
+
+	for (int32_t cx = min_cx; cx <= max_cx; ++cx) {
+		for (int32_t cz = min_cz; cz <= max_cz; ++cz) {
+			uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(cx)) << 32) | static_cast<uint32_t>(cz);
+			auto it = cells.find(key);
+			if (it != cells.end()) {
+				out_entities.insert(out_entities.end(), it->second.begin(), it->second.end());
+			}
+		}
+	}
+}
+
 PackedInt32Array QNSpatialGrid::get_entities_in_chunk(const Vector3 &pos) const {
 	PackedInt32Array result;
 	uint64_t key = _get_cell_key(pos);

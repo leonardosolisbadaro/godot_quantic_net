@@ -35,6 +35,7 @@ public:
 	void update_entity(int id, const Vector3 &pos);
 	void remove_entity(int id);
 	PackedInt32Array get_entities_in_radius(const Vector3 &pos, double radius) const;
+	void get_entities_in_radius_internal(const Vector3 &pos, double radius, std::vector<int> &out_entities) const;
 	
 	// --- MMO World & Chunk System API ---
 	void set_world_bounds(const Vector3 &extents, bool active);

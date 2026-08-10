@@ -58,19 +58,15 @@ struct ScoredItem {
 	}
 };
 
-PackedInt32Array QNPriorityAccumulator::select_entities(int peer_id, const PackedInt32Array &candidates, const Dictionary &registry, const Dictionary &current_states, const Vector3 &observer_pos, int mtu_budget, int bytes_per_entity) {
+void QNPriorityAccumulator::select_entities(int peer_id, const std::vector<int> &candidates, const Dictionary &registry, const Dictionary &current_states, const Vector3 &observer_pos, int mtu_budget, int bytes_per_entity, std::vector<int> &out_selected) {
 	std::vector<ScoredItem> scored_list;
-	
-	// Create a quick lookup for candidates
-	std::vector<int> cand_vec;
-	for (int i = 0; i < candidates.size(); i++) cand_vec.push_back(candidates[i]);
 	
 	// Limpeza de Memory Leak: Expurgar dívidas velhas
 	auto peer_it = _debt.find(peer_id);
 	if (peer_it != _debt.end()) {
 		auto it = peer_it->second.begin();
 		while (it != peer_it->second.end()) {
-			if (std::find(cand_vec.begin(), cand_vec.end(), it->first) == cand_vec.end()) {
+			if (std::find(candidates.begin(), candidates.end(), it->first) == candidates.end()) {
 				it = peer_it->second.erase(it);
 			} else {
 				++it;
@@ -119,18 +115,15 @@ PackedInt32Array QNPriorityAccumulator::select_entities(int peer_id, const Packe
 	
 	std::sort(scored_list.begin(), scored_list.end());
 	
-	PackedInt32Array selected;
 	int current_bytes = 0;
 	
 	for (const ScoredItem &item : scored_list) {
 		if (current_bytes + bytes_per_entity <= mtu_budget) {
-			selected.push_back(item.id);
+			out_selected.push_back(item.id);
 			current_bytes += bytes_per_entity;
 			_clear_debt(peer_id, item.id);
 		} else {
 			_add_debt(peer_id, item.id, item.score * 0.5);
 		}
 	}
-	
-	return selected;
 }

@@ -2,15 +2,10 @@ Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
 
 [DEMO] Iniciando SERVIDOR QuanticNet (Porta 4242)...
 [DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.
-[DEMO] Server RAM (Static): 60.16 MB | FPS: 58
-[DEMO] Server RAM (Static): 60.20 MB | FPS: 60
-[QNHostSession] Bandwidth Stats (Peer 1): 1 entities sent out of 4. Savings so far: 32224 bytes
-[DEMO] Server RAM (Static): 60.19 MB | FPS: 60
-[DEMO] Server RAM (Static): 60.20 MB | FPS: 60
-[QNHostSession] Bandwidth Stats (Peer 1): 1 entities sent out of 4. Savings so far: 64163 bytes
-[DEMO] Server RAM (Static): 60.20 MB | FPS: 60
-[DEMO] Server RAM (Static): 60.20 MB | FPS: 59
-[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 4. Savings so far: 96672 bytes
-[DEMO] Server RAM (Static): 60.20 MB | FPS: 60
-[DEMO] Server RAM (Static): 60.19 MB | FPS: 60
-[QNHostSession] Bandwidth Stats (Peer 1): 1 entities sent out of 4. Savings so far: 128725 bytes
+[DEMO] Peer Joined: 2
+[DEMO] Peer Joined: 3
+[DEMO] Server RAM (Static): 61.11 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 3): 1 entities sent out of 6. Savings so far: 48811 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 1 entities sent out of 6. Savings so far: 103645 bytes
+[DEMO] Server RAM (Static): 61.13 MB | FPS: 55
+[QNHostSession] Bandwidth Stats (Peer 3): 1 entities sent out of 6. Savings so far: 159562 bytes

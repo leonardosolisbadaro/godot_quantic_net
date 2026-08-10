@@ -6,6 +6,7 @@
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <map>
+#include <vector>
 
 namespace godot {
 
@@ -29,7 +30,7 @@ public:
 	void cleanup_entity(int entity_id);
 	void _cleanup_peer(int peer_id);
 
-	PackedInt32Array select_entities(int peer_id, const PackedInt32Array &candidates, const Dictionary &registry, const Dictionary &current_states, const Vector3 &observer_pos, int mtu_budget, int bytes_per_entity);
+	void select_entities(int peer_id, const std::vector<int> &candidates, const Dictionary &registry, const Dictionary &current_states, const Vector3 &observer_pos, int mtu_budget, int bytes_per_entity, std::vector<int> &out_selected);
 };
 
 } // namespace godot

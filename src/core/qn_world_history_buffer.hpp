@@ -47,6 +47,7 @@ public:
 	int get_max_history_ticks() const;
 
 	void push_state(int timestamp, const Dictionary &world_snapshot);
+	void push_state_internal(int timestamp, const Dictionary &world_snapshot, const std::vector<int> &active_entities);
 	void clear();
 	
 	// Agnostic Time-Travel Queries
