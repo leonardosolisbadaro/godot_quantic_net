@@ -62,7 +62,7 @@ void QNServerJitterBuffer::push(int seq, int input_mask, const Vector2 &look_dir
 		if (diff > 32768) diff -= 65536;
 		
 		if (diff < 0) { // seq is older than e_seq
-			pending.insert(i, d);
+			pending.insert(pending.begin() + i, d);
 			inserted = true;
 			break;
 		} else if (diff == 0) {
@@ -76,8 +76,6 @@ void QNServerJitterBuffer::push(int seq, int input_mask, const Vector2 &look_dir
 	}
 	
 	if (pending.size() > MAX_PENDING) {
-		Dictionary first = pending[0];
-		first.clear();
 		pending.pop_front(); // drop oldest if full
 	}
 }

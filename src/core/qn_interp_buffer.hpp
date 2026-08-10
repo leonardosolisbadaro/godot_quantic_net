@@ -5,6 +5,7 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <deque>
 
 namespace godot {
 
@@ -18,7 +19,7 @@ private:
 	static const int EXTRAPOLATION_LIMIT_MS = 250;
 	static constexpr double ERROR_BLEND_SPEED = 5.0;
 
-	Array snaps;
+	std::deque<Dictionary> snaps;
 	Dictionary _cached_state;
 	Dictionary _empty_state;
 

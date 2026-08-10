@@ -384,8 +384,26 @@ func is_clock_synced() -> bool:
 func get_registry() -> Dictionary:
 	if _is_server and _host_session:
 		return _host_session.get_registry()
+	elif _client_session:
+		return _client_session.get_registry()
 	return {}
-	
+
+func get_registry_keys() -> Array:
+	if _is_server and _host_session:
+		return _host_session.get_registry_keys()
+	elif _client_session:
+		return _client_session.get_registry().keys()
+	return []
+
+func get_entity_position(entity_id: int) -> Vector3:
+	if _is_server and _host_session:
+		return _host_session.get_entity_position(entity_id)
+	elif _client_session:
+		var reg = _client_session.get_registry()
+		if reg.has(entity_id):
+			return reg[entity_id].get("pos", Vector3.ZERO)
+	return Vector3.ZERO
+
 func register_entity(entity_id: int, is_peer: bool, has_initial_state: bool, profile: RefCounted = null) -> void:
 	if _is_server and _host_session:
 		_host_session.register_entity(entity_id, is_peer, has_initial_state, profile)
@@ -415,6 +433,18 @@ func update_entity_state(entity_id: int, pos: Vector3, rot: Vector3, custom_id: 
 func change_entity_profile(entity_id: int, new_profile: RefCounted) -> void:
 	if _is_server and _host_session:
 		_host_session.change_entity_profile(entity_id, new_profile)
+
+func add_region(region_id: int, center: Vector3, extents: Vector3) -> void:
+	if _is_server and _host_session:
+		_host_session.add_region(region_id, center, extents)
+
+func remove_region(region_id: int) -> void:
+	if _is_server and _host_session:
+		_host_session.remove_region(region_id)
+
+func clear_regions() -> void:
+	if _is_server and _host_session:
+		_host_session.clear_regions()
 
 func kick(peer_id: int) -> void:
 	if _is_server and _hook:

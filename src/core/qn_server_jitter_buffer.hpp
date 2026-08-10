@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <deque>
 #include <godot_cpp/variant/vector2.hpp>
 
 namespace godot {
@@ -13,7 +14,7 @@ class QNServerJitterBuffer : public RefCounted {
 
 private:
 	static const int MAX_PENDING = 512;
-	Array pending;
+	std::deque<Dictionary> pending;
 	int tick_rate_ms;
 	int target_delay_ms;
 	bool initialized;

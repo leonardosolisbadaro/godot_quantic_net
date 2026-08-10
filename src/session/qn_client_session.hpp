@@ -7,7 +7,7 @@
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/callable.hpp>
-#include <godot_cpp/variant/callable.hpp>
+#include <deque>
 
 #include "core/qn_clock_sync.hpp"
 #include "core/qn_input_buffer.hpp"
@@ -29,8 +29,8 @@ private:
 	Dictionary _interp; // owner -> Ref<QNInterpBuffer>
 	Ref<QNLossTracker> _loss_tracker;
 	
-	Array _state_history;
-	Array _world_history;
+	std::deque<Dictionary> _state_history;
+	std::deque<Dictionary> _world_history;
 	int _last_server_seq = 0;
 	
 	double _send_accum = 0.0;

@@ -99,8 +99,6 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 	
 	_state_history.push_front(state_dict);
 	if (_state_history.size() > 3) {
-		Dictionary last = _state_history[_state_history.size() - 1];
-		last.clear();
 		_state_history.pop_back();
 	}
 	
@@ -287,8 +285,6 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 	hist_entry["states"] = parsed_states;
 	_world_history.push_front(hist_entry);
 	if (_world_history.size() > 60) {
-		Dictionary last = _world_history[_world_history.size() - 1];
-		last.clear();
 		_world_history.pop_back();
 	}
 	

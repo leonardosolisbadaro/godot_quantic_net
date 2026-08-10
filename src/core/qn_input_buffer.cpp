@@ -28,8 +28,6 @@ void QNInputBuffer::record(int seq, const Vector2 &move, double rot_delta, doubl
 	pending.push_back(d);
 	
 	if (pending.size() > MAX_PENDING) {
-		Dictionary first = pending[0];
-		first.clear();
 		pending.pop_front();
 	}
 }
@@ -46,7 +44,7 @@ int QNInputBuffer::get_sent_ts(int seq) {
 
 Array QNInputBuffer::drain_after(int confirmed_seq) {
 	Array replay;
-	Array keep;
+	std::deque<Dictionary> keep;
 	
 	for (int i = 0; i < pending.size(); i++) {
 		Dictionary e = pending[i];

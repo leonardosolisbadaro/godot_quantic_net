@@ -5,6 +5,9 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <deque>
+#include <vector>
+#include <map>
 
 namespace godot {
 
@@ -14,18 +17,24 @@ class QNWorldHistoryBuffer : public RefCounted {
 private:
 	// Store historical states:
 	// A deque of dictionaries. Each dictionary contains:
-	// "ts" : int (timestamp)
-	// "entities" : Dictionary (key: entity_id, value: Dictionary{"pos", "radius"})
-	Array _history;
-	
-	// Max length of history in ticks. Assuming 60Hz, 90 ticks = 1.5 seconds.
-	int _max_history_ticks;
+	struct QNEntitySnapshot {
+		Vector3 pos;
+		Vector3 extents;
+		int type;
+	};
 
-	// Math logic for raycast vs geometries
+	struct QNWorldSnapshot {
+		int ts;
+		std::map<int, QNEntitySnapshot> entities;
+	};
+
+	int _max_history_ticks;
+	std::deque<QNWorldSnapshot> _history;
+
 	bool _ray_intersects_sphere(const Vector3 &origin, const Vector3 &dir, const Vector3 &center, double radius) const;
 	bool _ray_intersects_aabb(const Vector3 &origin, const Vector3 &dir, const Vector3 &center, const Vector3 &extents) const;
-	
-	Dictionary _get_interpolated_state(int timestamp) const;
+
+	std::map<int, QNEntitySnapshot> _get_interpolated_state(int timestamp) const;
 
 protected:
 	static void _bind_methods();

@@ -80,6 +80,9 @@ void QNSpatialGrid::update_entity(int id, const Vector3 &pos) {
 		// Remove from old cell
 		auto &old_vec = cells[old_key];
 		old_vec.erase(std::remove(old_vec.begin(), old_vec.end(), id), old_vec.end());
+		if (old_vec.empty()) {
+			cells.erase(old_key);
+		}
 
 		// Insert into new cell
 		if (is_in_bounds(pos)) {
@@ -97,6 +100,9 @@ void QNSpatialGrid::remove_entity(int id) {
 		uint64_t key = it->second;
 		auto &vec = cells[key];
 		vec.erase(std::remove(vec.begin(), vec.end(), id), vec.end());
+		if (vec.empty()) {
+			cells.erase(key);
+		}
 		entity_cells.erase(it);
 	}
 }

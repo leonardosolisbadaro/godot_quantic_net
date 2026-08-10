@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <deque>
 #include <godot_cpp/variant/vector2.hpp>
 
 namespace godot {
@@ -13,7 +14,7 @@ class QNInputBuffer : public RefCounted {
 
 private:
 	static const int MAX_PENDING = 256;
-	Array pending;
+	std::deque<Dictionary> pending;
 
 protected:
 	static void _bind_methods();

@@ -6,6 +6,8 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
+#include <deque>
+#include <map>
 
 #include "core/qn_priority_accumulator.hpp"
 #include "core/qn_entity_profile.hpp"
@@ -21,18 +23,25 @@ private:
 	static const int SNAPBACK_REASON_CLAMP = 1;
 	static const int SNAPBACK_REASON_REJECT = 2;
 
+	struct RegionData {
+		AABB aabb;
+	};
+
 	Dictionary _registry;
+	std::map<int, RegionData> _regions; // Region ID -> RegionData
 	int _server_seq;
-	Array _world_history;
+	std::deque<Dictionary> _world_history;
 	Ref<QNPriorityAccumulator> _accumulator;
 	Ref<QNSpatialGrid> _grid;
 	Ref<QNWorldHistoryBuffer> _rewind_buffer;
+	std::vector<Dictionary> _dict_pool;
 	
 	Dictionary _stats;
 	Ref<RefCounted> validator;
 
 protected:
 	static void _bind_methods();
+	Dictionary _get_pooled_dict();
 
 public:
 	QNHostSession();
@@ -49,6 +58,10 @@ public:
 	void change_entity_profile(int entity_id, Ref<QNEntityProfile> new_profile);
 	void update_entity_state(int entity_id, const Vector3 &pos, const Vector3 &rot, int custom_id, int ts);
 	
+	void add_region(int region_id, const Vector3 &center, const Vector3 &extents);
+	void remove_region(int region_id);
+	void clear_regions();
+	
 	void on_peer_disconnected(int peer_id);
 	
 	void on_client_snapshot(int peer_id, const PackedByteArray &data, int now);
@@ -59,6 +72,8 @@ public:
 	Array query_sphere(const Vector3 &center, double radius, int timestamp) const;
 
 	Dictionary get_registry();
+	Array get_registry_keys() const;
+	Vector3 get_entity_position(int entity_id) const;
 	Ref<QNSpatialGrid> get_grid() const;
 };
 

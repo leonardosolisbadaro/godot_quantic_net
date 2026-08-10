@@ -63,14 +63,12 @@ void QNInterpBuffer::push(int ts, const Vector3 &pos, const Vector3 &rot) {
 	snaps.push_back(d);
 	
 	if (snaps.size() > MAX_SNAPSHOTS) {
-		Dictionary first = snaps[0];
-		first.clear();
 		snaps.pop_front();
 	}
 }
 
 Dictionary QNInterpBuffer::sample(int now) {
-	if (snaps.is_empty()) {
+	if (snaps.empty()) {
 		return _empty_state;
 	}
 		

@@ -46,6 +46,8 @@ void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("on_client_snapshot", "peer_id", "data", "now"), &QNHostSession::on_client_snapshot);
 	ClassDB::bind_method(D_METHOD("tick_broadcast", "now"), &QNHostSession::tick_broadcast);
 	ClassDB::bind_method(D_METHOD("get_registry"), &QNHostSession::get_registry);
+	ClassDB::bind_method(D_METHOD("get_registry_keys"), &QNHostSession::get_registry_keys);
+	ClassDB::bind_method(D_METHOD("get_entity_position", "entity_id"), &QNHostSession::get_entity_position);
 	ClassDB::bind_method(D_METHOD("get_grid"), &QNHostSession::get_grid);
 	
 	ADD_SIGNAL(MethodInfo("snapback_requested", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::PACKED_BYTE_ARRAY, "pkt")));
@@ -199,16 +201,30 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 	}
 }
 
+void QNHostSession::clear_regions() {
+	_regions.clear();
+}
+
+Dictionary QNHostSession::_get_pooled_dict() {
+	if (!_dict_pool.empty()) {
+		Dictionary d = _dict_pool.back();
+		_dict_pool.pop_back();
+		d.clear();
+		return d;
+	}
+	return Dictionary();
+}
+
 void QNHostSession::tick_broadcast(int now) {
 	_server_seq = (_server_seq + 1) & 0xFFFF;
-	Dictionary world_snapshot;
+	Dictionary world_snapshot = _get_pooled_dict();
 	
 	Array keys = _registry.keys();
 	for (int i = 0; i < keys.size(); i++) {
 		int id = keys[i];
 		Dictionary st = _registry[id];
 		if ((bool)st["has_state"]) {
-			Dictionary ws;
+			Dictionary ws = _get_pooled_dict();
 			ws["id"] = id;
 			ws["seq"] = st["seq"];
 			ws["pos"] = st["pos"];
@@ -229,17 +245,24 @@ void QNHostSession::tick_broadcast(int now) {
 		}
 	}
 	
-	Dictionary hist_entry;
+	Dictionary hist_entry = _get_pooled_dict();
 	hist_entry["seq"] = _server_seq;
 	hist_entry["states"] = world_snapshot;
 	_world_history.push_front(hist_entry);
 	if (_world_history.size() > 60) {
-		Dictionary last = _world_history[_world_history.size() - 1];
-		last.clear();
+		Dictionary old_hist = _world_history[_world_history.size() - 1];
 		_world_history.pop_back();
+		
+		Dictionary old_states = old_hist["states"];
+		Array old_keys = old_states.keys();
+		for (int i = 0; i < old_keys.size(); i++) {
+			_dict_pool.push_back(old_states[old_keys[i]]);
+		}
+		_dict_pool.push_back(old_states);
+		_dict_pool.push_back(old_hist);
 	}
 	
-	Dictionary current_states;
+	Dictionary current_states = _get_pooled_dict();
 	for (int i = 0; i < keys.size(); i++) {
 		int id = keys[i];
 		Dictionary st = _registry[id];
@@ -262,7 +285,13 @@ void QNHostSession::tick_broadcast(int now) {
 		}
 		
 		if (should_broadcast) {
-			current_states[id] = world_snapshot[id];
+			Dictionary inner_clone = _get_pooled_dict();
+			Dictionary orig = world_snapshot[id];
+			Array orig_keys = orig.keys();
+			for (int k = 0; k < orig_keys.size(); k++) {
+				inner_clone[orig_keys[k]] = orig[orig_keys[k]];
+			}
+			current_states[id] = inner_clone;
 		}
 	}
 	
@@ -281,8 +310,7 @@ void QNHostSession::tick_broadcast(int now) {
 			}
 		}
 		
-		Dictionary peer_current_states;
-		Dictionary profiles;
+		PackedInt32Array candidates;
 		
 		// O Servidor define a visibilidade baseado na Aura de Existência (AoI) do EMISSOR, não do receptor.
 		// Busca num raio máximo razoável (ex: 250m) e então filtra pela aura de cada entidade.
@@ -297,23 +325,24 @@ void QNHostSession::tick_broadcast(int now) {
 				Vector3 my_pos = st["pos"];
 				
 				if (cid_pos.distance_to(my_pos) <= cid_aura) {
-					peer_current_states[cid] = current_states[cid];
-					profiles[cid] = cid_profile;
+					candidates.push_back(cid);
 				}
 			}
 		}
 		
 		// Ensure peer itself is included
 		if (current_states.has(id)) {
-			peer_current_states[id] = current_states[id];
-			profiles[id] = ((Dictionary)_registry[id]).get("profile", Variant());
+			bool found = false;
+			for (int j = 0; j < candidates.size(); j++) {
+				if (candidates[j] == id) { found = true; break; }
+			}
+			if (!found) candidates.push_back(id);
 		}
 		
-		Dictionary selected_states = _accumulator->select_entities(id, peer_current_states, profiles, st["pos"], 1200, 19);
+		PackedInt32Array selected_states = _accumulator->select_entities(id, candidates, _registry, current_states, st["pos"], 1200, 19);
 		
-		Array sel_keys = selected_states.keys();
-		for (int j = 0; j < sel_keys.size(); j++) {
-			int selected_id = sel_keys[j];
+		for (int j = 0; j < selected_states.size(); j++) {
+			int selected_id = selected_states[j];
 			if (_registry.has(selected_id)) {
 				Dictionary sel_st = _registry[selected_id];
 				sel_st["last_broadcast_ts"] = now;
@@ -338,8 +367,8 @@ void QNHostSession::tick_broadcast(int now) {
 		buf->write_bits(now & 0xFFFFFFFF, 32);
 		buf->write_bits(selected_states.size(), 8);
 		
-		for (int j = 0; j < sel_keys.size(); j++) {
-			int entity_id = sel_keys[j];
+		for (int j = 0; j < selected_states.size(); j++) {
+			int entity_id = selected_states[j];
 			buf->write_bits(entity_id, 32);
 			Dictionary base = base_states.get(entity_id, Dictionary());
 			
@@ -347,8 +376,9 @@ void QNHostSession::tick_broadcast(int now) {
 				Dictionary peer_base = base_states.get(id, Dictionary());
 				if (!peer_base.is_empty()) {
 					double cull_radius = 50.0;
-					if (profiles.has(entity_id)) {
-						Ref<QNEntityProfile> p = profiles[entity_id];
+					Dictionary reg_st = _registry.get(entity_id, Dictionary());
+					if (!reg_st.is_empty()) {
+						Ref<QNEntityProfile> p = reg_st.get("profile", Variant());
 						if (p.is_valid()) cull_radius = p->get_spatial_culling_radius();
 					}
 					
@@ -361,7 +391,7 @@ void QNHostSession::tick_broadcast(int now) {
 				}
 			}
 			
-			QNDeltaSerializer::encode_state(buf, base, selected_states[entity_id]);
+			QNDeltaSerializer::encode_state(buf, base, current_states[entity_id]);
 		}
 		
 		emit_signal("packet_ready", id, buf->get_buffer());
@@ -384,6 +414,18 @@ Array QNHostSession::query_sphere(const Vector3 &center, double radius, int time
 
 Dictionary QNHostSession::get_registry() {
 	return _registry;
+}
+
+Array QNHostSession::get_registry_keys() const {
+	return _registry.keys();
+}
+
+Vector3 QNHostSession::get_entity_position(int entity_id) const {
+	if (_registry.has(entity_id)) {
+		Dictionary st = _registry[entity_id];
+		return st.get("pos", Vector3());
+	}
+	return Vector3();
 }
 
 Ref<QNSpatialGrid> QNHostSession::get_grid() const {

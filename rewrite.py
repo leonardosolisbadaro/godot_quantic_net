@@ -1,4 +1,5 @@
-#include "qn_world_history_buffer.hpp"
+import sys
+content = """#include "qn_world_history_buffer.hpp"
 #include <godot_cpp/core/class_db.hpp>
 #include <cmath>
 #include <limits>
@@ -233,3 +234,6 @@ Array QNWorldHistoryBuffer::query_sphere(const Vector3 &center, double radius, i
 	
 	return results;
 }
+"""
+with open('src/core/qn_world_history_buffer.cpp', 'w', encoding='utf-8') as f:
+    f.write(content)

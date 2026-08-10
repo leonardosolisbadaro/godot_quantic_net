@@ -4,8 +4,8 @@
 ## @description
 ## Cena principal de simulação e ponto de entrada da arquitetura QuanticNet.
 ##
-## Este script atua como um "Playground Bare Metal". O objetivo não é simular 
-## mecânicas de um jogo complexo (como inventário ou física de veículos), mas sim expor 
+## Este script atua como um "Playground Bare Metal". O objetivo não é simular
+## mecânicas de um jogo complexo (como inventário ou física de veículos), mas sim expor
 ## e validar o comportamento bruto das abstrações de rede, culling e sincronização sob estresse.
 ##
 ## Fundações arquiteturais demonstradas aqui:
@@ -92,8 +92,8 @@ var _global_network_parameters = {
 	"netem_dup": 0.0, # Simula retransmissões fantasmas em roteadores congestionados.
 	# Determina se o Spatial Partitioning (Grid) C++ filtrará o envio global.
 	# Quando habilitado, o servidor estilhaça o mapa em setores menores, economizando a largura de banda.
-	"grid_culling_enabled": true,
-	"grid_culling_size": (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0,
+	# "grid_culling_enabled": true, # Obsoleto - Substituído por QNSpatialGrid no Core
+	# "grid_culling_size": (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0,
 }
 
 # Controle de estado da topologia local
@@ -108,6 +108,8 @@ var _entity_profile_player: QNEntityProfile
 var _entity_profile_npc: QNEntityProfile
 var _entity_profile_prop: QNEntityProfile
 var _entity_profile_projectile: QNEntityProfile
+var _profile_region_a: QNEntityProfile
+var _profile_region_b: QNEntityProfile
 
 # ------------------------------------------------------------------------------
 # RASTREAMENTO E HISTÓRICOS DE REDE (ALIMENTADO VIA SINAIS)
@@ -136,6 +138,7 @@ var _auto_movement_center_origin: Vector3 = Vector3.ZERO
 var _auto_movement_elapsed_time: float = 0.0
 var _server_authoritative_props_time: float = 0.0
 var _client_local_culling_radius: float = DEFAULT_VIEW_DISTANCE
+var _show_culling_rings: bool = true
 var _ui_label_connection_status: Label
 var _ui_button_reconnect: Button
 var _cooldown_timer_last_shot_ms: int = 0 # Previne sobrecarga de Input na rede.
@@ -156,11 +159,13 @@ var _ui_diagnostic_label_loss: Label
 var _ui_diagnostic_label_offset: Label
 var _ui_diagnostic_label_peers: Label
 
+var _camera: Camera3D
+
 # ------------------------------------------------------------------------------
 # VARIÁVEIS DE CONTROLE DE THROTTLE E ESTATÍSTICA
 # ------------------------------------------------------------------------------
-# Atualizar elementos visuais constantemente gera um custo alto de CPU devido ao 
-# recálculo de layouts e fontes. O sistema utiliza um throttle de 250ms para 
+# Atualizar elementos visuais constantemente gera um custo alto de CPU devido ao
+# recálculo de layouts e fontes. O sistema utiliza um throttle de 250ms para
 # equilibrar a legibilidade com a performance.
 var _ui_throttle_last_update_ms: int = 0
 var _is_network_emulation_active: bool = false
@@ -199,7 +204,7 @@ func _ready() -> void:
 	# Orquestração Automática de Topologia (Auto-Spawn)
 	# Gerencia a inicialização simultânea do ambiente de teste simulando a arquitetura autoritativa do servidor e múltiplos clientes locais conectando-se ao loopback (127.0.0.1).
 	# Ao invés de compilarmos executáveis separados, lemos os parâmetros da linha de comando.
-	# Se a demo for executada diretamente pelo Godot (F5), ela não terá parâmetros. 
+	# Se a demo for executada diretamente pelo Godot (F5), ela não terá parâmetros.
 	# Nesse caso, a própria demo "clona" duas novas janelas via OS.create_instance e se torna o Servidor.
 	var args = OS.get_cmdline_user_args()
 	var is_server = args.has("--server")
@@ -238,7 +243,6 @@ func _ready() -> void:
 	_entity_profile_prop.init(5.0, 0.5, 20.0) # Hz Default
 	_entity_profile_projectile = QNEntityProfile.new()
 	_entity_profile_projectile.init(60.0, 3.0, 50.0) # Hz (Prioridade Extrema)
-
 	# Bindings de Sinais Assíncronos (Event-Driven Architecture)
 	# Delega respostas de eventos de rede originados no C++ para handlers locais no GDScript. Abordagem preferível ao pooling síncrono no _process para evitar gargalos.
 	# O QuanticNet emite sinais limpos quando eventos ocorrem nas entranhas do C++.
@@ -264,6 +268,9 @@ func _ready() -> void:
 		# O Servidor registra a si mesmo (ID 1)
 		QuanticNet.register_entity(1, true, true, _entity_profile_player)
 
+		# O Mundo Aberto não utiliza Regions (Instanciamento Rígido). 
+		# Todos habitam o mesmo continuum espacial e são regidos unicamente pelo QNSpatialGrid.
+
 		# O Servidor instancia e gerencia Props de forma Autoritativa (Eles não possuem clientes enviando input)
 		for prop_id in SERVER_PROPS:
 			QuanticNet.register_entity(prop_id, false, true, _entity_profile_prop)
@@ -274,7 +281,7 @@ func _ready() -> void:
 	# Encapsulamento de Rede e Bypass do SceneTree
 	# Injeta a implementação nativa em C++ no SceneTree, permitindo o roteamento direto e processamento isolado do QuanticNet.
 	# Este é o truque de ouro: forçamos a Árvore de Cena do Godot a enxergar o roteador (MultiplayerAPI)
-	# que o QuanticNet construiu em C++. Isso faz com que RPCs nativos funcionem de forma transparente 
+	# que o QuanticNet construiu em C++. Isso faz com que RPCs nativos funcionem de forma transparente
 	# através dos túneis ultra-otimizados do nosso plugin.
 	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
 
@@ -292,30 +299,26 @@ func _notification(what: int) -> void:
 
 func _setup_scene() -> void:
 	# Uma câmera isométrica, uma luz direcional com sombras e um chão escuro.
-	var cam := Camera3D.new()
-	cam.position = CAMERA_START_POS
-	cam.rotation_degrees = CAMERA_START_ROT
-	add_child(cam)
+	_camera = Camera3D.new()
+	_camera.position = CAMERA_START_POS
+	_camera.rotation_degrees = CAMERA_START_ROT
+	add_child(_camera)
 
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-45, 45, 0)
 	light.shadow_enabled = true
 	add_child(light)
 
-	var floor_mesh := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = FLOOR_SIZE
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.2, 0.2, 0.25)
-	plane.material = mat
-	floor_mesh.mesh = plane
-	add_child(floor_mesh)
-
-	# [AoI Geral] Feedback visual do Grid System (Spatial Partitioning)
-	if _global_network_parameters.get("grid_culling_enabled", false):
-		var aoi_size = FLOOR_SIZE * GENERAL_AOI_RATIO
-		var general_aoi = _create_aoi_grid(Color(1.0, 0.0, 0.5, 0.3), aoi_size, 0.05) # Rosa para AoI
-		add_child(general_aoi)
+	# Chão Base do Mundo Aberto (Contínuo)
+	var open_world_floor := MeshInstance3D.new()
+	var plane_ow := PlaneMesh.new()
+	plane_ow.size = Vector2(80, 80)
+	var mat_ow := StandardMaterial3D.new()
+	mat_ow.albedo_color = Color(0.2, 0.2, 0.2) # Dark Gray
+	plane_ow.material = mat_ow
+	open_world_floor.mesh = plane_ow
+	open_world_floor.position = Vector3(0, 0, 0)
+	add_child(open_world_floor)
 
 	_scene_world_root_node = Node3D.new()
 	add_child(_scene_world_root_node)
@@ -515,7 +518,7 @@ func _setup_ui() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# O _physics_process opera sincronamente a 60Hz. Toda a carga pesada de matemática vetorial, 
+	# O _physics_process opera sincronamente a 60Hz. Toda a carga pesada de matemática vetorial,
 	# predição e serialização de pacotes UDP reside aqui para garantir determinismo.
 	if QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 		# Lógica Autoritativa de Servidor: O servidor tem o monopólio sobre o movimento dos Props.
@@ -572,7 +575,7 @@ func _physics_process(delta: float) -> void:
 		):
 			input_dir = (_auto_movement_center_origin - _client_predicted_position).normalized()
 
-		# Client-Side Prediction: Movimenta instantaneamente o avatar local na malha visual 
+		# Client-Side Prediction: Movimenta instantaneamente o avatar local na malha visual
 		# antes mesmo do servidor validar, garantindo responsividade imediata (Zero Input Lag).
 		_client_predicted_position += input_dir * speed * delta
 		_update_visual(QuanticNet.get_unique_id(), _client_predicted_position, true)
@@ -597,6 +600,10 @@ func _process(_delta: float) -> void:
 	# O _process roda de forma assíncrona (destravado do tick rate de rede), preso apenas ao V-Sync do monitor.
 	# Por isso, toda a lógica de Snapshot Interpolation e Lerping visual vive exclusivamente aqui.
 	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		if _camera:
+			var target_cam_pos = _client_predicted_position + CAMERA_START_POS
+			_camera.position = _camera.position.lerp(target_cam_pos, _delta * 5.0)
+
 		var now = Time.get_ticks_msec()
 		for id in _active_visual_entities_map.keys():
 			if id != QuanticNet.get_unique_id():
@@ -608,7 +615,7 @@ func _process(_delta: float) -> void:
 
 					# Culling Visual
 					var rad = _entity_profile_player.get_spatial_culling_radius() if id < 1000 else _entity_profile_prop.get_spatial_culling_radius()
-					var dist = _client_predicted_position.distance_to(visual.position)
+					var dist = _client_predicted_position.distance_to(target_pos)
 
 					# O Servidor define a malha absoluta, então se a entidade chegou no pacote, ela está visível no servidor.
 					# Só precisamos nos preocupar com o culling local e se há atualização recente.
@@ -642,20 +649,16 @@ func _process(_delta: float) -> void:
 		# Modo Monitor de Espectador (Server Capado).
 		# O Servidor não recebe "_on_state" de peers nativamente na camada de lógica, ele processa C++ e emite o registro final.
 		# Lemos o registro aqui para materializar visualmente os Peers e Props na Viewport local de diagnóstico do host.
-		var registry = QuanticNet.get_registry()
+		var keys = QuanticNet.get_registry_keys()
 		var grid_enabled = _global_network_parameters.get("grid_culling_enabled", false)
 		var aoi_limit = _global_network_parameters.get("grid_culling_size", 9999.0)
 
-		for id in registry.keys():
+		for id in keys:
 			if id == QuanticNet.get_unique_id():
 				continue # Monitor não tem avatar próprio e não se renderiza
 
-			# Consumo da camada C++. O C++ já converteu as matrizes.
-			var st = QuanticNet.remote_state(id)
-			if st.is_empty():
-				st = registry[id] # Previne null exceptions no tick de inicialização
-
-			var target_pos = st.get("pos", Vector3.ZERO)
+			# O registro base já contém o estado completo.
+			var target_pos = QuanticNet.get_entity_position(id)
 
 			# Cria a malha (nó visual) se esta entidade for recém descoberta
 			if not _active_visual_entities_map.has(id):
@@ -693,14 +696,14 @@ func _process(_delta: float) -> void:
 
 	# Histórico de FPS
 	var current_fps = Engine.get_frames_per_second()
-	if current_fps > 0:
-		_frames_per_second_history.append(current_fps)
-		if _frames_per_second_history.size() > FPS_HISTORY_MAX:
-			_frames_per_second_history.pop_front()
-		if current_fps < _frames_per_second_minimum:
-			_frames_per_second_minimum = current_fps
-		if current_fps > _frames_per_second_maximum:
-			_frames_per_second_maximum = current_fps
+	# if current_fps > 0:
+	#	_frames_per_second_history.append(current_fps)
+	#	if _frames_per_second_history.size() > FPS_HISTORY_MAX:
+	#		_frames_per_second_history.pop_front()
+	if current_fps < _frames_per_second_minimum:
+		_frames_per_second_minimum = current_fps
+	if current_fps > _frames_per_second_maximum:
+		_frames_per_second_maximum = current_fps
 
 	# Histórico de Frame Time (Tempo para montar o visual e a lógica)
 	var frame_ms = Performance.get_monitor(Performance.TIME_PROCESS) * SEC_TO_MS
@@ -758,7 +761,7 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 				sum += f
 			fps_avg = sum / _frames_per_second_history.size()
 
-			# O "1% Low" é crucial para MMOs: ele descarta os picos altos e te diz 
+			# O "1% Low" é crucial para MMOs: ele descarta os picos altos e te diz
 			# qual foi o Pior FPS do pior engasgo que o seu jogador sentiu recentemente.
 			var sorted_fps = _frames_per_second_history.duplicate()
 			sorted_fps.sort()
@@ -820,6 +823,11 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 
 		var ram_mb = Performance.get_monitor(Performance.MEMORY_STATIC) / BYTES_TO_MB
 		_ui_diagnostic_label_mem.text = "RAM (Static): %.2f MB" % ram_mb
+		
+		var now_time = Time.get_ticks_msec()
+		if QuanticNet.is_server() and now_time - get_meta("last_ram_print", 0) > 5000:
+			print("[DEMO] Server RAM (Static): %.2f MB | FPS: %d" % [ram_mb, current_fps])
+			set_meta("last_ram_print", now_time)
 
 		var vram_mb = Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / BYTES_TO_MB
 		_ui_diagnostic_label_vram.text = "VRAM (Video): %.2f MB" % vram_mb
@@ -873,23 +881,15 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 
 		if QuanticNet.is_server():
 			var registry = QuanticNet.get_registry()
-			var grid_enabled = _global_network_parameters.get("grid_culling_enabled", false)
-			var aoi_limit = _global_network_parameters.get("grid_culling_size", 9999.0)
-
 			for k in registry:
 				var st = registry[k]
 				var pos = st.get("pos", Vector3.ZERO)
-				# Na UI do Servidor, contabilizamos apenas quem está ATIVO dentro do Grid
-				var is_inside_aoi = true
-				if grid_enabled:
-					is_inside_aoi = absf(pos.x) <= aoi_limit and absf(pos.z) <= aoi_limit
 
-				if is_inside_aoi:
-					total_entities += 1
-					if st.get("is_peer", false):
-						count_peers += 1
-					else:
-						count_props += 1
+				total_entities += 1
+				if st.get("is_peer", false):
+					count_peers += 1
+				else:
+					count_props += 1
 		else:
 			for id in _active_visual_entities_map.keys():
 				var last_up = _active_visual_entities_map[id].get_meta("last_update", now_ms)
@@ -1022,6 +1022,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		lbl.outline_size = 4
 		mesh_inst.add_child(lbl)
 		# ---------------------------------------------------------------------
+		mesh_inst.position = pos
 		_scene_world_root_node.add_child(mesh_inst)
 		_active_visual_entities_map[id] = mesh_inst
 
@@ -1044,6 +1045,7 @@ func _update_dynamic_rings() -> void:
 		# Atualiza Presence Ring
 		var presence_ring = vis.get_node_or_null("PresenceRing") as MeshInstance3D
 		if presence_ring:
+			presence_ring.visible = _show_culling_rings
 			var target_radius = vis.get_meta("presence_radius", 20.0)
 
 			if presence_ring.mesh.outer_radius != target_radius:
@@ -1053,31 +1055,17 @@ func _update_dynamic_rings() -> void:
 		# Atualiza FOV Ring
 		if is_local:
 			var fov_ring = vis.get_node_or_null("FOVRing") as MeshInstance3D
-			if fov_ring and fov_ring.mesh.outer_radius != _client_local_culling_radius:
-				fov_ring.mesh.inner_radius = maxf(0.1, _client_local_culling_radius - 0.2)
-				fov_ring.mesh.outer_radius = _client_local_culling_radius
+			if fov_ring:
+				fov_ring.visible = _show_culling_rings
+				if fov_ring.mesh.outer_radius != _client_local_culling_radius:
+					fov_ring.mesh.inner_radius = maxf(0.1, _client_local_culling_radius - 0.2)
+					fov_ring.mesh.outer_radius = _client_local_culling_radius
 
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
-	# [Simulação do Grid System no Cliente]
-	# Em uma build real, o Servidor aplicaria o Culling e não mandaria pacotes desnecessários.
-	# Como o Culling Espacial C++ ainda será injetado no futuro, simulamos o bloqueio aqui no recebedor para testes de UI.
-	if _global_network_parameters.get("grid_culling_enabled", false):
-		var aoi_limit = _global_network_parameters.get("grid_culling_size", 9999.0)
-
-		# Se o próprio jogador local saiu do Grid, a rede é cortada para ele (Não vê mais nada).
-		if (
-			absf(_client_predicted_position.x) > aoi_limit
-			or absf(_client_predicted_position.z) > aoi_limit
-		):
-			return
-
-		# Se a entidade relatada (prop ou outro peer) saiu do Grid, bloqueamos a atualização do last_update.
-		if absf(pos.x) > aoi_limit or absf(pos.z) > aoi_limit:
-			return
 
 	# Recepção de Snapshot (Estado Oficial do Servidor).
-	# Ignoramos a nós mesmos (owner == get_unique_id) porque a movimentação do nosso avatar 
+	# Ignoramos a nós mesmos (owner == get_unique_id) porque a movimentação do nosso avatar
 	# é baseada em Client-Side Prediction (Zero Input Lag), não em comandos do servidor.
 	if owner != QuanticNet.get_unique_id():
 		if not _active_visual_entities_map.has(owner):
@@ -1224,6 +1212,46 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
 			_client_local_culling_radius = maxf(2.0, _client_local_culling_radius - 2.0)
 			print("[DEMO] View Distance: ", _client_local_culling_radius)
+
+		elif event.keycode == KEY_H:
+			_show_culling_rings = not _show_culling_rings
+			for id in _active_visual_entities_map.keys():
+				var vis = _active_visual_entities_map[id]
+				var presence_ring = vis.get_node_or_null("PresenceRing") as MeshInstance3D
+				if presence_ring:
+					presence_ring.visible = _show_culling_rings
+				var fov_ring = vis.get_node_or_null("FOVRing") as MeshInstance3D
+				if fov_ring:
+					fov_ring.visible = _show_culling_rings
+			print("[DEMO] Culling Rings: ", "Exibidos" if _show_culling_rings else "Ocultos")
+
+		elif event.keycode >= KEY_1 and event.keycode <= KEY_0:
+			var target_tick = -1.0
+			var target_cull = -1.0
+
+			match event.keycode:
+				KEY_1:
+					target_tick = 20.0
+				KEY_2:
+					target_tick = 30.0
+				KEY_3:
+					target_tick = 60.0
+				KEY_4:
+					target_tick = 5.0
+				KEY_5:
+					target_tick = 1.0
+				KEY_6:
+					target_cull = 5.0
+				KEY_7:
+					target_cull = 10.0
+				KEY_8:
+					target_cull = 20.0
+				KEY_9:
+					target_cull = 50.0
+				KEY_0:
+					target_cull = 100.0
+
+			_request_profile_change(target_tick, target_cull)
 
 # ==============================================================================
 # PERFIS DINÂMICOS (TESTE DE ARQUITETURA)

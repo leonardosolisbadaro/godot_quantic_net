@@ -1,4 +1,6 @@
-#include "qn_priority_accumulator.hpp"
+import sys
+
+content = """#include "qn_priority_accumulator.hpp"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -134,3 +136,7 @@ PackedInt32Array QNPriorityAccumulator::select_entities(int peer_id, const Packe
 	
 	return selected;
 }
+"""
+
+with open('src/core/qn_priority_accumulator.cpp', 'w', encoding='utf-8') as f:
+    f.write(content)
