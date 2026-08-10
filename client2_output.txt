@@ -2,4 +2,4 @@ Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
 
 [DEMO] Iniciando CLIENTE QuanticNet...
 [DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.
-[DEMO] Peer Joined: 2
+[DEMO] Peer Joined: 3

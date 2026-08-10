@@ -4,17 +4,17 @@ Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
 [DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.
 [DEMO] Peer Joined: 2
 [DEMO] Peer Joined: 3
-[DEMO] Server RAM (Static): 61.14 MB | FPS: 59
-[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 6. Savings so far: 45904 bytes
-[QNHostSession] Bandwidth Stats (Peer 1): 3 entities sent out of 6. Savings so far: 92359 bytes
-[DEMO] Server RAM (Static): 61.24 MB | FPS: 60
-[QNHostSession] Bandwidth Stats (Peer 1): 0 entities sent out of 6. Savings so far: 140391 bytes
-[DEMO] Server RAM (Static): 61.32 MB | FPS: 59
-[QNHostSession] Bandwidth Stats (Peer 1): 6 entities sent out of 6. Savings so far: 188917 bytes
-[QNHostSession] Bandwidth Stats (Peer 1): 3 entities sent out of 6. Savings so far: 236778 bytes
+[DEMO] Server RAM (Static): 61.13 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 6935 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 14535 bytes
+[DEMO] Server RAM (Static): 61.23 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 22135 bytes
+[DEMO] Server RAM (Static): 61.30 MB | FPS: 59
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 29735 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 37335 bytes
 [DEMO] Server RAM (Static): 61.39 MB | FPS: 60
-[QNHostSession] Bandwidth Stats (Peer 1): 3 entities sent out of 6. Savings so far: 285285 bytes
-[QNHostSession] Bandwidth Stats (Peer 1): 3 entities sent out of 6. Savings so far: 333526 bytes
-[DEMO] Server RAM (Static): 61.48 MB | FPS: 60
-[QNHostSession] Bandwidth Stats (Peer 1): 3 entities sent out of 6. Savings so far: 380969 bytes
-[DEMO] Server RAM (Static): 61.55 MB | FPS: 59
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 44935 bytes
+[DEMO] Server RAM (Static): 61.46 MB | FPS: 60
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 52535 bytes
+[QNHostSession] Bandwidth Stats (Peer 3): 5 entities sent out of 6. Savings so far: 60135 bytes
+[DEMO] Server RAM (Static): 61.54 MB | FPS: 60

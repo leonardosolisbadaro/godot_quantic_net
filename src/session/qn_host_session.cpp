@@ -320,11 +320,27 @@ void QNHostSession::tick_broadcast(int now) {
 			continue;
 		}
 		if (should_broadcast) {
-			if (world_snapshot.has(id)) {
-				current_states[id] = world_snapshot[id];
-			}
+			Dictionary st_copy = _get_pooled_dict();
+			st_copy["pos"] = st["pos"];
+			st_copy["rot"] = st["rot"];
+			st_copy["custom_id"] = st["custom_id"];
+			st_copy["ts"] = st["ts"];
+			st_copy["seq"] = _server_seq;
+			current_states[id] = st_copy;
+			
 			st["last_broadcast_ts"] = now;
 			_registry[id] = st;
+		} else {
+			if (world_snapshot.has(id)) {
+				Dictionary prev_st = world_snapshot[id];
+				Dictionary st_copy = _get_pooled_dict();
+				st_copy["pos"] = prev_st["pos"];
+				st_copy["rot"] = prev_st["rot"];
+				st_copy["custom_id"] = prev_st["custom_id"];
+				st_copy["ts"] = prev_st["ts"];
+				st_copy["seq"] = prev_st["seq"];
+				current_states[id] = st_copy;
+			}
 		}
 	}
 	
