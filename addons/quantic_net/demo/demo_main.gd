@@ -15,12 +15,12 @@
 ## - Network Emulation (NETEM): Injeção artificial de cenários adversos de rede (latência, perdas e duplicação) para testar a resiliência do Client-Side Prediction.
 ##
 ## @created 2026-08-06
-## @updated 2026-08-07
+## @updated 2026-08-10
 ##
 ## @since 0.5.0
-## @lastModifiedIn 0.6.0
+## @lastModifiedIn 0.8.0
 ##
-## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 
 extends Node3D
 

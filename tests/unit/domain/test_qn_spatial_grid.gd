@@ -11,7 +11,7 @@
 ## @since 0.5.0
 ## @lastModifiedIn 0.5.0
 ##
-## @author Leonardo S. Badaró (with Kimi k3 - Thinking & Gemini 3.1 Pro - High)
+## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 
 extends GutTest
 
