@@ -267,7 +267,9 @@ func _ready() -> void:
 		QuanticNet.host(PORT, SECRET, "127.0.0.1", MAX_PEERS, _global_network_parameters)
 
 		# O Servidor registra a si mesmo (ID 1)
-		QuanticNet.register_entity(1, true, true, _entity_profile_player)
+		# Se o seu servidor é puramente uma máquina autoritativa (não há um humano jogando nele),
+		# ele não deveria ter um corpo físico na rede
+		# QuanticNet.register_entity(1, true, true, _entity_profile_player)
 
 		# O Mundo Aberto não utiliza Regions (Instanciamento Rígido).
 		# Todos habitam o mesmo continuum espacial e são regidos unicamente pelo QNSpatialGrid.
@@ -1065,6 +1067,13 @@ func _update_dynamic_rings() -> void:
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 	# Recepção de Snapshot (Estado Oficial do Servidor).
+
+	# Se o Host também for um jogador na mesma tela (e o cubo dele precisar existir fisicamente),
+	# mas você quer forçar os clientes a ignorarem o pacote visual apenas dele, você pode bloquear
+	# a entrada no evento de recepção.
+	if owner == 1:
+		return # Descarta sumariamente os pacotes visuais do servidor
+
 	# Ignoramos a nós mesmos (owner == get_unique_id) porque a movimentação do nosso avatar
 	# é baseada em Client-Side Prediction (Zero Input Lag), não em comandos do servidor.
 	if owner != QuanticNet.get_unique_id():

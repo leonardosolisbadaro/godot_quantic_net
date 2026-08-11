@@ -66,9 +66,9 @@ Se você planeja modificar a infraestrutura em C++ (GDExtension):
 
 ---
 
-## 🌍 Hello World QuanticNet
+## 🚀 Hello World QuanticNet
 
-Aqui está o esqueleto mínimo de integração em GDScript puro (assumindo que o plugin está ativo). Crie um script `game_manager.gd` e anexe a um Node vazio na sua cena principal:
+Aqui está um exemplo completo e robusto em GDScript puro (assumindo que o plugin está ativo). Crie um script `game_manager.gd` e anexe a um Node vazio na sua cena principal. Este exemplo cobre inicialização, sinais vitais, sincronia e reconciliação (*Snapback*).
 
 ```gdscript
 extends Node
@@ -76,27 +76,90 @@ extends Node
 const PORT = 7777
 const SECRET = "chavesecreta123"
 
+# Variáveis Locais do Cliente
+var _my_position := Vector3.ZERO
+var _my_rotation := Vector3.ZERO
+var _move_speed := 5.0
+
+# Perfil Padrão para Entidades (TickRate: 60Hz, Prioridade: 1.0, Culling: 50m)
+var _player_profile := QNEntityProfile.new()
+
 func _ready() -> void:
-    # 1. Escutamos os sinais do motor
-    QuanticNet.peer_joined.connect(_on_peer_joined)
+    _player_profile.init(60.0, 1.0, 50.0)
     
-    # 2. Escolhemos o nosso papel na rede (Host ou Cliente)
+    # 1. Conectando os Sinais Vitais do Motor
+    QuanticNet.peer_joined.connect(_on_peer_joined)
+    QuanticNet.peer_left.connect(_on_peer_left)
+    QuanticNet.state_received.connect(_on_state_received)
+    QuanticNet.snapback_received.connect(_on_snapback_received)
+    
+    # 2. Roteamento via Argumentos de Linha de Comando (CLI)
     if "--server" in OS.get_cmdline_args():
-        print("Iniciando Servidor Autoritativo...")
-        # Inicializa em Modo 0 (State-Based)
-        QuanticNet.host(PORT, SECRET, "*", 32, {"network_mode": 0})
+        print("[SERVIDOR] Iniciando na porta ", PORT)
+        # Sobe o servidor autoritativo
+        QuanticNet.host(PORT, SECRET, "*", 32)
+        
+        # Opcional: Se for um Dedicated Server (invisível), NÃO registre o ID 1.
+        # QuanticNet.register_entity(1, true, true, _player_profile)
     else:
-        print("Iniciando Cliente...")
+        print("[CLIENTE] Conectando ao Host...")
         QuanticNet.join("127.0.0.1", PORT, SECRET)
 
+
+# ==========================================
+# EVENTOS DE REDE (SINAIS)
+# ==========================================
+
 func _on_peer_joined(id: int) -> void:
-    print("Novo Peer autenticado com ID: ", id)
+    print("Jogador conectou: ", id)
+    if QuanticNet.is_server():
+        # O Servidor é a Autoridade: Ele decide registrar a nova entidade na malha.
+        # Parâmetros: (id, é_humano, tem_estado_inicial, perfil)
+        QuanticNet.register_entity(id, true, true, _player_profile)
+
+func _on_peer_left(id: int) -> void:
+    print("Jogador desconectou: ", id)
+    # Aqui você removeria o Node 3D (Mesh) do jogador da sua SceneTree
+
+func _on_state_received(owner_id: int, pos: Vector3, rot: Vector3, custom: int) -> void:
+    # Ignora os próprios pacotes para não anular o Client-Side Prediction local
+    if owner_id == QuanticNet.get_unique_id():
+        return
+        
+    # Os pacotes de outros jogadores chegam aqui.
+    # O motor C++ (QNInterpBuffer) usará esses dados nos bastidores para gerar um Lerp perfeito.
+    # Na sua lógica visual (_process), você apenas chamaria:
+    # var remote_pos = QuanticNet.get_remote_state(owner_id)["pos"]
+
+func _on_snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array) -> void:
+    # O coração do Anti-Cheat arquitetural.
+    # Se o cliente tentou burlar a física, o servidor envia a posição Real (Autoritativa).
+    print("[CLIENTE] Snapback! Posição forçada pelo servidor: ", pos)
+    _my_position = pos
+    
+    # Após aceitar a posição real, re-simulamos os inputs pendentes (Lag Compensation)
+    for pending in replay_inputs:
+        var input_dir = pending["move"] # (Vector2)
+        var dt = pending["dt"]
+        _my_position += Vector3(input_dir.x, 0, input_dir.y) * _move_speed * dt
+
+
+# ==========================================
+# LOOP DE JOGO E PREDIÇÃO (CLIENT-SIDE)
+# ==========================================
 
 func _physics_process(delta: float) -> void:
+    # Apenas clientes conectados enviam movimentação
     if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-        # 3. (Apenas Cliente): Disparamos a nossa posição preditiva local para a rede.
-        # O motor em C++ absorve, empacota em Deltas e envia ao servidor.
-        QuanticNet.submit_state(Vector3.ZERO, Vector3.ZERO, 0, delta)
+        
+        # 1. Coleta Input e simula instantaneamente (Client-Side Prediction - Zero Lag)
+        var input_dir = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+        if input_dir.length() > 0:
+            _my_position += Vector3(input_dir.x, 0, input_dir.y) * _move_speed * delta
+        
+        # 2. Informa ao servidor onde VOCÊ ACHA que está (State-Based)
+        # O Motor C++ vai absorver isso, encadear num Jitter Buffer e validar.
+        QuanticNet.submit_state(_my_position, _my_rotation, 0, delta)
 ```
 
 ---
