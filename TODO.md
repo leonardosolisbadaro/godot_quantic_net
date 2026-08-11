@@ -28,9 +28,9 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 
 ### PR 2 — Tick Server-Side Independente & Dormancy
 
-* [ ] Substituir o uso de `_physics_process` no servidor por um `_process` com Acumulador Determinístico (Ex: `NET_TICK_RATE = 1.0 / 20.0`).
-* [ ] Gerenciar entidades dormentes (Sleep State): Servidor parar de transmitir estados se Δ Posição e Rotação zerarem por `N` ticks.
-* [ ] Transmitir notificação explícita de pacote `TYPE_SLEEP` ao cliente para suspender a interpolação visual do prop.
+* [x] Substituir o uso de `_physics_process` no servidor por um `_process` com Acumulador Determinístico (Ex: `NET_TICK_RATE = 1.0 / 20.0`).
+* [x] Gerenciar entidades dormentes (Sleep State): Servidor parar de transmitir estados se Δ Posição e Rotação zerarem por `N` ticks.
+* [x] Transmitir notificação explícita de pacote `TYPE_SLEEP` ao cliente para suspender a interpolação visual do prop.
 
 ---
 

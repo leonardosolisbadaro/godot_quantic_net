@@ -1,0 +1,7 @@
+Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
+D3D12 11_0 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce 940MX
+
+[DEMO] Iniciando topologia automática: 1 Servidor, 2 Clientes...
+[DEMO] Iniciando SERVIDOR QuanticNet (Porta 4242)...
+[DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.
+[DEMO] Server RAM (Static): 88.51 MB | FPS: 60

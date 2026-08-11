@@ -16,9 +16,17 @@ protected:
 	static void _bind_methods();
 
 public:
-	static constexpr int TYPE_STATE = 1;
-	static constexpr int TYPE_SNAPBACK = 2;
-	static constexpr int TYPE_PEER_LEFT = 3;
+	// --- CONNECTION / TOPOLOGY (0 - 9) ---
+	static constexpr int TYPE_PEER_LEFT = 1;
+
+	// --- PHYSICS & STATE SYNC (10 - 19) ---
+	static constexpr int TYPE_STATE = 10;
+	static constexpr int TYPE_SNAPBACK = 11;
+	static constexpr int TYPE_SLEEP = 12;
+	static constexpr int TYPE_INPUT_SNAPSHOT = 13;
+
+	// --- INTERNAL COMMANDS (20 - 31) ---
+	static constexpr int TYPE_INPUT = 20;
 
 	static const double POS_LO;
 	static const double POS_HI;

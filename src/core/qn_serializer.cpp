@@ -18,9 +18,12 @@ void QNSerializer::_bind_methods() {
 	ClassDB::bind_static_method("QNSerializer", D_METHOD("encode_state_history", "history"), &QNSerializer::encode_state_history);
 	ClassDB::bind_static_method("QNSerializer", D_METHOD("decode_state_history", "b"), &QNSerializer::decode_state_history);
 	
+	BIND_CONSTANT(TYPE_PEER_LEFT);
 	BIND_CONSTANT(TYPE_STATE);
 	BIND_CONSTANT(TYPE_SNAPBACK);
-	BIND_CONSTANT(TYPE_PEER_LEFT);
+	BIND_CONSTANT(TYPE_SLEEP);
+	BIND_CONSTANT(TYPE_INPUT_SNAPSHOT);
+	BIND_CONSTANT(TYPE_INPUT);
 }
 
 PackedByteArray QNSerializer::encode_state_seq(int seq, const Vector3 &pos, const Vector3 &rot, int ts_msec, int custom_id) {

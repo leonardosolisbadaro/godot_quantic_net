@@ -30,7 +30,7 @@ func _new_session(my_id := 2) -> RefCounted:
 
 
 func _echo_pkt(owner: int, seq: int, server_ts: int) -> PackedByteArray:
-	var pkt := PackedByteArray([1]) # 1 = TYPE_STATE
+	var pkt := PackedByteArray([QNSerializer.TYPE_STATE]) # 1 = TYPE_STATE
 	pkt.resize(5)
 	pkt.encode_u32(1, owner)
 	pkt.append_array(QNSerializer.encode_state_seq(seq, Vector3.ZERO, Vector3.ZERO, server_ts, 0))

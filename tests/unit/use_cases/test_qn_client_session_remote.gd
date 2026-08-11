@@ -30,7 +30,7 @@ func _new_session(my_id := 2) -> RefCounted:
 
 
 func _state_from(owner: int, seq: int, pos: Vector3, ts: int) -> PackedByteArray:
-	var pkt := PackedByteArray([1]) # 1 = TYPE_STATE
+	var pkt := PackedByteArray([QNSerializer.TYPE_STATE]) # 1 = TYPE_STATE
 	pkt.resize(5)
 	pkt.encode_u32(1, owner)
 	pkt.append_array(QNSerializer.encode_state_seq(seq, pos, Vector3.ZERO, ts, 0))
@@ -43,7 +43,7 @@ func _snapshot_from(seq: int) -> PackedByteArray:
 	buf.write_bits(0, 16) # ack
 	buf.write_bits(1000, 32) # server_now
 	buf.write_bits(0, 8) # num_entities
-	var pkt = PackedByteArray([4]) # TYPE_SNAPSHOT
+	var pkt = PackedByteArray([QNSerializer.TYPE_INPUT_SNAPSHOT]) # TYPE_SNAPSHOT
 	pkt.append_array(buf.get_buffer())
 	return pkt
 
@@ -100,6 +100,6 @@ func test_pacote_corrompido_ignorado() -> void:
 	# Arrange
 	var sess := _new_session()
 	# Act
-	sess.handle_packet(PackedByteArray([1, 2]), 1000)
+	sess.handle_packet(PackedByteArray([QNSerializer.TYPE_STATE, 2]), 1000)
 	# Assert
 	assert_eq(sess.remote_state(0, 1000), { }, "nada registrado")

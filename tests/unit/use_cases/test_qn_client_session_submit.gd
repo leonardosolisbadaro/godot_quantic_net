@@ -66,7 +66,7 @@ func test_pacote_tem_formato_do_protocolo_com_seq_crescente() -> void:
 			sess.submit_state(Vector3(i, 0, 0), Vector3.ZERO, 0, 0.02, 1000 + (i * 3 + j) * 20)
 	# Assert: seq 1 e 2, tipo STATE, posicao quantizada
 	assert_eq(_sent.size(), 2)
-	assert_eq(_sent[0]["data"].decode_u8(0), 1) # TYPE_STATE
+	assert_eq(_sent[0]["data"].decode_u8(0), QNSerializer.TYPE_STATE) # TYPE_STATE
 	var hist1: Array = QNSerializer.decode_state_history(_sent[0]["data"].slice(3))
 	var hist2: Array = QNSerializer.decode_state_history(_sent[1]["data"].slice(3))
 	assert_eq(hist1[0]["seq"], 1, "primeiro envio seq=1")

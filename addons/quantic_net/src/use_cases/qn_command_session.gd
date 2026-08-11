@@ -16,9 +16,6 @@ extends RefCounted
 
 signal input_tick(peer_id: int, sequence: int, input_mask: int, look_dir: Vector2)
 signal peer_rejected(peer_id: int, reason: String, strikes: int)
-
-const TYPE_INPUT = 5
-
 var _buffers := {} # peer_id -> QNServerJitterBuffer
 var _send_cb: Callable
 var _tick_rate_ms: int = 50
@@ -49,7 +46,7 @@ func on_client_input(peer_id: int, data: PackedByteArray, current_time: int) -> 
 		return
 		
 	var type = data.decode_u8(0)
-	if type != TYPE_INPUT:
+	if type != QNSerializer.TYPE_INPUT:
 		return
 		
 	var seq = data.decode_u16(1)

@@ -33,6 +33,8 @@ private:
 	std::unordered_map<int, Ref<QNEntityProfile>> _profiles;
 	std::vector<int> _active_entities;
 	std::map<int, RegionData> _regions; // Region ID -> RegionData
+	std::unordered_map<int, int> _dormancy_ticks;
+	int _dormancy_threshold_ticks = 60;
 	int _server_seq;
 	std::deque<QNWorldSnapshot> _world_history;
 	Ref<QNPriorityAccumulator> _accumulator;
@@ -53,6 +55,7 @@ public:
 	~QNHostSession();
 
 	void set_validator(const Ref<RefCounted> &v);
+	void set_dormancy_threshold(int ticks);
 	Ref<RefCounted> get_validator() const;
 	
 	void _on_validator_peer_rejected(int id, String reason, int strikes);

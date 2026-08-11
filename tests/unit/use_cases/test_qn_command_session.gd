@@ -45,7 +45,7 @@ func test_must_allocate_and_free_buffers_based_on_connection_lifecycle() -> void
 
 	var pkt = PackedByteArray()
 	pkt.resize(13)
-	pkt.encode_u8(0, sut.TYPE_INPUT)
+	pkt.encode_u8(0, QNSerializer.TYPE_INPUT)
 	pkt.encode_u16(1, 1)
 
 	# Act 1: Sem autenticar (Ignora)
@@ -82,7 +82,7 @@ func test_must_parse_input_packet_and_emit_tick() -> void:
 
 	var pkt = PackedByteArray()
 	pkt.resize(13)
-	pkt.encode_u8(0, sut.TYPE_INPUT)
+	pkt.encode_u8(0, QNSerializer.TYPE_INPUT)
 	pkt.encode_u16(1, 100) # seq
 	pkt.encode_u16(3, 5) # mask
 	pkt.encode_float(5, 1.0) # dir_x
@@ -112,7 +112,7 @@ func test_must_ignore_invalid_or_unregistered_packets() -> void:
 	sut.input_tick.connect(_on_input_tick)
 	sut.on_peer_authenticated(7)
 
-	var bad_size_pkt = PackedByteArray([sut.TYPE_INPUT, 1, 2, 3]) # curto
+	var bad_size_pkt = PackedByteArray([QNSerializer.TYPE_INPUT, 1, 2, 3]) # curto
 	var bad_type_pkt = PackedByteArray()
 	bad_type_pkt.resize(13)
 	bad_type_pkt.encode_u8(0, 99) # Tipo invalido

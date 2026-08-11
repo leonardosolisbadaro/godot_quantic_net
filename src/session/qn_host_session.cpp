@@ -29,6 +29,7 @@ QNHostSession::~QNHostSession() {
 void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_validator", "validator"), &QNHostSession::set_validator);
 	ClassDB::bind_method(D_METHOD("get_validator"), &QNHostSession::get_validator);
+	ClassDB::bind_method(D_METHOD("set_dormancy_threshold", "ticks"), &QNHostSession::set_dormancy_threshold);
 	ClassDB::bind_method(D_METHOD("register_entity", "entity_id", "is_peer", "has_initial_state", "profile"), &QNHostSession::register_entity, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("on_peer_authenticated", "peer_id", "profile"), &QNHostSession::on_peer_authenticated, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("unregister_entity", "entity_id"), &QNHostSession::unregister_entity);
@@ -56,6 +57,10 @@ void QNHostSession::_bind_methods() {
 		ADD_SIGNAL(MethodInfo("snapback_requested", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::PACKED_BYTE_ARRAY, "pkt")));
 	ADD_SIGNAL(MethodInfo("packet_ready", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::PACKED_BYTE_ARRAY, "data")));
 	ADD_SIGNAL(MethodInfo("peer_rejected", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::STRING, "reason"), PropertyInfo(Variant::INT, "strikes")));
+}
+
+void QNHostSession::set_dormancy_threshold(int ticks) {
+	_dormancy_threshold_ticks = ticks;
 }
 
 void QNHostSession::set_validator(const Ref<RefCounted> &v) {
@@ -93,6 +98,7 @@ void QNHostSession::clear_regions() {
 void QNHostSession::register_entity(int entity_id, bool is_peer, bool has_initial_state, Ref<QNEntityProfile> profile) {
 	if (_registry.find(entity_id) == _registry.end()) {
 		_active_entities.push_back(entity_id);
+	_dormancy_ticks[entity_id] = 0;
 	}
 	QNEntityState st;
 	st.is_peer = is_peer;
@@ -236,6 +242,35 @@ void QNHostSession::tick_broadcast(int now) {
 	QNWorldSnapshot world_snapshot;
 	world_snapshot.seq = _server_seq;
 	
+	std::vector<int> fell_asleep_this_tick;
+	std::vector<int> sleeping_entities;
+	
+	for (int i = 0; i < _active_entities.size(); i++) {
+		int id = _active_entities[i];
+		QNEntityState &st = _registry[id];
+		if (!st.has_state) continue;
+		
+		if (_world_history.size() > 0) {
+			const QNWorldSnapshot &prev = _world_history.front();
+			if (prev.states.find(id) != prev.states.end()) {
+				const QNEntityState &p_st = prev.states.at(id);
+				if (p_st.pos.is_equal_approx(st.pos) && p_st.rot.is_equal_approx(st.rot)) {
+					_dormancy_ticks[id]++;
+				} else {
+					_dormancy_ticks[id] = 0;
+				}
+			}
+		}
+		
+		if (_dormancy_ticks[id] >= _dormancy_threshold_ticks) {
+			if (_dormancy_ticks[id] == _dormancy_threshold_ticks) {
+				fell_asleep_this_tick.push_back(id);
+				_dormancy_ticks[id]++;
+			}
+			sleeping_entities.push_back(id);
+		}
+	}
+	
 	for (int i = 0; i < _active_entities.size(); i++) {
 		int id = _active_entities[i];
 		QNEntityState &st = _registry[id];
@@ -271,6 +306,10 @@ void QNHostSession::tick_broadcast(int now) {
 		int id = _active_entities[i];
 		QNEntityState &st = _registry[id];
 		if (!st.has_state) continue;
+		
+		if (std::find(sleeping_entities.begin(), sleeping_entities.end(), id) != sleeping_entities.end()) {
+			continue; // Do not serialize sleeping entities
+		}
 		
 		double tick_rate_hz = 20.0;
 		if (_profiles.find(id) != _profiles.end()) {
@@ -370,7 +409,16 @@ void QNHostSession::tick_broadcast(int now) {
 			}
 		}
 		
+		for (int asleep_id : fell_asleep_this_tick) {
+			PackedByteArray sleep_pkt;
+			sleep_pkt.resize(5);
+			sleep_pkt.encode_u8(0, QNSerializer::TYPE_SLEEP);
+			sleep_pkt.encode_u32(1, asleep_id);
+			emit_signal("packet_ready", id, sleep_pkt);
+		}
+		
 		_write_buf->seek(0);
+		_write_buf->write_bits(QNSerializer::TYPE_INPUT_SNAPSHOT, 8);
 		_write_buf->write_bits(_server_seq, 16);
 		_write_buf->write_bits(st.client_seq, 16);
 		_write_buf->write_bits(now & 0xFFFFFFFF, 32);

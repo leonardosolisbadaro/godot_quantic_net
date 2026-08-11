@@ -57,7 +57,9 @@ const OUTLINE_THIN := 3
 # Constantes de Gameplay (Valores Extraídos para Configuração)
 const DEFAULT_VIEW_DISTANCE := 12.0 # Raio dinâmico no qual o Cliente decide renderizar ou ocultar entidades locais.
 const CLIENT_MOVE_SPEED := 6.0 # Deslocamento cravado do avatar. Variável blindada que o Servidor usará no Anti-Speedhack.
-const SHOOT_COOLDOWN_MS := 200 # Limita o spam de "Zero-RPC" para evitar overhead na predição de inputs.
+const GAME_OP_SHOOT_HITSCAN = 32
+const GAME_OP_SHOOT_PHYSICS = 33
+const SHOOT_COOLDOWN_MS := 200
 const SERVER_CULL_TIMEOUT_MS := 2000 # Define quanto tempo o Client aguarda antes de "matar" uma entidade visualmente por inanição de pacotes.
 const INTERP_LERP_SPEED := 5.0 # Suavização visual (Client-Side Interpolation)
 
@@ -152,6 +154,8 @@ var _global_network_parameters = {
 	"netem_latency": NETEM_LATENCY_DEFAULT, # Injeção de RTT base forçado na rede local (Loopback).
 	"netem_jitter": NETEM_JITTER_DEFAULT, # Flutuação randômica do atraso, imitando redes Mobile 4G instáveis.
 	"netem_dup": NETEM_DUP_DEFAULT, # Simula retransmissões fantasmas em roteadores congestionados.
+	"server_tick_rate": 20.0, # Taxa fixa do loop de rede desacoplado da engine de física.
+	"dormancy_threshold_ticks": 60, # Ticks sem movimento até declarar a entidade inerte e cessar o envio na banda.
 	# Determina se o Spatial Partitioning (Grid) C++ filtrará o envio global.
 	# Quando habilitado, o servidor estilhaça o mapa em setores menores, economizando a largura de banda.
 	# "grid_culling_enabled": true, # Obsoleto - Substituído por QNSpatialGrid no Core
@@ -194,6 +198,7 @@ var _packet_loss_maximum: float = 0.0
 # ==============================================================================
 var _scene_world_root_node: Node3D
 var _active_visual_entities_map: Dictionary = { }
+var _sleeping_entities: Dictionary = { }
 var _client_predicted_position: Vector3 = Vector3(0, 1.0, 0)
 var _is_auto_movement_enabled: bool = false
 var _auto_movement_center_origin: Vector3 = Vector3.ZERO
@@ -310,11 +315,15 @@ func _ready() -> void:
 	# Delega respostas de eventos de rede originados no C++ para handlers locais no GDScript. Abordagem preferível ao pooling síncrono no _process para evitar gargalos.
 	# O QuanticNet emite sinais limpos quando eventos ocorrem nas entranhas do C++.
 	QuanticNet.connection_state_changed.connect(_on_conn_state)
+	QuanticNet.peer_sleep.connect(_on_peer_sleep)
+
+	# Autenticação e Topologia
 	QuanticNet.peer_joined.connect(_on_peer_joined)
 	QuanticNet.peer_left.connect(_on_peer_left)
 	QuanticNet.pong_received.connect(_on_pong_received)
 	QuanticNet.state_received.connect(_on_state)
 	QuanticNet.snapback_received.connect(_on_snapback)
+	QuanticNet.custom_packet_received.connect(_on_custom_packet_received)
 
 	# Instancia o ambiente 3D mínimo (Lighting, Floor, Culling Rings) isolando lógicas de apresentação.
 	_setup_scene()
@@ -646,20 +655,23 @@ func _physics_process(delta: float) -> void:
 		_client_predicted_position += input_dir * speed * delta
 		_update_visual(QuanticNet.get_unique_id(), _client_predicted_position, true)
 
-		var custom_input = 0
 		var now = Time.get_ticks_msec()
 		if now - _cooldown_timer_last_shot_ms > SHOOT_COOLDOWN_MS:
-			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-				custom_input = 1 # Laser Hitscan
+			if not QuanticNet.is_server():
 				_cooldown_timer_last_shot_ms = now
 				_spawn_laser(_client_predicted_position, LASER_COLOR_HITSCAN)
+				_send_shoot_packet(GAME_OP_SHOOT_HITSCAN, _client_predicted_position)
+			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+				_cooldown_timer_last_shot_ms = now
+				_spawn_laser(_client_predicted_position, LASER_COLOR_HITSCAN)
+				_send_shoot_packet(GAME_OP_SHOOT_HITSCAN, _client_predicted_position)
 			elif Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-				custom_input = 2 # Projétil Físico
 				_cooldown_timer_last_shot_ms = now
 				_spawn_laser(_client_predicted_position, LASER_COLOR_PHYSICS)
+				_send_shoot_packet(GAME_OP_SHOOT_PHYSICS, _client_predicted_position)
 
 		# Envia a predição otimista de forma cravada para a Engine C++ assinar e rotear
-		QuanticNet.submit_state(_client_predicted_position, Vector3.ZERO, custom_input, delta)
+		QuanticNet.submit_state(_client_predicted_position, Vector3.ZERO, 0, delta)
 
 
 func _process(_delta: float) -> void:
@@ -685,9 +697,10 @@ func _process(_delta: float) -> void:
 
 					# O Servidor define a malha absoluta, então se a entidade chegou no pacote, ela está visível no servidor.
 					# Só precisamos nos preocupar com o culling local e se há atualização recente.
+					var is_sleeping = _sleeping_entities.get(id, false)
 					var is_visible = (
 						(dist <= _client_local_culling_radius)
-						and (now - last_up <= SERVER_CULL_TIMEOUT_MS)
+						and (is_sleeping or (now - last_up <= SERVER_CULL_TIMEOUT_MS))
 					)
 
 					if not visual.visible and is_visible:
@@ -987,12 +1000,18 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 # ==============================================================================
 
 
+func _on_peer_sleep(owner: int) -> void:
+	print("[CLIENT] Recebeu TYPE_SLEEP: Entidade %d entrou em Dormancy!" % owner)
+	_sleeping_entities[owner] = true
+
+
 func _on_conn_state(state: int) -> void:
 	# Máquina de estados global exposta pelo Autoload do QuanticNet
 	match state:
 		QuanticNet.ConnectionState.DISCONNECTED:
 			_ui_label_connection_status.text = "DISCONNECTED"
 			_ui_label_connection_status.add_theme_color_override("font_color", Color.GRAY)
+			_clear_world()
 		QuanticNet.ConnectionState.CONNECTING:
 			_ui_label_connection_status.text = "CONNECTING..."
 			_ui_label_connection_status.add_theme_color_override("font_color", Color.YELLOW)
@@ -1005,6 +1024,16 @@ func _on_conn_state(state: int) -> void:
 		QuanticNet.ConnectionState.FAILED:
 			_ui_label_connection_status.text = "FAILED"
 			_ui_label_connection_status.add_theme_color_override("font_color", Color.RED)
+			_clear_world()
+
+
+func _clear_world() -> void:
+	# Purga o registro visual local. 
+	# Sem o aval do servidor (Autoridade), qualquer entidade remanescente é apenas um fantasma estéril.
+	_active_visual_entities_map.clear()
+	if _scene_world_root_node:
+		for child in _scene_world_root_node.get_children():
+			child.queue_free()
 
 
 func _on_pong_received(rtt: float, offset: float) -> void:
@@ -1141,6 +1170,7 @@ func _update_dynamic_rings() -> void:
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 	# Recepção de Snapshot (Estado Oficial do Servidor).
+	_sleeping_entities.erase(owner)
 
 	# Se o Host também for um jogador na mesma tela (e o cubo dele precisar existir fisicamente),
 	# mas você quer forçar os clientes a ignorarem o pacote visual apenas dele, você pode bloquear
@@ -1157,16 +1187,9 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 		var visual = _active_visual_entities_map[owner]
 		visual.set_meta("last_update", Time.get_ticks_msec())
 
-		# Disparo propagado via C++
-		if custom == 1:
-			# Disparo Hitscan (Raio Laser) propagado via C++
-			_spawn_laser(pos, LASER_COLOR_HITSCAN)
-		elif custom == 2:
-			# Disparo de Projétil Físico
-			_spawn_laser(pos, LASER_COLOR_PHYSICS)
-
 
 func _spawn_laser(start_pos: Vector3, color: Color) -> void:
+	print("[DEBUG] Spawning laser at: ", start_pos, " | Is Server: ", QuanticNet.is_server())
 	var mesh = MeshInstance3D.new()
 	var box = BoxMesh.new()
 	box.size = LASER_MESH_SIZE
@@ -1379,3 +1402,33 @@ func client_update_visual_radius(peer_id: int, new_radius: float) -> void:
 	if _active_visual_entities_map.has(peer_id):
 		var vis = _active_visual_entities_map[peer_id]
 		vis.set_meta("presence_radius", new_radius)
+
+
+func _send_shoot_packet(ptype: int, pos: Vector3) -> void:
+	var data = PackedByteArray()
+	data.resize(12)
+	data.encode_float(0, pos.x)
+	data.encode_float(4, pos.y)
+	data.encode_float(8, pos.z)
+	QuanticNet.send_game_packet(1, ptype, data, true) # Send to Server
+
+
+func _on_custom_packet_received(peer_id: int, ptype: int, data: PackedByteArray) -> void:
+	print("[DEBUG] Custom Packet from %d (Type %d, Size %d)" % [peer_id, ptype, data.size()])
+	if ptype == GAME_OP_SHOOT_HITSCAN or ptype == GAME_OP_SHOOT_PHYSICS:
+		if data.size() >= 12:
+			var pos = Vector3(data.decode_float(0), data.decode_float(4), data.decode_float(8))
+			var color = LASER_COLOR_HITSCAN if ptype == GAME_OP_SHOOT_HITSCAN else LASER_COLOR_PHYSICS
+
+			if QuanticNet.is_server():
+				# Broadcast for other clients
+				for other_id in QuanticNet.get_active_peers():
+					if other_id != peer_id and other_id > 1:
+						QuanticNet.send_game_packet(other_id, ptype, data, true)
+
+				# Se o servidor tbm for visual, spawna localmente
+				if not OS.has_feature("dedicated_server") and peer_id != 1:
+					_spawn_laser(pos, color)
+			else:
+				# Sou cliente e recebi isso do servidor (significa q outro cliente atirou)
+				_spawn_laser(pos, color)

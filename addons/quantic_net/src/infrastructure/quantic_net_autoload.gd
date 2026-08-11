@@ -23,10 +23,12 @@ signal connection_failed_reason(error: int)
 signal peer_joined(id: int)
 signal peer_left(id: int)
 signal state_received(owner: int, pos: Vector3, rot: Vector3, custom: int)
+signal peer_sleep(owner: int)
 signal pong_received(rtt: float, offset: float)
 signal snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array)
 signal input_tick(peer_id: int, sequence: int, input_mask: int, look_dir: Vector2)
 signal peer_rejected(id: int, reason: String, strikes: int)
+signal custom_packet_received(peer_id: int, ptype: int, data: PackedByteArray)
 
 const MODE_STATE_BASED = 0
 const MODE_COMMAND_BASED = 1
@@ -57,6 +59,8 @@ var _client_session: RefCounted = null # QNClientSession
 var _secret: String = ""
 var _is_server: bool = false
 var _netem_on: bool = false
+var _server_tick_rate: float = 20.0
+var _tick_accumulator: float = 0.0
 
 var _telemetry_map: Dictionary = { }
 
@@ -79,6 +83,13 @@ func get_unique_id() -> int:
 	if _hook != null and _hook.get_base() != null:
 		return _hook.get_base().get_unique_id()
 	return 0
+
+
+func _on_dtls_server_ready(success: bool) -> void:
+	if success:
+		print("[QuanticNet] DTLS Bootstrapped Successfully (Server)")
+	else:
+		push_error("[QuanticNet] Failed to Bootstrap DTLS (Server)")
 
 
 func _set_state(s: int) -> void:
@@ -151,6 +162,8 @@ func host(
 		)
 	else:
 		_host_session = QNHostSession.new()
+		_server_tick_rate = config.get("server_tick_rate", 20.0)
+		_host_session.set_dormancy_threshold(config.get("dormancy_threshold_ticks", 60))
 		var validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
 		validator.configure(config)
 		_host_session.set_validator(validator)
@@ -172,7 +185,7 @@ func host(
 	_hook.peer_connected.connect(
 		func(id: int) -> void:
 			if _is_server:
-				# print("HOOK PEER CONNECTED: ", id)
+				_telemetry_map[id] = QNTelemetryAggregator.new()
 				peer_joined.emit(id)
 	)
 	_hook.peer_disconnected.connect(
@@ -237,6 +250,8 @@ func join(ip: String, port: int, secret: String, netem: bool = false, config: Di
 		func(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 			state_received.emit(owner, pos, rot, custom)
 	)
+	_client_session.peer_sleep.connect(func(owner: int) -> void:
+			peer_sleep.emit(owner))
 	_client_session.snapback_received.connect(
 		func(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Array) -> void:
 			snapback_received.emit(seq, pos, rot, reason, replay)
@@ -250,12 +265,18 @@ func join(ip: String, port: int, secret: String, netem: bool = false, config: Di
 			var my_id: int = _hook.get_base().get_unique_id()
 			_client_session.set_local_id(my_id)
 			_telemetry_map[my_id] = QNTelemetryAggregator.new()
+			print("[DEBUG] ADDED PEER ", my_id, ". NOW MAP HAS: ", _telemetry_map.keys())
 			_set_state(ConnectionState.CONNECTED)
 			peer_joined.emit(my_id)
 	)
 	_hook.peer_connected.connect(
-		func(id: int) -> void:
-			_telemetry_map[id] = QNTelemetryAggregator.new()
+		func _on_peer_connected (id: int) -> void:
+			if _is_server:
+				_telemetry_map[id] = QNTelemetryAggregator.new()
+				print("[DEBUG] ADDED PEER ", id, ". NOW MAP HAS: ", _telemetry_map.keys())
+			else:
+				# Even on clients, we must populate the map so get_active_peers() sees them
+				_telemetry_map[id] = QNTelemetryAggregator.new()
 			if id != SERVER_PEER_ID:
 				peer_joined.emit(id)
 	)
@@ -274,16 +295,25 @@ func join(ip: String, port: int, secret: String, netem: bool = false, config: Di
 
 
 func _physics_process(delta: float) -> void:
+	pass
+
+
+func _process(delta: float) -> void:
 	if _hook == null:
 		return
 	if _is_server and _state == ConnectionState.CONNECTED:
-		if _host_session:
-			_host_session.tick_broadcast(Time.get_ticks_msec())
-		if _command_session:
-			_command_session.tick_broadcast(Time.get_ticks_msec())
+		_tick_accumulator += delta
+		var tick_time = 1.0 / _server_tick_rate
+		while _tick_accumulator >= tick_time:
+			_tick_accumulator -= tick_time
+			if _host_session:
+				_host_session.tick_broadcast(Time.get_ticks_msec())
+			if _command_session:
+				_command_session.tick_broadcast(Time.get_ticks_msec())
 	elif not _is_server:
 		if (
-			_hook.get_base().get_multiplayer_peer().get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+			_hook.get_base().get_multiplayer_peer().get_connection_status()
+			== MultiplayerPeer.CONNECTION_CONNECTED
 			and _state == ConnectionState.CONNECTING
 		):
 			_set_state(ConnectionState.AUTHENTICATING)
@@ -327,13 +357,14 @@ func _on_client_auth_callback(id: int, data: PackedByteArray) -> void:
 
 
 func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -> void:
+	if data.size() >= 1 and data[0] >= 32:
+		custom_packet_received.emit(peer_id, data[0], data.slice(1))
+		return
+
 	if _is_server:
 		if _host_session and data.size() >= 20 and data[0] == QNSerializer.TYPE_STATE:
 			_host_session.on_client_snapshot(peer_id, data.slice(1), Time.get_ticks_msec())
-		elif (
-			_command_session and data.size() >= 1
-			and data[0] == preload("res://addons/quantic_net/src/use_cases/qn_command_session.gd").TYPE_INPUT
-		):
+		elif (_command_session and data.size() >= 1 and data[0] == QNSerializer.TYPE_INPUT):
 			_command_session.on_client_input(peer_id, data, Time.get_ticks_msec())
 	else:
 		if data.size() >= 1:
@@ -344,7 +375,7 @@ func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -
 				peer_left.emit(left_id)
 			else:
 				_client_session.handle_packet(data, Time.get_ticks_msec())
-				if data[0] == 4: # TYPE_SNAPSHOT
+				if data[0] == QNSerializer.TYPE_INPUT_SNAPSHOT:
 					var my_id = _hook.get_base().get_unique_id()
 					if _telemetry_map.has(my_id):
 						_telemetry_map[my_id].push_loss(_client_session.loss_of(SERVER_PEER_ID))
@@ -373,9 +404,7 @@ func get_server_time() -> int:
 func _on_host_packet_ready(peer_id: int, data: PackedByteArray) -> void:
 	if not _hook.get_base().get_peers().has(peer_id):
 		return
-	var pkt := PackedByteArray([4]) # 4 = TYPE_SNAPSHOT
-	pkt.append_array(data)
-	_hook.send_custom(peer_id, pkt, CH_STATE, TRANSFER_UNRELIABLE)
+	_hook.send_custom(peer_id, data, CH_STATE, TRANSFER_UNRELIABLE)
 
 
 func _on_client_submit_packet(to: int, data: PackedByteArray, ch: int, mode: int) -> void:
@@ -393,7 +422,7 @@ func submit_input(sequence: int, input_mask: int, look_dir: Vector2) -> void:
 		pkt.resize(13)
 		pkt.encode_u8(
 			0,
-			preload("res://addons/quantic_net/src/use_cases/qn_command_session.gd").TYPE_INPUT,
+			QNSerializer.TYPE_INPUT,
 		)
 		pkt.encode_u16(1, sequence)
 		pkt.encode_u16(3, input_mask)
@@ -574,3 +603,30 @@ func set_netem_config(loss_pct: float, latency_ms: int, jitter_ms: int, dup_pct:
 
 func _exit_tree() -> void:
 	disconnect_net(true)
+
+
+func get_active_peers() -> Array:
+	return _telemetry_map.keys()
+
+
+func send_game_packet(
+	to_peer: int,
+	ptype: int,
+	data: PackedByteArray = PackedByteArray(),
+	reliable: bool = true,
+) -> void:
+	if ptype < 32:
+		push_error("Game OpCodes must be >= 32. Reserved OpCode used: %d" % ptype)
+		return
+	if _hook == null:
+		return
+
+	var pkt = PackedByteArray()
+	pkt.resize(1 + data.size())
+	pkt.encode_u8(0, ptype)
+	if data.size() > 0:
+		for i in range(data.size()):
+			pkt.encode_u8(1 + i, data[i])
+
+	var mode = MultiplayerPeer.TRANSFER_MODE_RELIABLE if reliable else MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
+	_hook.send_custom(to_peer, pkt, CH_STATE, mode)

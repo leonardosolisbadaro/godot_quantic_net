@@ -30,7 +30,7 @@ func _new_session(my_id := 2) -> RefCounted:
 
 
 func _snapback_pkt(seq: int, pos: Vector3, reason: int) -> PackedByteArray:
-	var pkt := PackedByteArray([2]) # 2 = TYPE_SNAPBACK
+	var pkt := PackedByteArray([QNSerializer.TYPE_SNAPBACK]) # 2 = TYPE_SNAPBACK
 	pkt.append_array(QNSerializer.encode_snapback(seq, pos, Vector3.ZERO, 2000, reason))
 	return pkt
 
@@ -81,6 +81,6 @@ func test_snapback_corrompido_ignorado() -> void:
 	var sess := _new_session()
 	sess.local_pos = Vector3(5, 0, 5)
 	# Act
-	sess.handle_packet(PackedByteArray([2, 1]), 1500) # TYPE_SNAPBACK
+	sess.handle_packet(PackedByteArray([QNSerializer.TYPE_SNAPBACK, 1]), 1500) # TYPE_SNAPBACK
 	# Assert
 	assert_eq(sess.local_pos, Vector3(5, 0, 5), "estado local intocado")

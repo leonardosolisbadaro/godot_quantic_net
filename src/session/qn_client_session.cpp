@@ -48,6 +48,7 @@ void QNClientSession::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "local_pos"), "set_local_pos", "get_local_pos");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "local_rot"), "set_local_rot", "get_local_rot");
 	
+	ADD_SIGNAL(MethodInfo("peer_sleep", PropertyInfo(Variant::INT, "owner")));
 	ADD_SIGNAL(MethodInfo("remote_state_received", PropertyInfo(Variant::INT, "owner"), PropertyInfo(Variant::VECTOR3, "pos"), PropertyInfo(Variant::VECTOR3, "rot"), PropertyInfo(Variant::INT, "custom_id")));
 	ADD_SIGNAL(MethodInfo("snapback_received", PropertyInfo(Variant::INT, "seq"), PropertyInfo(Variant::VECTOR3, "pos"), PropertyInfo(Variant::VECTOR3, "rot"), PropertyInfo(Variant::INT, "custom_id"), PropertyInfo(Variant::ARRAY, "replay")));
 	ADD_SIGNAL(MethodInfo("pong_received", PropertyInfo(Variant::FLOAT, "rtt"), PropertyInfo(Variant::FLOAT, "offset")));
@@ -104,7 +105,7 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 	}
 	
 	_write_buf->seek(0);
-	_write_buf->write_bits(1, 8); // MsgType::STATE
+	_write_buf->write_bits(QNSerializer::TYPE_STATE, 8);
 	_write_buf->write_bits(_send_seq, 16);
 	_write_buf->write_bits(_last_server_seq, 16);
 	_write_buf->write_bits(pending_inputs(), 8);
@@ -149,8 +150,14 @@ void QNClientSession::handle_packet(const PackedByteArray &data, int now) {
 		return;
 	}
 	
-	if (ptype == 4) { // TYPE_SNAPSHOT
+	if (ptype == QNSerializer::TYPE_INPUT_SNAPSHOT) {
 		_handle_snapshot(data.slice(1), now);
+		return;
+	}
+	
+	if (ptype == QNSerializer::TYPE_SLEEP) {
+		int owner = data.decode_u32(1);
+		emit_signal("peer_sleep", owner);
 		return;
 	}
 	
