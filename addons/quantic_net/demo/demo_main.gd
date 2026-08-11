@@ -78,18 +78,80 @@ const PROP_HEIGHT := 0.5
 const PORT := 4242
 const SECRET := "demo-secret"
 
+
+# Constantes de Visualização de Entidades (Meshes e Labels)
+const PLAYER_MESH_SIZE := Vector3(1, 2, 1)
+const PROP_MESH_SIZE := Vector3(1, 1, 1)
+const LOCAL_PLAYER_COLOR := Color.GREEN
+const REMOTE_PLAYER_COLOR := Color.RED
+const PROP_COLOR := Color.YELLOW
+const COORD_LABEL_OFFSET := Vector3(0, 1.5, 0)
+const COORD_LABEL_PIXEL_SIZE := 0.015
+const COORD_LABEL_OUTLINE_SIZE := 4
+
+# Constantes de Efeitos e Animações (Laser Hitscan/Físico)
+const LASER_MESH_SIZE := Vector3(0.2, 2.0, 0.2)
+const LASER_EMISSION_ENERGY := 5.0
+const LASER_START_OFFSET := Vector3(0, 2, 0)
+const LASER_ANIM_OFFSET := Vector3(0, 10, 0)
+const LASER_ANIM_DURATION := 0.5
+
+# Constantes de Topologia e Endereçamento
+const DEFAULT_BIND_IP := "127.0.0.1"
+
+
+# Constantes de Perfis Dinâmicos (Tick Rates e Culling Radius)
+const PROFILE_PLAYER_HZ := 60.0 # Tick rate nativo de um jogador humano
+const PROFILE_PLAYER_PRIO := 1.0 # Prioridade base na fila do acumulador visual
+const PROFILE_PLAYER_CULL := 20.0 # Distância máxima onde a engine transmitirá estado
+
+const PROFILE_PROP_HZ := 5.0 # Props inanimados atualizam raramente
+const PROFILE_PROP_PRIO := 0.5 # Menor prioridade, só transmite se sobrar banda
+const PROFILE_PROP_CULL := 20.0
+
+const PROFILE_NPC_HZ := 20.0 # NPCs se movem moderadamente
+const PROFILE_NPC_PRIO := 1.0
+const PROFILE_NPC_CULL := 20.0
+
+const PROFILE_PROJECT_HZ := 60.0 # Balas e projéteis requerem fluidez máxima
+const PROFILE_PROJECT_PRIO := 3.0 # Prioridade extrema (fura a fila)
+const PROFILE_PROJECT_CULL := 50.0 # Devem ser vistos de longe
+
+# Constantes de Geração de Cena Visual
+const WORLD_FLOOR_COLOR := Color(0.2, 0.2, 0.2)
+const RING_THICKNESS := 0.2 # Espessura do anel de debug visual
+const RING_SIDES := 64 # Segmentos do torus de debug
+const RING_SEG := 32
+const RING_Y_OFFSET := 0.05
+const GRID_THICKNESS := 0.15 # Espessura da linha do grid visual
+const CAMERA_LERP_SPEED := 5.0 # Suavização do acompanhamento da câmera
+const LASER_COLOR_HITSCAN := Color.AQUA
+const LASER_COLOR_PHYSICS := Color.ORANGE
+
+# Constantes de Parâmetros de Host / Rede (Segurança e Anti-Cheat)
+const NET_MAX_SPEED := 30.0 # Limiar elástico do Anti-Speedhack
+const NET_HARD_CAP := 50.0 # Tolerância máxima de predição antes de Snap forçado
+const NET_WORLD_BOUNDS := 60.0 # Fronteira invisível de Culling
+const NET_MAX_STRIKES := 5 # Quantos strikes antes do jogador ser kickado
+const NET_AUTH_TIMEOUT := 3.0 # Tempo limite para resolver criptografia DTLS
+const NETEM_LOSS_DEFAULT := 10.0 # Porcentagem simulada de perdas de pacote
+const NETEM_LATENCY_DEFAULT := 150 # Ping base simulado
+const NETEM_JITTER_DEFAULT := 50 # Variância no Ping simulado
+const NETEM_DUP_DEFAULT := 0.0 # Simulação de clones udp
+
+
 # Dicionário passado para a Engine C++ (QuanticNet) durante a inicialização via `host()` ou `join()`.
 # Concentra todas as regras de validação, limites de desconexão e parâmetros do emulador de rede (NETEM).
 var _global_network_parameters = {
-	"max_speed": 30.0, # Limiar elástico do Anti-Speedhack. Alto para acomodar os solavancos drásticos causados pela simulação do Netem.
-	"hard_cap": 50.0, # Se a distância do vetor ultrapassar este limite, a Engine descarta interpolações suaves e aplica um "Snap" (teleporte corretivo absoluto).
-	"world_bounds": 60.0, # Fronteira matemática invisível. Entidades além dessa borda são removidas do registro autoritativo para poupar processamento Culling.
-	"max_strikes": 5, # Contador de punição. Inputs flagrados por validação incorreta somam strikes até a desconexão compulsória (Kick).
-	"auth_timeout": 3.0, # Margem (em segundos) para finalizar as chaves DTLS antes de derrubar a tentativa.
-	"netem_loss": 10.0, # Simulação de colisão em redes ruins: % de pacotes que a placa virtual engolirá.
-	"netem_latency": 150, # Injeção de RTT base forçado na rede local (Loopback).
-	"netem_jitter": 50, # Flutuação randômica do atraso, imitando redes Mobile 4G instáveis.
-	"netem_dup": 0.0, # Simula retransmissões fantasmas em roteadores congestionados.
+	"max_speed": NET_MAX_SPEED, # Limiar elástico do Anti-Speedhack. Alto para acomodar os solavancos drásticos causados pela simulação do Netem.
+	"hard_cap": NET_HARD_CAP, # Se a distância do vetor ultrapassar este limite, a Engine descarta interpolações suaves e aplica um "Snap" (teleporte corretivo absoluto).
+	"world_bounds": NET_WORLD_BOUNDS, # Fronteira matemática invisível. Entidades além dessa borda são removidas do registro autoritativo para poupar processamento Culling.
+	"max_strikes": NET_MAX_STRIKES, # Contador de punição. Inputs flagrados por validação incorreta somam strikes até a desconexão compulsória (Kick).
+	"auth_timeout": NET_AUTH_TIMEOUT, # Margem (em segundos) para finalizar as chaves DTLS antes de derrubar a tentativa.
+	"netem_loss": NETEM_LOSS_DEFAULT, # Simulação de colisão em redes ruins: % de pacotes que a placa virtual engolirá.
+	"netem_latency": NETEM_LATENCY_DEFAULT, # Injeção de RTT base forçado na rede local (Loopback).
+	"netem_jitter": NETEM_JITTER_DEFAULT, # Flutuação randômica do atraso, imitando redes Mobile 4G instáveis.
+	"netem_dup": NETEM_DUP_DEFAULT, # Simula retransmissões fantasmas em roteadores congestionados.
 	# Determina se o Spatial Partitioning (Grid) C++ filtrará o envio global.
 	# Quando habilitado, o servidor estilhaça o mapa em setores menores, economizando a largura de banda.
 	# "grid_culling_enabled": true, # Obsoleto - Substituído por QNSpatialGrid no Core
@@ -236,13 +298,13 @@ func _ready() -> void:
 
 	# Perfis Dinâmicos (Tick Rate vs Priority vs Culling Radius)
 	_entity_profile_player = QNEntityProfile.new()
-	_entity_profile_player.init(60.0, 1.0, 20.0) # Hz default, 20m culling
+	_entity_profile_player.init(PROFILE_PLAYER_HZ, PROFILE_PLAYER_PRIO, PROFILE_PLAYER_CULL)
 	_entity_profile_prop = QNEntityProfile.new()
-	_entity_profile_prop.init(5.0, 0.5, 20.0) # Hz Default
+	_entity_profile_prop.init(PROFILE_PROP_HZ, PROFILE_PROP_PRIO, PROFILE_PROP_CULL)
 	_entity_profile_npc = QNEntityProfile.new()
-	_entity_profile_npc.init(20.0, 1.0, 20.0) # Hz
+	_entity_profile_npc.init(PROFILE_NPC_HZ, PROFILE_NPC_PRIO, PROFILE_NPC_CULL)
 	_entity_profile_projectile = QNEntityProfile.new()
-	_entity_profile_projectile.init(60.0, 3.0, 50.0) # Hz (Prioridade Extrema)
+	_entity_profile_projectile.init(PROFILE_PROJECT_HZ, PROFILE_PROJECT_PRIO, PROFILE_PROJECT_CULL)
 
 	# Bindings de Sinais Assíncronos (Event-Driven Architecture)
 	# Delega respostas de eventos de rede originados no C++ para handlers locais no GDScript. Abordagem preferível ao pooling síncrono no _process para evitar gargalos.
@@ -264,7 +326,7 @@ func _ready() -> void:
 	# Inicialização do Handshake e da Camada de Transporte Segura (DTLS + ENet)
 	if _is_acting_as_server:
 		print("[DEMO] Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
-		QuanticNet.host(PORT, SECRET, "127.0.0.1", MAX_PEERS, _global_network_parameters)
+		QuanticNet.host(PORT, SECRET, DEFAULT_BIND_IP, MAX_PEERS, _global_network_parameters)
 
 		# O Servidor registra a si mesmo (ID 1)
 		# Se o seu servidor é puramente uma máquina autoritativa (não há um humano jogando nele),
@@ -279,7 +341,7 @@ func _ready() -> void:
 			QuanticNet.register_entity(prop_id, false, true, _entity_profile_prop)
 	else:
 		print("[DEMO] Iniciando CLIENTE QuanticNet...")
-		QuanticNet.join("127.0.0.1", PORT, SECRET, use_netem, _global_network_parameters)
+		QuanticNet.join(DEFAULT_BIND_IP, PORT, SECRET, use_netem, _global_network_parameters)
 
 	# Encapsulamento de Rede e Bypass do SceneTree
 	# Injeta a implementação nativa em C++ no SceneTree, permitindo o roteamento direto e processamento isolado do QuanticNet.
@@ -315,9 +377,9 @@ func _setup_scene() -> void:
 	# Chão Base do Mundo Aberto (Contínuo)
 	var open_world_floor := MeshInstance3D.new()
 	var plane_ow := PlaneMesh.new()
-	plane_ow.size = Vector2(80, 80)
+	plane_ow.size = FLOOR_SIZE * 2.0
 	var mat_ow := StandardMaterial3D.new()
-	mat_ow.albedo_color = Color(0.2, 0.2, 0.2) # Dark Gray
+	mat_ow.albedo_color = WORLD_FLOOR_COLOR
 	plane_ow.material = mat_ow
 	open_world_floor.mesh = plane_ow
 	open_world_floor.position = Vector3(0, 0, 0)
@@ -330,10 +392,10 @@ func _setup_scene() -> void:
 func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3D:
 	var mi = MeshInstance3D.new()
 	var mesh = TorusMesh.new()
-	mesh.inner_radius = radius - 0.2
+	mesh.inner_radius = radius - RING_THICKNESS
 	mesh.outer_radius = radius
-	mesh.rings = 64
-	mesh.ring_segments = 32
+	mesh.rings = RING_SIDES
+	mesh.ring_segments = RING_SEG
 	mi.mesh = mesh
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = color
@@ -346,7 +408,7 @@ func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3
 
 func _create_aoi_grid(color: Color, size: Vector2, y_offset: float) -> Node3D:
 	var node = Node3D.new()
-	var thickness = 0.15
+	var thickness = GRID_THICKNESS
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = color
@@ -589,11 +651,11 @@ func _physics_process(delta: float) -> void:
 			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 				custom_input = 1 # Laser Hitscan
 				_cooldown_timer_last_shot_ms = now
-				_spawn_laser(_client_predicted_position, Color.AQUA)
+				_spawn_laser(_client_predicted_position, LASER_COLOR_HITSCAN)
 			elif Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 				custom_input = 2 # Projétil Físico
 				_cooldown_timer_last_shot_ms = now
-				_spawn_laser(_client_predicted_position, Color.ORANGE)
+				_spawn_laser(_client_predicted_position, LASER_COLOR_PHYSICS)
 
 		# Envia a predição otimista de forma cravada para a Engine C++ assinar e rotear
 		QuanticNet.submit_state(_client_predicted_position, Vector3.ZERO, custom_input, delta)
@@ -605,7 +667,7 @@ func _process(_delta: float) -> void:
 	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 		if _camera:
 			var target_cam_pos = _client_predicted_position + CAMERA_START_POS
-			_camera.position = _camera.position.lerp(target_cam_pos, _delta * 5.0)
+			_camera.position = _camera.position.lerp(target_cam_pos, _delta * CAMERA_LERP_SPEED)
 
 		var now = Time.get_ticks_msec()
 		for id in _active_visual_entities_map.keys():
@@ -972,25 +1034,25 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 	if not _active_visual_entities_map.has(id):
 		var mesh_inst = MeshInstance3D.new()
 		var box = BoxMesh.new()
-		box.size = Vector3(1, 2, 1) if id < 1000 else Vector3(1, 1, 1)
+		box.size = PLAYER_MESH_SIZE if id < 1000 else PROP_MESH_SIZE
 		mesh_inst.mesh = box
 		var mat = StandardMaterial3D.new()
 		var entity_color: Color
 		var presence_radius: float
 
 		if is_local:
-			entity_color = Color.GREEN
+			entity_color = LOCAL_PLAYER_COLOR
 			presence_radius = _entity_profile_player.get_spatial_culling_radius()
 		elif id < 1000:
-			entity_color = Color.RED
+			entity_color = REMOTE_PLAYER_COLOR
 			# Pega o raio de presença a partir do profile atual do servidor (se disponivel), senao default
 			var registry = QuanticNet.get_registry()
 			if registry.has(id) and registry[id].get("profile") != null:
 				presence_radius = registry[id]["profile"].get_spatial_culling_radius()
 			else:
-				presence_radius = 20.0
+				presence_radius = PROFILE_PLAYER_CULL
 		else:
-			entity_color = Color.YELLOW
+			entity_color = PROP_COLOR
 			presence_radius = _entity_profile_prop.get_spatial_culling_radius()
 
 		mat.albedo_color = entity_color
@@ -1000,7 +1062,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		# Anel de Presença (AoI da Entidade - Quem a vê)
 		var presence_color = entity_color
 		presence_color.a = 0.25 # Translúcido
-		var presence_ring = _create_ring(presence_color, presence_radius, 0.05)
+		var presence_ring = _create_ring(presence_color, presence_radius, RING_Y_OFFSET)
 		presence_ring.name = "PresenceRing"
 		mesh_inst.add_child(presence_ring)
 
@@ -1017,12 +1079,12 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		# --- [DIAGNOSTIC] Label3D para prova determinística de coordenadas ---
 		var lbl = Label3D.new()
 		lbl.name = "CoordLabel"
-		lbl.pixel_size = 0.015
+		lbl.pixel_size = COORD_LABEL_PIXEL_SIZE
 		lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		lbl.position = Vector3(0, 1.5, 0)
+		lbl.position = COORD_LABEL_OFFSET
 		lbl.modulate = Color.WHITE
 		lbl.outline_modulate = Color.BLACK
-		lbl.outline_size = 4
+		lbl.outline_size = COORD_LABEL_OUTLINE_SIZE
 		mesh_inst.add_child(lbl)
 		# ---------------------------------------------------------------------
 		mesh_inst.position = pos
@@ -1086,28 +1148,28 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 		# Disparo propagado via C++
 		if custom == 1:
 			# Disparo Hitscan (Raio Laser) propagado via C++
-			_spawn_laser(pos, Color.AQUA)
+			_spawn_laser(pos, LASER_COLOR_HITSCAN)
 		elif custom == 2:
 			# Disparo de Projétil Físico
-			_spawn_laser(pos, Color.ORANGE)
+			_spawn_laser(pos, LASER_COLOR_PHYSICS)
 
 
 func _spawn_laser(start_pos: Vector3, color: Color) -> void:
 	var mesh = MeshInstance3D.new()
 	var box = BoxMesh.new()
-	box.size = Vector3(0.2, 2.0, 0.2)
+	box.size = LASER_MESH_SIZE
 	mesh.mesh = box
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.emission_enabled = true
 	mat.emission = color
-	mat.emission_energy_multiplier = 5.0
+	mat.emission_energy_multiplier = LASER_EMISSION_ENERGY
 	mesh.material_override = mat
-	mesh.position = start_pos + Vector3(0, 2, 0)
+	mesh.position = start_pos + LASER_START_OFFSET
 	_scene_world_root_node.add_child(mesh)
 
 	var tween = get_tree().create_tween()
-	tween.tween_property(mesh, "position", mesh.position + Vector3(0, 10, 0), 0.5)
+	tween.tween_property(mesh, "position", mesh.position + LASER_ANIM_OFFSET, LASER_ANIM_DURATION)
 	tween.tween_callback(mesh.queue_free)
 
 
