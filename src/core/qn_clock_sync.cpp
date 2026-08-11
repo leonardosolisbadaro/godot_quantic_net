@@ -30,6 +30,7 @@ void QNClockSync::_bind_methods() {
 }
 
 void QNClockSync::on_pong(int client_sent_time, int server_time_val, int client_now) {
+	if (client_sent_time <= 0) return;
 	int rtt = client_now - client_sent_time;
 	if (rtt < 0 || rtt > 5000) {
 		return;

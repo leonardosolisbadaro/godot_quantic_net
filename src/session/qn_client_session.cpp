@@ -292,9 +292,9 @@ void QNClientSession::_handle_snapshot(const PackedByteArray &body, int now) {
 		}
 		
 		if (owner == _my_id) {
-			int sent_ts = _input_buf->get_sent_ts(st.seq);
+			int sent_ts = _input_buf->get_sent_ts(client_seq_ack);
 			_clock->on_pong(sent_ts, server_now, now);
-			_input_buf->drain_after(st.seq);
+			_input_buf->drain_after(client_seq_ack);
 			
 			double current_jitter = _clock->jitter_ms;
 			for (int j = 0; j < _active_interps.size(); j++) {
