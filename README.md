@@ -114,22 +114,22 @@ func _on_peer_joined(id: int) -> void:
     print("Jogador conectou: ", id)
     if QuanticNet.is_server():
         # O Servidor é a Autoridade: Ele decide registrar a nova entidade na malha.
-        # Parâmetros: (id, é_humano, tem_estado_inicial, perfil)
+        # Parâmetros: (entity_id, is_peer, has_initial_state, profile)
         QuanticNet.register_entity(id, true, true, _player_profile)
 
 func _on_peer_left(id: int) -> void:
     print("Jogador desconectou: ", id)
     # Aqui você removeria o Node 3D (Mesh) do jogador da sua SceneTree
 
-func _on_state_received(owner_id: int, pos: Vector3, rot: Vector3, custom: int) -> void:
+func _on_state_received(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
     # Ignora os próprios pacotes para não anular o Client-Side Prediction local
-    if owner_id == QuanticNet.get_unique_id():
+    if owner == QuanticNet.get_unique_id():
         return
         
     # Os pacotes de outros jogadores chegam aqui.
     # O motor C++ (QNInterpBuffer) usará esses dados nos bastidores para gerar um Lerp perfeito.
     # Na sua lógica visual (_process), você apenas chamaria:
-    # var remote_pos = QuanticNet.get_remote_state(owner_id)["pos"]
+    # var remote_pos = QuanticNet.get_remote_state(owner)["pos"]
 
 func _on_snapback_received(seq: int, pos: Vector3, rot: Vector3, reason: int, replay_inputs: Array) -> void:
     # O coração do Anti-Cheat arquitetural.
