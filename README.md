@@ -1,6 +1,6 @@
 # QuanticNet (Core Infrastructure)
 
-**Versão Atual:** `0.7.0` (Command-Based API & Jitter Buffer)
+**Versão Atual:** `0.8.0` (Struct POD Migration & Memory Optimization)
 
 O **QuanticNet** é um ecossistema de rede *plug-and-play* autoritativo e de altíssimo desempenho, construído nativamente em **C++** (GDExtension) para a **Godot Engine 4.7**.
 

@@ -105,8 +105,8 @@ var _local_peer_id: int = 0
 # PERFIS DE ENTIDADES (TICK RATES E CULLING)
 # ==============================================================================
 var _entity_profile_player: QNEntityProfile
-var _entity_profile_npc: QNEntityProfile
 var _entity_profile_prop: QNEntityProfile
+var _entity_profile_npc: QNEntityProfile
 var _entity_profile_projectile: QNEntityProfile
 var _profile_region_a: QNEntityProfile
 var _profile_region_b: QNEntityProfile
@@ -237,12 +237,13 @@ func _ready() -> void:
 	# Perfis Dinâmicos (Tick Rate vs Priority vs Culling Radius)
 	_entity_profile_player = QNEntityProfile.new()
 	_entity_profile_player.init(60.0, 1.0, 20.0) # Hz default, 20m culling
-	_entity_profile_npc = QNEntityProfile.new()
-	_entity_profile_npc.init(20.0, 1.0, 20.0) # Hz
 	_entity_profile_prop = QNEntityProfile.new()
 	_entity_profile_prop.init(5.0, 0.5, 20.0) # Hz Default
+	_entity_profile_npc = QNEntityProfile.new()
+	_entity_profile_npc.init(20.0, 1.0, 20.0) # Hz
 	_entity_profile_projectile = QNEntityProfile.new()
 	_entity_profile_projectile.init(60.0, 3.0, 50.0) # Hz (Prioridade Extrema)
+
 	# Bindings de Sinais Assíncronos (Event-Driven Architecture)
 	# Delega respostas de eventos de rede originados no C++ para handlers locais no GDScript. Abordagem preferível ao pooling síncrono no _process para evitar gargalos.
 	# O QuanticNet emite sinais limpos quando eventos ocorrem nas entranhas do C++.
@@ -268,7 +269,7 @@ func _ready() -> void:
 		# O Servidor registra a si mesmo (ID 1)
 		QuanticNet.register_entity(1, true, true, _entity_profile_player)
 
-		# O Mundo Aberto não utiliza Regions (Instanciamento Rígido). 
+		# O Mundo Aberto não utiliza Regions (Instanciamento Rígido).
 		# Todos habitam o mesmo continuum espacial e são regidos unicamente pelo QNSpatialGrid.
 
 		# O Servidor instancia e gerencia Props de forma Autoritativa (Eles não possuem clientes enviando input)
@@ -823,7 +824,7 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 
 		var ram_mb = Performance.get_monitor(Performance.MEMORY_STATIC) / BYTES_TO_MB
 		_ui_diagnostic_label_mem.text = "RAM (Static): %.2f MB" % ram_mb
-		
+
 		var now_time = Time.get_ticks_msec()
 		if QuanticNet.is_server() and now_time - get_meta("last_ram_print", 0) > 5000:
 			print("[DEMO] Server RAM (Static): %.2f MB | FPS: %d" % [ram_mb, current_fps])
@@ -1063,7 +1064,6 @@ func _update_dynamic_rings() -> void:
 
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
-
 	# Recepção de Snapshot (Estado Oficial do Servidor).
 	# Ignoramos a nós mesmos (owner == get_unique_id) porque a movimentação do nosso avatar
 	# é baseada em Client-Side Prediction (Zero Input Lag), não em comandos do servidor.

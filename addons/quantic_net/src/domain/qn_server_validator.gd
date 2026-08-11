@@ -42,7 +42,7 @@ func peer_left(id: int) -> void:
 	peers.erase(id)
 
 func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
-	print("[VALIDATOR] Validate called with pos: ", pos)
+	# print("[VALIDATOR] Validate called with pos: ", pos)
 	if absf(pos.x) > world_bounds or absf(pos.z) > world_bounds or pos.y < -2.0 or pos.y > 50.0:
 		return _reject(id, peers.get(id), "fora do mundo")
 		
