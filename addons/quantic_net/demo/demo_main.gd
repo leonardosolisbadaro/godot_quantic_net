@@ -70,7 +70,7 @@ const PROP_ORBIT_SPACING := 3.0
 const PROP_HEIGHT := 0.5
 
 # ==============================================================================
-# VARIÁVEIS DE REDE E CONFIGURAÇÕES DO QUANTICNET
+# CONSTANTES E VARIÁVEIS DE REDE E CONFIGURAÇÕES DO QUANTICNET
 # ==============================================================================
 # Definem o canal de comunicação via Socket. A chave `SECRET` é vital para o Handshake DTLS;
 # ela atua como um pre-shared token, descartando imediatamente scanners TCP/UDP ou acessos espúrios
@@ -476,11 +476,12 @@ func _setup_ui() -> void:
 	top_panel.add_child(_ui_label_connection_status)
 	hud.add_child(top_panel)
 
-	# ... (Dicas e Atalhos na Esquerda) ...
+	# ... (Dicas e Atalhos na Direita) ...
 	var margin_shortcuts = MarginContainer.new()
-	margin_shortcuts.add_theme_constant_override("margin_left", UI_MARGIN_STD)
+	margin_shortcuts.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	margin_shortcuts.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	margin_shortcuts.add_theme_constant_override("margin_right", UI_MARGIN_STD)
 	margin_shortcuts.add_theme_constant_override("margin_top", UI_MARGIN_LARGE)
-
 	var vbox_shortcuts = VBoxContainer.new()
 	var shortcuts = [
 		"CONTROLES IN-GAME:",
@@ -761,14 +762,14 @@ func _process(_delta: float) -> void:
 
 	# Histórico de FPS
 	var current_fps = Engine.get_frames_per_second()
-	# if current_fps > 0:
-	#	_frames_per_second_history.append(current_fps)
-	#	if _frames_per_second_history.size() > FPS_HISTORY_MAX:
-	#		_frames_per_second_history.pop_front()
-	if current_fps < _frames_per_second_minimum:
-		_frames_per_second_minimum = current_fps
-	if current_fps > _frames_per_second_maximum:
-		_frames_per_second_maximum = current_fps
+	if current_fps > 0:
+		_frames_per_second_history.append(current_fps)
+		if _frames_per_second_history.size() > FPS_HISTORY_MAX:
+			_frames_per_second_history.pop_front()
+		if current_fps < _frames_per_second_minimum:
+			_frames_per_second_minimum = current_fps
+		if current_fps > _frames_per_second_maximum:
+			_frames_per_second_maximum = current_fps
 
 	# Histórico de Frame Time (Tempo para montar o visual e a lógica)
 	var frame_ms = Performance.get_monitor(Performance.TIME_PROCESS) * SEC_TO_MS
@@ -864,23 +865,29 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 		var loss_min_disp = _packet_loss_minimum if _packet_loss_minimum != SENTINEL_MAX_FLOAT else 0.0
 
 		# --- Injeção nas Labels (System Profiler) ---
-		_ui_diagnostic_label_fps.text = "FPS: %d | Avg: %d | Min: %d | Max: %d | 1%% Low: %d" % [
+		var fps_win = _frames_per_second_history.size()
+		_ui_diagnostic_label_fps.text = "FPS: %d | Avg(%d): %d | Min: %d | Max: %d | 1%% Low: %d" % [
 			current_fps,
+			fps_win,
 			fps_avg,
-			_frames_per_second_minimum,
+			_frames_per_second_minimum if _frames_per_second_minimum != SENTINEL_MAX_INT else 0,
 			_frames_per_second_maximum,
 			fps_1_low,
 		]
 		var frame_min_disp = _frame_time_minimum if _frame_time_minimum != SENTINEL_MAX_FLOAT else 0.0
-		_ui_diagnostic_label_frametime.text = "Frame Time: %.2f ms | Avg: %.2f | Min: %.2f | Max: %.2f" % [
+		var f_win = _frame_time_history.size()
+		_ui_diagnostic_label_frametime.text = "Frame Time: %.2f ms | Avg(%d): %.2f | Min: %.2f | Max: %.2f" % [
 			frame_ms,
+			f_win,
 			frame_avg,
 			frame_min_disp,
 			_frame_time_maximum,
 		]
 		var phys_min_disp = _physics_time_minimum if _physics_time_minimum != SENTINEL_MAX_FLOAT else 0.0
-		_ui_diagnostic_label_phys.text = "Physics Time: %.2f ms | Avg: %.2f | Min: %.2f | Max: %.2f" % [
+		var p_win = _physics_time_history.size()
+		_ui_diagnostic_label_phys.text = "Physics Time: %.2f ms | Avg(%d): %.2f | Min: %.2f | Max: %.2f" % [
 			phys_ms,
+			p_win,
 			phys_avg,
 			phys_min_disp,
 			_physics_time_maximum,
@@ -922,14 +929,18 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 		var t2 = QuanticNet.get_telemetry(id_to_check)
 
 		if t2:
-			_ui_diagnostic_label_rtt.text = "RTT (ms): %.0f | Avg: %.0f | Min: %.0f | Max: %.0f" % [
+			var rtt_win = _round_trip_time_history.size()
+			_ui_diagnostic_label_rtt.text = "RTT (ms): %.0f | Avg(%d): %.0f | Min: %.0f | Max: %.0f" % [
 				_network_round_trip_time,
+				rtt_win,
 				rtt_avg,
 				rtt_min_disp,
 				_round_trip_time_maximum,
 			]
-			_ui_diagnostic_label_loss.text = "Packet Loss: %.1f%% | Avg: %.1f%% | Min: %.1f%% | Max: %.1f%%" % [
+			var l_win = _packet_loss_history.size()
+			_ui_diagnostic_label_loss.text = "Packet Loss: %.1f%% | Avg(%d): %.1f%% | Min: %.1f%% | Max: %.1f%%" % [
 				current_loss,
+				l_win,
 				loss_avg,
 				loss_min_disp,
 				_packet_loss_maximum,
@@ -1003,14 +1014,15 @@ func _on_pong_received(rtt: float, offset: float) -> void:
 	_network_round_trip_time = rtt
 	_network_clock_offset = offset
 
-	_round_trip_time_history.append(rtt)
-	if _round_trip_time_history.size() > RTT_HISTORY_MAX:
-		_round_trip_time_history.pop_front()
+	if rtt > 0:
+		_round_trip_time_history.append(rtt)
+		if _round_trip_time_history.size() > RTT_HISTORY_MAX:
+			_round_trip_time_history.pop_front()
 
-	if rtt < _round_trip_time_minimum:
-		_round_trip_time_minimum = rtt
-	if rtt > _round_trip_time_maximum:
-		_round_trip_time_maximum = rtt
+		if rtt < _round_trip_time_minimum:
+			_round_trip_time_minimum = rtt
+		if rtt > _round_trip_time_maximum:
+			_round_trip_time_maximum = rtt
 
 
 func _on_peer_joined(peer_id: int) -> void:
