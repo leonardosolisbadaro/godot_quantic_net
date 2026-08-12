@@ -21,10 +21,13 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 
 *Esta fase foca em otimizar a resiliência à perda de pacotes e isolar a autoridade do tempo no servidor.*
 
-### PR 1 — Ack-Tracking no Delta Serializer (CRÍTICO)
+### PR 1 — Arquitetura Híbrida: Validação Server-Side (NavMesh & Raycasts)
 
-* [ ] Implementar bitmask de 32 bits de confirmação alimentado pelo `QNLossTracker` (em memória contígua `uint32_t`, zero allocation).
-* [ ] Gerar P-Frames exclusivamente contra o último snapshot confirmado pelo cliente; emitir I-Frame automático após 32 perdas.
+* [ ] Exportar NavMesh (NavigationRegion3D) do mapa e carregá-lo no contexto do Servidor Dedicado.
+* [ ] Implementar um callback (Hook) ou iterador no Servidor para interceptar posições recebidas de clientes.
+* [ ] Utilizar `NavigationServer3D.map_get_closest_point` para validar se a coordenada (X, Z) do pacote de movimento é permitida.
+* [ ] Integrar Raycasts verticais isolados para validar a tolerância de pulos e quedas (Eixo Y).
+* [ ] Disparar "Snapbacks" automáticos (pacotes corretivos) caso o movimento do cliente falhe na validação geométrica.
 
 ### PR 2 — Tick Server-Side Independente & Dormancy
 
@@ -36,7 +39,12 @@ Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay
 
 ## 🌐 FASE FUTURA: EXPANSÃO DO CORE (Features Avançadas C++)
 
-### PR 1 — Networked Physics (RigidBody Sync)
+### PR 1 — Ack-Tracking no Delta Serializer (Resiliência)
+
+* [ ] Implementar bitmask de 32 bits de confirmação alimentado pelo `QNLossTracker` (em memória contígua `uint32_t`, zero allocation).
+* [ ] Gerar P-Frames exclusivamente contra o último snapshot confirmado pelo cliente; emitir I-Frame automático após 32 perdas.
+
+### PR 2 — Networked Physics (RigidBody Sync)
 
 * [ ] Expandir o codec nativo para empacotar *Linear* e *Angular Velocity* para simulações baseadas em física autoritativa.
 

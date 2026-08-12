@@ -176,7 +176,7 @@ var _entity_profile_npc: QNEntityProfile
 var _entity_profile_projectile: QNEntityProfile
 # var _profile_region_a: QNEntityProfile
 # var _profile_region_b: QNEntityProfile
-var _active_profiles: Dictionary = {}
+var _active_profiles: Dictionary = { }
 
 # ------------------------------------------------------------------------------
 # RASTREAMENTO E HISTÓRICOS DE REDE (ALIMENTADO VIA SINAIS)
@@ -364,7 +364,7 @@ func _ready() -> void:
 	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
 
 	print("[DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.")
-	
+
 	# AUTOMATED TEST: Simulate KEY_1 after 3 seconds
 	# var t = get_tree().create_timer(3.0)
 	# t.timeout.connect(func():
@@ -713,8 +713,7 @@ func _process(_delta: float) -> void:
 					# Só precisamos nos preocupar com o culling local e se há atualização recente.
 					var is_sleeping = _sleeping_entities.get(id, false)
 					var is_visible = (
-						(dist <= _client_local_culling_radius)
-						and (dist <= rad)
+						(dist <= _client_local_culling_radius) and (dist <= rad)
 						and (is_sleeping or (now - last_up <= SERVER_CULL_TIMEOUT_MS))
 					)
 
@@ -744,7 +743,7 @@ func _process(_delta: float) -> void:
 		# O Servidor não recebe "_on_state" de peers nativamente na camada de lógica, ele processa C++ e emite o registro final.
 		# Lemos o registro aqui para materializar visualmente os Peers e Props na Viewport local de diagnóstico do host.
 		var keys = QuanticNet.get_registry_keys()
-		
+
 		for id in keys:
 			if id == QuanticNet.get_unique_id():
 				continue # Monitor não tem avatar próprio e não se renderiza
@@ -1099,7 +1098,9 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 			presence_radius = _entity_profile_player.get_spatial_culling_radius()
 		elif id < 1000:
 			entity_color = REMOTE_PLAYER_COLOR
-			presence_radius = _active_profiles.get(id, _entity_profile_player).get_spatial_culling_radius()
+			presence_radius = _active_profiles \
+					.get(id, _entity_profile_player) \
+					.get_spatial_culling_radius()
 		else:
 			entity_color = PROP_COLOR
 			presence_radius = _entity_profile_prop.get_spatial_culling_radius()
@@ -1288,8 +1289,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				"SIM (60Hz)" if Engine.max_fps == 60 else "NÃO (Unlimited)",
 			)
 
-
-
 		# [ENTER] - Toggle Auto-Move
 		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
 			_is_auto_movement_enabled = not _is_auto_movement_enabled
@@ -1380,13 +1379,11 @@ func server_update_profile(new_tick: float, new_culling: float) -> void:
 		var c = new_culling if new_culling > 0 else old_prof.get_spatial_culling_radius()
 		var new_prof = QNEntityProfile.new()
 		new_prof.init(t, old_prof.get_base_priority(), c)
-		
+
 		_active_profiles[peer_id] = new_prof
 		QuanticNet.change_entity_profile(peer_id, new_prof)
 		rpc("client_update_visual_radius", peer_id, c)
-		print(
-			"[DEMO] Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c]
-		)
+		print("[DEMO] Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c])
 
 
 @rpc("authority", "call_local")
