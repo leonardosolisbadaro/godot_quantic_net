@@ -174,8 +174,9 @@ var _entity_profile_player: QNEntityProfile
 var _entity_profile_prop: QNEntityProfile
 var _entity_profile_npc: QNEntityProfile
 var _entity_profile_projectile: QNEntityProfile
-var _profile_region_a: QNEntityProfile
-var _profile_region_b: QNEntityProfile
+# var _profile_region_a: QNEntityProfile
+# var _profile_region_b: QNEntityProfile
+var _active_profiles: Dictionary = {}
 
 # ------------------------------------------------------------------------------
 # RASTREAMENTO E HISTÓRICOS DE REDE (ALIMENTADO VIA SINAIS)
@@ -244,6 +245,7 @@ var _frames_per_second_minimum: int = SENTINEL_MAX_INT
 var _frames_per_second_maximum: int = 0
 
 var _frame_time_history: Array[float] = []
+const FRAME_TIME_HISTORY_MAX = 600
 var _frame_time_minimum: float = SENTINEL_MAX_FLOAT
 var _frame_time_maximum: float = 0.0
 
@@ -341,6 +343,7 @@ func _ready() -> void:
 		# Se o seu servidor é puramente uma máquina autoritativa (não há um humano jogando nele),
 		# ele não deveria ter um corpo físico na rede
 		# QuanticNet.register_entity(1, true, true, _entity_profile_player)
+		_active_profiles[1] = _entity_profile_player
 
 		# O Mundo Aberto não utiliza Regions (Instanciamento Rígido).
 		# Todos habitam o mesmo continuum espacial e são regidos unicamente pelo QNSpatialGrid.
@@ -348,6 +351,7 @@ func _ready() -> void:
 		# O Servidor instancia e gerencia Props de forma Autoritativa (Eles não possuem clientes enviando input)
 		for prop_id in SERVER_PROPS:
 			QuanticNet.register_entity(prop_id, false, true, _entity_profile_prop)
+			_active_profiles[prop_id] = _entity_profile_prop
 	else:
 		print("[DEMO] Iniciando CLIENTE QuanticNet...")
 		QuanticNet.join(DEFAULT_BIND_IP, PORT, SECRET, use_netem, _global_network_parameters)
@@ -360,6 +364,16 @@ func _ready() -> void:
 	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
 
 	print("[DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.")
+	
+	# AUTOMATED TEST: Simulate KEY_1 after 3 seconds
+	# var t = get_tree().create_timer(3.0)
+	# t.timeout.connect(func():
+	# 	print("[TEST] Simulating KEY_1 press...")
+	# 	var ev = InputEventKey.new()
+	# 	ev.keycode = KEY_1
+	# 	ev.pressed = true
+	# 	Input.parse_input_event(ev)
+	# )
 
 
 func _notification(what: int) -> void:
@@ -692,7 +706,7 @@ func _process(_delta: float) -> void:
 					var last_up = visual.get_meta("last_update", now)
 
 					# Culling Visual
-					var rad = _entity_profile_player.get_spatial_culling_radius() if id < 1000 else _entity_profile_prop.get_spatial_culling_radius()
+					var rad = visual.get_meta("presence_radius", 20.0)
 					var dist = _client_predicted_position.distance_to(target_pos)
 
 					# O Servidor define a malha absoluta, então se a entidade chegou no pacote, ela está visível no servidor.
@@ -700,6 +714,7 @@ func _process(_delta: float) -> void:
 					var is_sleeping = _sleeping_entities.get(id, false)
 					var is_visible = (
 						(dist <= _client_local_culling_radius)
+						and (dist <= rad)
 						and (is_sleeping or (now - last_up <= SERVER_CULL_TIMEOUT_MS))
 					)
 
@@ -729,9 +744,7 @@ func _process(_delta: float) -> void:
 		# O Servidor não recebe "_on_state" de peers nativamente na camada de lógica, ele processa C++ e emite o registro final.
 		# Lemos o registro aqui para materializar visualmente os Peers e Props na Viewport local de diagnóstico do host.
 		var keys = QuanticNet.get_registry_keys()
-		var grid_enabled = _global_network_parameters.get("grid_culling_enabled", false)
-		var aoi_limit = _global_network_parameters.get("grid_culling_size", 9999.0)
-
+		
 		for id in keys:
 			if id == QuanticNet.get_unique_id():
 				continue # Monitor não tem avatar próprio e não se renderiza
@@ -788,7 +801,7 @@ func _process(_delta: float) -> void:
 	var frame_ms = Performance.get_monitor(Performance.TIME_PROCESS) * SEC_TO_MS
 	if frame_ms > 0:
 		_frame_time_history.append(frame_ms)
-		if _frame_time_history.size() > FPS_HISTORY_MAX:
+		if _frame_time_history.size() > FRAME_TIME_HISTORY_MAX:
 			_frame_time_history.pop_front()
 		if frame_ms < _frame_time_minimum:
 			_frame_time_minimum = frame_ms
@@ -972,7 +985,6 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 			var registry = QuanticNet.get_registry()
 			for k in registry:
 				var st = registry[k]
-				var pos = st.get("pos", Vector3.ZERO)
 
 				total_entities += 1
 				if st.get("is_peer", false):
@@ -1058,12 +1070,14 @@ func _on_peer_joined(peer_id: int) -> void:
 	print("[DEMO] Peer Joined: %d" % peer_id)
 	if _is_acting_as_server:
 		QuanticNet.register_entity(peer_id, true, true, _entity_profile_player)
+		_active_profiles[peer_id] = _entity_profile_player
 
 
 func _on_peer_left(peer_id: int) -> void:
 	print("[DEMO] Peer Left: %d" % peer_id)
 	if _is_acting_as_server:
 		QuanticNet.unregister_entity(peer_id)
+		_active_profiles.erase(peer_id)
 
 	if _active_visual_entities_map.has(peer_id):
 		var v = _active_visual_entities_map[peer_id]
@@ -1086,12 +1100,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 			presence_radius = _entity_profile_player.get_spatial_culling_radius()
 		elif id < 1000:
 			entity_color = REMOTE_PLAYER_COLOR
-			# Pega o raio de presença a partir do profile atual do servidor (se disponivel), senao default
-			var registry = QuanticNet.get_registry()
-			if registry.has(id) and registry[id].get("profile") != null:
-				presence_radius = registry[id]["profile"].get_spatial_culling_radius()
-			else:
-				presence_radius = PROFILE_PLAYER_CULL
+			presence_radius = _active_profiles.get(id, _entity_profile_player).get_spatial_culling_radius()
 		else:
 			entity_color = PROP_COLOR
 			presence_radius = _entity_profile_prop.get_spatial_culling_radius()
@@ -1280,29 +1289,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				"SIM (60Hz)" if Engine.max_fps == 60 else "NÃO (Unlimited)",
 			)
 
-		# [1-5] - Tick Rate do Profile
-		elif event.keycode == KEY_1:
-			_request_profile_change(20.0, -1)
-		elif event.keycode == KEY_2:
-			_request_profile_change(10.0, -1)
-		elif event.keycode == KEY_3:
-			_request_profile_change(5.0, -1)
-		elif event.keycode == KEY_4:
-			_request_profile_change(1.0, -1)
-		elif event.keycode == KEY_5:
-			_request_profile_change(60.0, -1)
 
-		# [6-0] - Culling Radius do Profile
-		elif event.keycode == KEY_6:
-			_request_profile_change(-1, 5.0)
-		elif event.keycode == KEY_7:
-			_request_profile_change(-1, 10.0)
-		elif event.keycode == KEY_8:
-			_request_profile_change(-1, 20.0)
-		elif event.keycode == KEY_9:
-			_request_profile_change(-1, 50.0)
-		elif event.keycode == KEY_0:
-			_request_profile_change(-1, 100.0)
 
 		# [ENTER] - Toggle Auto-Move
 		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
@@ -1331,7 +1318,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					fov_ring.visible = _show_culling_rings
 			print("[DEMO] Culling Rings: ", "Exibidos" if _show_culling_rings else "Ocultos")
 
-		elif event.keycode >= KEY_1 and event.keycode <= KEY_0:
+		elif event.keycode >= KEY_0 and event.keycode <= KEY_9:
 			var target_tick = -1.0
 			var target_cull = -1.0
 
@@ -1366,10 +1353,15 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _request_profile_change(tick: float, culling: float) -> void:
 	# O cliente APENAS solicita a alteração ao Servidor. A classe global NÃO é mutada.
+	print("[DEBUG] _request_profile_change called with tick: ", tick, " culling: ", culling)
 	if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		print("[DEBUG] Client is connected, sending RPC to server!")
 		rpc_id(1, "server_update_profile", tick, culling)
 	elif _is_acting_as_server:
+		print("[DEBUG] Is server, applying profile directly!")
 		server_update_profile(tick, culling)
+	else:
+		print("[DEBUG] Client is NOT connected! State is: ", QuanticNet.get_state())
 
 
 @rpc("any_peer", "call_local")
@@ -1384,17 +1376,18 @@ func server_update_profile(new_tick: float, new_culling: float) -> void:
 
 	var registry = QuanticNet.get_registry()
 	if registry.has(peer_id):
-		var old_prof = registry[peer_id].get("profile")
-		if old_prof != null:
-			var t = new_tick if new_tick > 0 else old_prof.get_tick_rate_hz()
-			var c = new_culling if new_culling > 0 else old_prof.get_spatial_culling_radius()
-			var new_prof = QNEntityProfile.new()
-			new_prof.init(t, old_prof.get_base_priority(), c)
-			QuanticNet.change_entity_profile(peer_id, new_prof)
-			rpc("client_update_visual_radius", peer_id, c)
-			print(
-				"[DEMO] Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c]
-			)
+		var old_prof = _active_profiles.get(peer_id, _entity_profile_player)
+		var t = new_tick if new_tick > 0 else old_prof.get_tick_rate_hz()
+		var c = new_culling if new_culling > 0 else old_prof.get_spatial_culling_radius()
+		var new_prof = QNEntityProfile.new()
+		new_prof.init(t, old_prof.get_base_priority(), c)
+		
+		_active_profiles[peer_id] = new_prof
+		QuanticNet.change_entity_profile(peer_id, new_prof)
+		rpc("client_update_visual_radius", peer_id, c)
+		print(
+			"[DEMO] Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c]
+		)
 
 
 @rpc("authority", "call_local")
