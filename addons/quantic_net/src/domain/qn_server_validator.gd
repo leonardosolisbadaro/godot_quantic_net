@@ -22,12 +22,15 @@ var max_speed := 6.0
 var hard_cap := 20.0
 var world_bounds := 60.0
 var max_strikes := 5
+var _nav_map: RID
 
 func configure(config: Dictionary) -> void:
 	max_speed = config.get("max_speed", 6.0)
 	hard_cap = config.get("hard_cap", 20.0)
 	world_bounds = config.get("world_bounds", 60.0)
 	max_strikes = config.get("max_strikes", 5)
+	if config.has("navigation_map"):
+		_nav_map = config["navigation_map"]
 
 class PeerState:
 	var pos: Vector3
@@ -64,6 +67,21 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 	var speed: float = dist / effective_dt
 	
 	if speed <= max_speed:
+		# NavMesh Check
+		var closest = pos
+		if _nav_map.is_valid():
+			closest = NavigationServer3D.map_get_closest_point(_nav_map, pos)
+			var dist_nav = pos.distance_to(closest)
+			
+			if dist_nav > 2.0:
+				return _reject(id, st, "navmesh violation (> 2m)")
+			elif dist_nav > 0.1:
+				st.pos = closest
+				st.rot = rot
+				st.last_ts = now
+				st.strikes = maxi(0, st.strikes - 1)
+				return {"action": "clamp", "pos": closest, "rot": rot}
+
 		st.pos = pos
 		st.rot = rot
 		st.last_ts = now
@@ -74,6 +92,11 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 		var dir: Vector3 = pos - st.pos
 		var clamped: Vector3 = st.pos + dir.normalized() * minf(dist, max_speed * dt)
 		clamped.y = pos.y
+		
+		# NavMesh Check on clamped
+		if _nav_map.is_valid():
+			clamped = NavigationServer3D.map_get_closest_point(_nav_map, clamped)
+			
 		st.pos = clamped
 		st.rot = rot
 		st.last_ts = now

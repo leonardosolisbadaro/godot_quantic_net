@@ -337,7 +337,9 @@ func _ready() -> void:
 	# Inicialização do Handshake e da Camada de Transporte Segura (DTLS + ENet)
 	if _is_acting_as_server:
 		print("[DEMO] Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
-		QuanticNet.host(PORT, SECRET, DEFAULT_BIND_IP, MAX_PEERS, _global_network_parameters)
+		_global_network_parameters["navigation_map"] = get_world_3d().get_navigation_map()
+
+	if QuanticNet.host(PORT, SECRET, DEFAULT_BIND_IP, MAX_PEERS, _global_network_parameters) == OK:
 
 		# O Servidor registra a si mesmo (ID 1)
 		# Se o seu servidor é puramente uma máquina autoritativa (não há um humano jogando nele),
@@ -397,7 +399,20 @@ func _setup_scene() -> void:
 	light.shadow_enabled = true
 	add_child(light)
 
-	# Chão Base do Mundo Aberto (Contínuo)
+	# Chão Base do Mundo Aberto (Contínuo) com NavMesh para validação Server-Side
+	var nav_region = NavigationRegion3D.new()
+	var nav_mesh = NavigationMesh.new()
+	var verts = PackedVector3Array([
+		Vector3(-FLOOR_SIZE.x, 0, -FLOOR_SIZE.y),
+		Vector3(FLOOR_SIZE.x, 0, -FLOOR_SIZE.y),
+		Vector3(FLOOR_SIZE.x, 0, FLOOR_SIZE.y),
+		Vector3(-FLOOR_SIZE.x, 0, FLOOR_SIZE.y)
+	])
+	nav_mesh.vertices = verts
+	nav_mesh.add_polygon(PackedInt32Array([0, 1, 2, 3]))
+	nav_region.navigation_mesh = nav_mesh
+	add_child(nav_region)
+
 	var open_world_floor := MeshInstance3D.new()
 	var plane_ow := PlaneMesh.new()
 	plane_ow.size = FLOOR_SIZE * 2.0
@@ -406,7 +421,7 @@ func _setup_scene() -> void:
 	plane_ow.material = mat_ow
 	open_world_floor.mesh = plane_ow
 	open_world_floor.position = Vector3(0, 0, 0)
-	add_child(open_world_floor)
+	nav_region.add_child(open_world_floor)
 
 	_scene_world_root_node = Node3D.new()
 	add_child(_scene_world_root_node)
