@@ -1189,7 +1189,7 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 
 
 func _spawn_laser(start_pos: Vector3, color: Color) -> void:
-	print("[DEBUG] Spawning laser at: ", start_pos, " | Is Server: ", QuanticNet.is_server())
+	# print("[DEBUG] Spawning laser at: ", start_pos, " | Is Server: ", QuanticNet.is_server())
 	var mesh = MeshInstance3D.new()
 	var box = BoxMesh.new()
 	box.size = LASER_MESH_SIZE
@@ -1414,7 +1414,7 @@ func _send_shoot_packet(ptype: int, pos: Vector3) -> void:
 
 
 func _on_custom_packet_received(peer_id: int, ptype: int, data: PackedByteArray) -> void:
-	print("[DEBUG] Custom Packet from %d (Type %d, Size %d)" % [peer_id, ptype, data.size()])
+	# print("[DEBUG] Custom Packet from %d (Type %d, Size %d)" % [peer_id, ptype, data.size()])
 	if ptype == GAME_OP_SHOOT_HITSCAN or ptype == GAME_OP_SHOOT_PHYSICS:
 		if data.size() >= 12:
 			var pos = Vector3(data.decode_float(0), data.decode_float(4), data.decode_float(8))
