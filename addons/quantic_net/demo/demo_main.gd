@@ -987,14 +987,13 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 				var st = registry[k]
 
 				total_entities += 1
-				if st.get("is_peer", false):
+				if k < 1000:
 					count_peers += 1
 				else:
 					count_props += 1
 		else:
 			for id in _active_visual_entities_map.keys():
-				var last_up = _active_visual_entities_map[id].get_meta("last_update", now_ms)
-				if now_ms - last_up <= SERVER_CULL_TIMEOUT_MS:
+				if _active_visual_entities_map[id].visible:
 					total_entities += 1
 					if id < 1000:
 						count_peers += 1

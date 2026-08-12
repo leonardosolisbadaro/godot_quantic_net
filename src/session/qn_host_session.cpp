@@ -368,18 +368,39 @@ void QNHostSession::tick_broadcast(int now) {
 		auto it = candidates.begin();
 		while (it != candidates.end()) {
 			int cid = *it;
-			if (current_states.find(cid) != current_states.end()) {
+			bool is_dormant = current_states.find(cid) == current_states.end() && _registry[cid].has_state;
+			
+			if (current_states.find(cid) != current_states.end() || is_dormant) {
 				double cid_aura = 250.0;
 				if (_profiles.find(cid) != _profiles.end()) {
 					Ref<QNEntityProfile> cid_profile = _profiles[cid];
 					if (cid_profile.is_valid()) cid_aura = cid_profile->get_spatial_culling_radius();
 				}
-				
-				Vector3 cid_pos = current_states[cid].pos;
+
+				Vector3 cid_pos;
+				if (is_dormant) cid_pos = _registry[cid].pos;
+				else cid_pos = current_states[cid].pos;
+
 				if (cid_pos.distance_to(st.pos) > cid_aura) {
 					it = candidates.erase(it);
 				} else {
-					++it;
+					if (is_dormant) {
+						bool observer_has_it = false;
+						if (base_snapshot && base_snapshot->states.find(cid) != base_snapshot->states.end()) {
+							observer_has_it = true;
+						}
+						if (!observer_has_it) {
+							// O observador (peer atual) entrou na aura desta entidade dorminhoca e precisa dela!
+							// Adicionamos aos current_states para que o Accumulator a selecione e force um I-Frame.
+							current_states[cid] = _registry[cid];
+							++it;
+						} else {
+							// O observador já conhece esta entidade dorminhoca, não precisamos gastar banda.
+							it = candidates.erase(it);
+						}
+					} else {
+						++it;
+					}
 				}
 			} else {
 				it = candidates.erase(it);
