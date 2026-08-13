@@ -160,7 +160,7 @@ var _global_network_parameters = {
 	# Quando habilitado, o servidor estilhaça o mapa em setores menores, economizando a largura de banda.
 	# "grid_culling_enabled": true, # Obsoleto - Substituído por QNSpatialGrid no Core
 	"grid_culling_size": 100.0, # O tamanho fixo de cada célula do Spatial Partitioning do QuanticNet
-	"sync_adjacent_grids": true, # Habilita o envio de updates para chunks adjacentes ao jogador (Evita o cap de 50m/cell)
+	"sync_adjacent_grids": false, # Habilita o envio de updates para chunks adjacentes ao jogador (Evita o cap de 50m/cell)
 }
 
 # Controle de estado da topologia local
@@ -1341,20 +1341,16 @@ func _update_dynamic_rings() -> void:
 		spatial_node.visible = _show_culling_rings
 		
 		if spatial_node.visible:
-			# Obter o raio REAL do cliente (o mesmo que o servidor conhece, usando a memria de profiles que corrigimos!)
-			var server_cull_radius = _active_profiles.get(local_id, _entity_profile_player).get_spatial_culling_radius()
 			var pos = _client_predicted_position
 			var cell_size = 100.0 # Hardcoded no C++
 			
-			var min_cx = floor((pos.x - server_cull_radius) / cell_size)
-			var max_cx = floor((pos.x + server_cull_radius) / cell_size)
-			var min_cz = floor((pos.z - server_cull_radius) / cell_size)
-			var max_cz = floor((pos.z + server_cull_radius) / cell_size)
+			var cx = floor(pos.x / cell_size)
+			var cz = floor(pos.z / cell_size)
 			
-			var min_x = min_cx * cell_size
-			var max_x = (max_cx + 1) * cell_size
-			var min_z = min_cz * cell_size
-			var max_z = (max_cz + 1) * cell_size
+			var min_x = cx * cell_size
+			var max_x = (cx + 1) * cell_size
+			var min_z = cz * cell_size
+			var max_z = (cz + 1) * cell_size
 			
 			var size_x = max_x - min_x
 			var size_z = max_z - min_z

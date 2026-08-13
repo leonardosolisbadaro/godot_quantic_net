@@ -401,7 +401,7 @@ void QNHostSession::tick_broadcast(int now) {
 				// Para que uma entidade seja vista, ela precisa estar dentro do raio do observador, OU a entidade ser to grande que seu raio atinge o observador.
 				double effective_radius = Math::max(cull_radius, cid_aura);
 
-				if (cid_pos.distance_to(st.pos) > effective_radius) {
+				if (_sync_adjacent_grids && cid_pos.distance_to(st.pos) > effective_radius) {
 					it = candidates.erase(it);
 				} else {
 					if (is_dormant) {
