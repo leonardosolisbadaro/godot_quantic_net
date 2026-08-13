@@ -1,67 +1,64 @@
-# TODO: QuanticNet (Core Infrastructure)
+# TODO: QuanticNet (Core Infrastructure) v0.9.0-beta
 
 Plugin de network autoritativo (`QuanticNet`) construído em C++ (GDExtension) para Godot 4.7.
 Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay e MMOs concretos residem no repositório externo [godot_quantic_net_demos](https://github.com/leonardosolisbadaro/godot_quantic_net_demos).
 
 ---
 
-## 🗄️ FUNDAÇÕES HOMOLOGADAS (Concluído)
+## 🚨 FASE 1: O Sistema de Chunks e Validação Híbrida (AAA)
 
-* **Transporte Nativo:** ENet/DTLS integrado via GDExtension.
-* **Paradigma Híbrido:** Suporte a Command-Based e State-Based prediction.
-* **Worker Threads (I/O Offloading):** Desserialização e ENet rodando em thread paralela via `QNWirePeer` com Lock-Free Ring Buffers.
-* **Input Jitter Buffer:** Catch-up físico e absorção dinâmica de flutuações de rede no Host.
-* **Otimização de Memória Extrema:** Estruturas POD Contíguas (`QNEntityState`) sem `Variant/Dictionary` overhead para tracking.
-* **Queries Espaciais & Lag Compensation:** `QNWorldHistoryBuffer` e `QNSpatialGrid` com suporte a `query_raycast` no passado.
-* **Entity Profiles & Regions:** Culling espacial (AABB) dinâmico e perfis assíncronos customizados por taxa de tick e prioridade.
-
----
-
-## 🚨 FASE ATUAL: EXPANSÃO DO NETCODE AAA E ESTABILIDADE
-
-*Esta fase foca em otimizar a resiliência à perda de pacotes e isolar a autoridade do tempo no servidor.*
+*Foco total na engenharia de mapas e segurança geométrica contínua.*
 
 ### PR 1 — Arquitetura Híbrida: Validação Server-Side (NavMesh & Raycasts)
 
-* [ ] Exportar NavMesh (NavigationRegion3D) do mapa e carregá-lo no contexto do Servidor Dedicado.
-* [ ] Implementar um callback (Hook) ou iterador no Servidor para interceptar posições recebidas de clientes.
-* [ ] Utilizar `NavigationServer3D.map_get_closest_point` para validar se a coordenada (X, Z) do pacote de movimento é permitida.
-* [ ] Integrar Raycasts verticais isolados para validar a tolerância de pulos e quedas (Eixo Y).
-* [ ] Disparar "Snapbacks" automáticos (pacotes corretivos) caso o movimento do cliente falhe na validação geométrica.
+* [x] Exportar NavMesh (NavigationRegion3D) do mapa e carregá-lo no contexto do Servidor Dedicado.
+* [x] Implementar um callback (Hook) ou iterador no Servidor para interceptar posições recebidas de clientes.
+* [x] Utilizar `NavigationServer3D.map_get_closest_point` para validar se a coordenada (X, Z) do pacote de movimento é permitida.
 
-### PR 2 — Tick Server-Side Independente & Dormancy
+### PR 2 — Chunk Manager (Seamless Grid)
 
-* [x] Substituir o uso de `_physics_process` no servidor por um `_process` com Acumulador Determinístico (Ex: `NET_TICK_RATE = 1.0 / 20.0`).
-* [x] Gerenciar entidades dormentes (Sleep State): Servidor parar de transmitir estados se Δ Posição e Rotação zerarem por `N` ticks.
-* [x] Transmitir notificação explícita de pacote `TYPE_SLEEP` ao cliente para suspender a interpolação visual do prop.
+* [ ] Criar `qn_chunk_manager.gd` na Demo.
+* [ ] Gerar Grid de chão 3D dinamicamente a partir da coordenada (0,0) (Ex: raio 3x3 chunks).
+* [ ] Substituir o `open_world_floor` estático pelo carregamento dinâmico do Grid.
+* [ ] Adicionar lógica de Streaming (Load/Unload chunks ao afastar do centro).
+
+### PR 3 — Validação Híbrida em Relevos
+
+* [ ] Alterar o `qn_chunk_manager.gd` para gerar malhas 3D e NavMeshes com relevos matemáticos (rampas/escadas).
+* [ ] Validar a detecção de Flyhack (eixo Y) e a geração de Snapbacks verticais no Servidor.
 
 ---
 
-## 🌐 FASE FUTURA: EXPANSÃO DO CORE (Features Avançadas C++)
+## 🌐 FASE 2: Gameplay Autoritativo
 
-### PR 1 — Ack-Tracking no Delta Serializer (Resiliência)
+*Foco em testar e aplicar 100% do potencial da API do QuanticNet em um cenário de MMO real.*
 
-* [ ] Implementar bitmask de 32 bits de confirmação alimentado pelo `QNLossTracker` (em memória contígua `uint32_t`, zero allocation).
-* [ ] Gerar P-Frames exclusivamente contra o último snapshot confirmado pelo cliente; emitir I-Frame automático após 32 perdas.
+### PR 1 — Integração de OpCodes Complexos
 
-### PR 2 — Networked Physics (RigidBody Sync)
+* [ ] Utilizar `send_game_packet` para gerenciar a conjuração de magias (cast bars e interrupções autoritativas).
+* [ ] Substituir projéteis simulados no cliente por Raycasts validados com Lag Compensation (`query_raycast` no passado).
 
-* [ ] Expandir o codec nativo para empacotar *Linear* e *Angular Velocity* para simulações baseadas em física autoritativa.
+### PR 2 — Culling Avançado e Instâncias (Monstros e NPCs)
 
-### PR 2 — RPC Desacoplado e Object Replication
+* [ ] Instanciar NPCs patrulhando livremente pelos Chunks carregados.
+* [ ] Associar perfis de baixa prioridade (`QNEntityProfile`) aos NPCs distantes e garantir que o *Spatial Culling* poupe a banda dos clientes.
 
-* [ ] Implementar canal de envio garantido (Reliable) para "spawn" semântico dinâmico (transmissão de tipagens e eventos vitais paralelos ao tick posicional UDP).
+---
+
+## 🗄️ HISTÓRICO E LEGADO (Concluído em v0.8.0)
+
+* **Tick Server-Side Independente & Dormancy:** _physics_process substituído por acumulador. Entidades agora entram em sono profundo (TYPE_SLEEP).
+* **Transporte Nativo:** ENet/DTLS integrado via GDExtension.
+* **Paradigma Híbrido:** Suporte a Command-Based (submit_input) e State-Based (submit_state).
+* **Worker Threads (I/O Offloading):** Desserialização e ENet rodando em thread paralela via `QNWirePeer` com Lock-Free Ring Buffers.
+* **Input Jitter Buffer:** Catch-up físico e absorção dinâmica de flutuações de rede no Host.
+* **Otimização de Memória Extrema:** Estruturas POD Contíguas (`QNEntityState`) sem overhead.
+* **Queries Espaciais & Lag Compensation:** `QNWorldHistoryBuffer` (Histórico de 60 frames passados).
+* **Entity Profiles & Regions:** Culling espacial (AABB) dinâmico e perfis assíncronos.
 
 ---
 
 ## 🧊 ICEBOX (Tarefas Congeladas)
 
-### Issue: Elastic Time / Clock Steering
-
-* **Status:** Congelada (Obsoleta).
-* **Escopo:** Ajuste microscópico de delta no cliente baseado no nível do buffer do host. Rejeitado pois a Arquitetura V2 com Jitter Buffer Ativo e Tick Independente já resolve a autoridade de tempo no lado do servidor.
-
-### Issue: Solver Cinemático Stateless em C++ (`QNKinematicSolver`)
-
-* **Status:** Congelada aguardando necessidade real de colisão nativa pesada.
-* **Escopo:** Função pura stateless para rollback seguro via `PhysicsDirectSpaceState`.
+* **Ack-Tracking no Delta Serializer:** Removido da linha principal para focar no design de domínio. Aguardando a fase de stress test para ser reimplementado.
+* **Solver Cinemático Stateless em C++ (`QNKinematicSolver`):** Congelada aguardando necessidade real de colisão nativa pesada.

@@ -62,18 +62,26 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 	if dt <= 0.0:
 		dt = 0.001
 		
-	var dist: float = pos.distance_to(st.pos)
-	var effective_dt: float = maxf(dt, 0.05)
-	var speed: float = dist / effective_dt
+	var horizontal_dist = Vector2(pos.x, pos.z).distance_to(Vector2(st.pos.x, st.pos.z))
+	var vertical_dist = absf(pos.y - st.pos.y)
 	
-	if speed <= max_speed:
+	var effective_dt: float = maxf(dt, 0.05)
+	var h_speed: float = horizontal_dist / effective_dt
+	var v_speed: float = vertical_dist / effective_dt
+
+	if h_speed <= max_speed and v_speed <= 30.0:
 		# NavMesh Check
 		var closest = pos
 		if _nav_map.is_valid():
 			closest = NavigationServer3D.map_get_closest_point(_nav_map, pos)
 			var dist_nav = pos.distance_to(closest)
 			
-			if dist_nav > 2.0:
+			var nav_horizontal = Vector2(pos.x, pos.z).distance_to(Vector2(closest.x, closest.z))
+
+			if nav_horizontal <= 2.0 and pos.y >= closest.y and pos.y <= closest.y + 50.0:
+				# Aceita posições aéreas (pulos/quedas/spawns) até 50 metros de altura se estiver acima do chão válido
+				pass
+			elif dist_nav > 2.0:
 				return _reject(id, st, "navmesh violation (> 2m)")
 			elif dist_nav > 0.1:
 				st.pos = closest
@@ -88,9 +96,10 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 		st.strikes = maxi(0, st.strikes - 1)
 		return {"action": "accept", "pos": pos, "rot": rot}
 		
-	if speed <= hard_cap:
+	if h_speed <= hard_cap and v_speed <= 50.0:
 		var dir: Vector3 = pos - st.pos
-		var clamped: Vector3 = st.pos + dir.normalized() * minf(dist, max_speed * dt)
+		dir.y = 0
+		var clamped: Vector3 = st.pos + dir.normalized() * minf(horizontal_dist, max_speed * dt)
 		clamped.y = pos.y
 		
 		# NavMesh Check on clamped
@@ -102,7 +111,7 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 		st.last_ts = now
 		return {"action": "clamp", "pos": clamped, "rot": rot}
 		
-	return _reject(id, st, "speed=%.1f m/s" % speed)
+	return _reject(id, st, "speed=H:%.1f V:%.1f m/s" % [h_speed, v_speed])
 
 func _reject(id: int, st: PeerState, reason: String) -> Dictionary:
 	if st:

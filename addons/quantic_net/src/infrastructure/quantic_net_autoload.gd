@@ -164,6 +164,15 @@ func host(
 		_host_session = QNHostSession.new()
 		_server_tick_rate = config.get("server_tick_rate", 20.0)
 		_host_session.set_dormancy_threshold(config.get("dormancy_threshold_ticks", 60))
+		_host_session.set_sync_adjacent_grids(config.get("sync_adjacent_grids", true))
+		
+		# Repassa as configurações para o QNSpatialGrid (C++)
+		var grid = _host_session.get_grid()
+		if grid:
+			grid.set_cell_size(config.get("grid_culling_size", 50.0))
+			var bounds_val = config.get("world_bounds", 500.0)
+			grid.set_world_bounds(Vector3(bounds_val, bounds_val, bounds_val), true)
+			
 		var validator = preload("res://addons/quantic_net/src/domain/qn_server_validator.gd").new()
 		validator.configure(config)
 		_host_session.set_validator(validator)

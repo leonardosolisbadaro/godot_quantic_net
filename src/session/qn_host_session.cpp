@@ -51,8 +51,12 @@ void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_registry_keys"), &QNHostSession::get_registry_keys);
 	ClassDB::bind_method(D_METHOD("get_entity_position", "entity_id"), &QNHostSession::get_entity_position);
 	ClassDB::bind_method(D_METHOD("get_grid"), &QNHostSession::get_grid);
+	
+	ClassDB::bind_method(D_METHOD("set_sync_adjacent_grids", "sync"), &QNHostSession::set_sync_adjacent_grids);
+	ClassDB::bind_method(D_METHOD("get_sync_adjacent_grids"), &QNHostSession::get_sync_adjacent_grids);
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "validator"), "set_validator", "get_validator");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sync_adjacent_grids"), "set_sync_adjacent_grids", "get_sync_adjacent_grids");
 
 		ADD_SIGNAL(MethodInfo("snapback_requested", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::PACKED_BYTE_ARRAY, "pkt")));
 	ADD_SIGNAL(MethodInfo("packet_ready", PropertyInfo(Variant::INT, "peer_id"), PropertyInfo(Variant::PACKED_BYTE_ARRAY, "data")));
@@ -362,8 +366,20 @@ void QNHostSession::tick_broadcast(int now) {
 		candidates.clear();
 		selected_states.clear();
 		
-		double cull_radius = 250.0;
-		_grid->get_entities_in_radius_internal(st.pos, cull_radius, candidates);
+		double cull_radius = 250.0; // Use a large arbitrary default for lookup if they don't have profile
+		if (_profiles.find(id) != _profiles.end()) {
+			Ref<QNEntityProfile> observer_profile = _profiles[id];
+			if (observer_profile.is_valid()) cull_radius = observer_profile->get_spatial_culling_radius();
+		}
+
+		if (_sync_adjacent_grids) {
+			_grid->get_entities_in_radius_internal(st.pos, cull_radius, candidates);
+		} else {
+			PackedInt32Array chunk_ents = _grid->get_entities_in_chunk(st.pos);
+			for (int j = 0; j < chunk_ents.size(); j++) {
+				candidates.push_back(chunk_ents[j]);
+			}
+		}
 		
 		auto it = candidates.begin();
 		while (it != candidates.end()) {
@@ -417,7 +433,11 @@ void QNHostSession::tick_broadcast(int now) {
 		Dictionary gd_registry;
 		Dictionary gd_current_states;
 		for (int cid : candidates) {
-			gd_registry[cid] = _registry[cid].to_dict();
+			Dictionary dict = _registry[cid].to_dict();
+			if (_profiles.find(cid) != _profiles.end()) {
+				dict["profile"] = _profiles[cid];
+			}
+			gd_registry[cid] = dict;
 			gd_current_states[cid] = current_states[cid].to_dict();
 		}
 		
@@ -511,4 +531,12 @@ Vector3 QNHostSession::get_entity_position(int entity_id) const {
 
 Ref<QNSpatialGrid> QNHostSession::get_grid() const {
 	return _grid;
+}
+
+void QNHostSession::set_sync_adjacent_grids(bool p_sync) {
+	_sync_adjacent_grids = p_sync;
+}
+
+bool QNHostSession::get_sync_adjacent_grids() const {
+	return _sync_adjacent_grids;
 }

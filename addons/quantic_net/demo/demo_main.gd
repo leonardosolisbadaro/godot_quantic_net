@@ -55,8 +55,8 @@ const OUTLINE_THICK := 4
 const OUTLINE_THIN := 3
 
 # Constantes de Gameplay (Valores Extraídos para Configuração)
-const DEFAULT_VIEW_DISTANCE := 12.0 # Raio dinâmico no qual o Cliente decide renderizar ou ocultar entidades locais.
-const CLIENT_MOVE_SPEED := 6.0 # Deslocamento cravado do avatar. Variável blindada que o Servidor usará no Anti-Speedhack.
+const DEFAULT_VIEW_DISTANCE := 96.0 # 12.0 Raio dinâmico no qual o Cliente decide renderizar ou ocultar entidades locais.
+const CLIENT_MOVE_SPEED := 30.0 # 6.0 Deslocamento cravado do avatar. Variável blindada que o Servidor usará no Anti-Speedhack.
 const GAME_OP_SHOOT_HITSCAN = 32
 const GAME_OP_SHOOT_PHYSICS = 33
 const SHOOT_COOLDOWN_MS := 200
@@ -131,9 +131,9 @@ const LASER_COLOR_HITSCAN := Color.AQUA
 const LASER_COLOR_PHYSICS := Color.ORANGE
 
 # Constantes de Parâmetros de Host / Rede (Segurança e Anti-Cheat)
-const NET_MAX_SPEED := 30.0 # Limiar elástico do Anti-Speedhack
-const NET_HARD_CAP := 50.0 # Tolerância máxima de predição antes de Snap forçado
-const NET_WORLD_BOUNDS := 60.0 # Fronteira invisível de Culling
+const NET_MAX_SPEED := 300.0 # 30.0 Limiar elástico do Anti-Speedhack
+const NET_HARD_CAP := 500.0 # 50.0 Tolerância máxima de predição antes de Snap forçado
+const NET_WORLD_BOUNDS := 500.0 # Fronteira invisível aumentada para suportar o mapa
 const NET_MAX_STRIKES := 5 # Quantos strikes antes do jogador ser kickado
 const NET_AUTH_TIMEOUT := 3.0 # Tempo limite para resolver criptografia DTLS
 const NETEM_LOSS_DEFAULT := 10.0 # Porcentagem simulada de perdas de pacote
@@ -159,7 +159,8 @@ var _global_network_parameters = {
 	# Determina se o Spatial Partitioning (Grid) C++ filtrará o envio global.
 	# Quando habilitado, o servidor estilhaça o mapa em setores menores, economizando a largura de banda.
 	# "grid_culling_enabled": true, # Obsoleto - Substituído por QNSpatialGrid no Core
-	# "grid_culling_size": (FLOOR_SIZE.x * GENERAL_AOI_RATIO) / 2.0,
+	"grid_culling_size": 100.0, # O tamanho fixo de cada célula do Spatial Partitioning do QuanticNet
+	"sync_adjacent_grids": true, # Habilita o envio de updates para chunks adjacentes ao jogador (Evita o cap de 50m/cell)
 }
 
 # Controle de estado da topologia local
@@ -198,9 +199,14 @@ var _packet_loss_maximum: float = 0.0
 # VARIÁVEIS DE ESTADO DA INTERFACE E SISTEMA
 # ==============================================================================
 var _scene_world_root_node: Node3D
+var _chunk_manager: Node3D
+var _is_camera_high: bool = false
+var _current_zoom: float = 25.0
 var _active_visual_entities_map: Dictionary = { }
 var _sleeping_entities: Dictionary = { }
-var _client_predicted_position: Vector3 = Vector3(0, 1.0, 0)
+var _client_predicted_position: Vector3 = Vector3(0, 0, 0)
+var _client_predicted_rotation: Vector3 = Vector3(0, 0, 0)
+var _client_predicted_velocity_y: float = 0.0
 var _is_auto_movement_enabled: bool = false
 var _auto_movement_center_origin: Vector3 = Vector3.ZERO
 var _auto_movement_elapsed_time: float = 0.0
@@ -228,6 +234,8 @@ var _ui_diagnostic_label_offset: Label
 var _ui_diagnostic_label_peers: Label
 
 var _camera: Camera3D
+var _camera_pivot: Node3D
+var _spring_arm: SpringArm3D
 
 # ------------------------------------------------------------------------------
 # VARIÁVEIS DE CONTROLE DE THROTTLE E ESTATÍSTICA
@@ -339,13 +347,12 @@ func _ready() -> void:
 		print("[DEMO] Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
 		_global_network_parameters["navigation_map"] = get_world_3d().get_navigation_map()
 
-	if QuanticNet.host(PORT, SECRET, DEFAULT_BIND_IP, MAX_PEERS, _global_network_parameters) == OK:
-
-		# O Servidor registra a si mesmo (ID 1)
-		# Se o seu servidor é puramente uma máquina autoritativa (não há um humano jogando nele),
-		# ele não deveria ter um corpo físico na rede
-		# QuanticNet.register_entity(1, true, true, _entity_profile_player)
-		_active_profiles[1] = _entity_profile_player
+		if QuanticNet.host(PORT, SECRET, DEFAULT_BIND_IP, MAX_PEERS, _global_network_parameters) == OK:
+			# O Servidor registra a si mesmo (ID 1)
+			# Se o seu servidor é puramente uma máquina autoritativa (não há um humano jogando nele),
+			# ele não deveria ter um corpo físico na rede
+			# QuanticNet.register_entity(1, true, true, _entity_profile_player)
+			_active_profiles[1] = _entity_profile_player
 
 		# O Mundo Aberto não utiliza Regions (Instanciamento Rígido).
 		# Todos habitam o mesmo continuum espacial e são regidos unicamente pelo QNSpatialGrid.
@@ -389,42 +396,34 @@ func _notification(what: int) -> void:
 
 func _setup_scene() -> void:
 	# Uma câmera isométrica, uma luz direcional com sombras e um chão escuro.
+	_camera_pivot = Node3D.new()
+	add_child(_camera_pivot)
+
+	_spring_arm = SpringArm3D.new()
+	_spring_arm.spring_length = 25.0
+	_spring_arm.margin = 0.5
+	_spring_arm.position.y = 1.0 # Look at player's head
+	_camera_pivot.add_child(_spring_arm)
+
 	_camera = Camera3D.new()
-	_camera.position = CAMERA_START_POS
-	_camera.rotation_degrees = CAMERA_START_ROT
-	add_child(_camera)
+	_spring_arm.add_child(_camera)
+
+	_camera_pivot.rotation_degrees = CAMERA_START_ROT
 
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-45, 45, 0)
 	light.shadow_enabled = true
 	add_child(light)
 
-	# Chão Base do Mundo Aberto (Contínuo) com NavMesh para validação Server-Side
-	var nav_region = NavigationRegion3D.new()
-	var nav_mesh = NavigationMesh.new()
-	var verts = PackedVector3Array([
-		Vector3(-FLOOR_SIZE.x, 0, -FLOOR_SIZE.y),
-		Vector3(FLOOR_SIZE.x, 0, -FLOOR_SIZE.y),
-		Vector3(FLOOR_SIZE.x, 0, FLOOR_SIZE.y),
-		Vector3(-FLOOR_SIZE.x, 0, FLOOR_SIZE.y)
-	])
-	nav_mesh.vertices = verts
-	nav_mesh.add_polygon(PackedInt32Array([0, 1, 2, 3]))
-	nav_region.navigation_mesh = nav_mesh
-	add_child(nav_region)
-
-	var open_world_floor := MeshInstance3D.new()
-	var plane_ow := PlaneMesh.new()
-	plane_ow.size = FLOOR_SIZE * 2.0
-	var mat_ow := StandardMaterial3D.new()
-	mat_ow.albedo_color = WORLD_FLOOR_COLOR
-	plane_ow.material = mat_ow
-	open_world_floor.mesh = plane_ow
-	open_world_floor.position = Vector3(0, 0, 0)
-	nav_region.add_child(open_world_floor)
-
 	_scene_world_root_node = Node3D.new()
 	add_child(_scene_world_root_node)
+
+	# Gerenciador de Chunks (NavMesh e Visual dinâmicos)
+	_chunk_manager = preload("res://addons/quantic_net/demo/qn_chunk_manager.gd").new()
+	_scene_world_root_node.add_child(_chunk_manager)
+
+	# Fix Initial Client Position (Nasce exatamente no chão plano)
+	_client_predicted_position.y = _chunk_manager.get_height(0, 0)
 
 
 func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3D:
@@ -671,6 +670,10 @@ func _physics_process(delta: float) -> void:
 
 		if input_dir.length_squared() > 0:
 			input_dir = input_dir.normalized()
+			if _camera_pivot:
+				input_dir = input_dir.rotated(Vector3.UP, _camera_pivot.rotation.y)
+
+			_client_predicted_rotation = Vector3(0, atan2(-input_dir.x, -input_dir.z), 0)
 
 		if (
 			_is_auto_movement_enabled
@@ -678,46 +681,88 @@ func _physics_process(delta: float) -> void:
 			> AUTO_MOVE_RADIUS
 		):
 			input_dir = (_auto_movement_center_origin - _client_predicted_position).normalized()
+			_client_predicted_rotation = Vector3(0, atan2(-input_dir.x, -input_dir.z), 0)
 
 		# Client-Side Prediction: Movimenta instantaneamente o avatar local na malha visual
 		# antes mesmo do servidor validar, garantindo responsividade imediata (Zero Input Lag).
 		_client_predicted_position += input_dir * speed * delta
+
+		if _chunk_manager:
+			var target_y = _chunk_manager.get_height(
+				_client_predicted_position.x,
+				_client_predicted_position.z,
+			)
+			if _client_predicted_position.y > target_y:
+				_client_predicted_velocity_y -= 9.8 * delta
+				_client_predicted_position.y += _client_predicted_velocity_y * delta
+				if _client_predicted_position.y <= target_y:
+					_client_predicted_position.y = target_y
+					_client_predicted_velocity_y = 0.0
+			else:
+				_client_predicted_position.y = target_y
+				_client_predicted_velocity_y = 0.0
+
 		_update_visual(QuanticNet.get_unique_id(), _client_predicted_position, true)
 
-		var now = Time.get_ticks_msec()
-		if now - _cooldown_timer_last_shot_ms > SHOOT_COOLDOWN_MS:
-			if not QuanticNet.is_server():
-				_cooldown_timer_last_shot_ms = now
-				_spawn_laser(_client_predicted_position, LASER_COLOR_HITSCAN)
-				_send_shoot_packet(GAME_OP_SHOOT_HITSCAN, _client_predicted_position)
-			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-				_cooldown_timer_last_shot_ms = now
-				_spawn_laser(_client_predicted_position, LASER_COLOR_HITSCAN)
-				_send_shoot_packet(GAME_OP_SHOOT_HITSCAN, _client_predicted_position)
-			elif Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-				_cooldown_timer_last_shot_ms = now
-				_spawn_laser(_client_predicted_position, LASER_COLOR_PHYSICS)
-				_send_shoot_packet(GAME_OP_SHOOT_PHYSICS, _client_predicted_position)
-
 		# Envia a predição otimista de forma cravada para a Engine C++ assinar e rotear
-		QuanticNet.submit_state(_client_predicted_position, Vector3.ZERO, 0, delta)
+		QuanticNet.submit_state(_client_predicted_position, _client_predicted_rotation, 0, delta)
 
 
 func _process(_delta: float) -> void:
+	if _chunk_manager:
+		var poi = []
+		if QuanticNet.is_server():
+			var reg = QuanticNet.get_registry()
+			for id in reg.keys():
+				if reg[id].has("pos"):
+					poi.append(reg[id]["pos"])
+		else:
+			poi.append(_client_predicted_position)
+		_chunk_manager.update_chunks(poi)
+
 	# O _process roda de forma assíncrona (destravado do tick rate de rede), preso apenas ao V-Sync do monitor.
 	# Por isso, toda a lógica de Snapshot Interpolation e Lerping visual vive exclusivamente aqui.
 	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-		if _camera:
-			var target_cam_pos = _client_predicted_position + CAMERA_START_POS
-			_camera.position = _camera.position.lerp(target_cam_pos, _delta * CAMERA_LERP_SPEED)
+		if _camera_pivot:
+			var target_cam_pos = _client_predicted_position
+			var target_cam_rot = _camera_pivot.rotation_degrees
+			var target_spring = _current_zoom
+
+			if _is_camera_high:
+				target_spring = 150.0 # Apenas afasta a câmera, não trava a rotação
+
+			_camera_pivot.position = _camera_pivot.position.lerp(
+				target_cam_pos,
+				_delta * CAMERA_LERP_SPEED,
+			)
+
+			_spring_arm.spring_length = lerp(
+				_spring_arm.spring_length,
+				target_spring,
+				_delta * CAMERA_LERP_SPEED,
+			)
 
 		var now = Time.get_ticks_msec()
 		for id in _active_visual_entities_map.keys():
-			if id != QuanticNet.get_unique_id():
+			if id == QuanticNet.get_unique_id():
+				var visual = _active_visual_entities_map[id]
+				var current_quat = Quaternion.from_euler(visual.rotation)
+				var target_quat = Quaternion.from_euler(_client_predicted_rotation)
+				visual.rotation = current_quat.slerp(target_quat, _delta * 15.0).get_euler()
+			else:
 				var interp_state = QuanticNet.remote_state(id)
 				if not interp_state.is_empty():
 					var visual = _active_visual_entities_map[id]
 					var target_pos = interp_state.get("pos", visual.position)
+					var y_off = 0.5
+					if visual.mesh and visual.mesh is BoxMesh:
+						y_off = visual.mesh.size.y / 2.0
+					target_pos.y += y_off
+
+					var target_rot = interp_state.get("rot", visual.rotation)
+					var current_quat = Quaternion.from_euler(visual.rotation)
+					var target_quat = Quaternion.from_euler(target_rot)
+					visual.rotation = current_quat.slerp(target_quat, _delta * 15.0).get_euler()
 					var last_up = visual.get_meta("last_update", now)
 
 					# Culling Visual
@@ -773,6 +818,10 @@ func _process(_delta: float) -> void:
 			# Interpolação suave para garantir que o Monitor exiba movimento fluido
 			# em vez de "pulos" instantâneos a cada tick de rede.
 			var vis = _active_visual_entities_map[id]
+			var y_off = 0.5
+			if vis.mesh and vis.mesh is BoxMesh:
+				y_off = vis.mesh.size.y / 2.0
+			target_pos.y += y_off
 			vis.position = vis.position.lerp(target_pos, _delta * INTERP_LERP_SPEED)
 
 			# Feedback visual do Filtro Geral renderizado nativamente no Host
@@ -1026,6 +1075,26 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 
 
 func _on_peer_sleep(owner: int) -> void:
+	# O QuanticNet C++ usa TYPE_SLEEP tanto para Dormancy (AFK) quanto para Despawn (Saiu da Área de Interesse).
+	# Para evitar que fantasmas fiquem parados na tela quando o jogador teleporta para outro mapa ou sai da área,
+	# verificamos se a distância do último pacote recebido está muito próxima da borda do nosso Culling Radius.
+	if _active_visual_entities_map.has(owner):
+		var vis = _active_visual_entities_map[owner]
+		var rad = vis.get_meta("presence_radius", 20.0)
+		var interp_state = QuanticNet.remote_state(owner)
+		var last_pos = interp_state.get("pos", vis.position)
+		var dist = _client_predicted_position.distance_to(last_pos)
+
+		var margin := 2.0 # Tolerância para não despawnar falsamente quem dorme na borda exata
+		if dist > (rad + margin):
+			print(
+				"[CLIENT] Entidade %d ignorada (Despawn detectado por borda: %.1fm > %.1fm). Removendo nó visual."
+				% [owner, dist, rad + margin]
+			)
+			vis.queue_free()
+			_active_visual_entities_map.erase(owner)
+			return
+
 	print("[CLIENT] Recebeu TYPE_SLEEP: Entidade %d entrou em Dormancy!" % owner)
 	_sleeping_entities[owner] = true
 
@@ -1151,6 +1220,16 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		lbl.outline_modulate = Color.BLACK
 		lbl.outline_size = COORD_LABEL_OUTLINE_SIZE
 		mesh_inst.add_child(lbl)
+		# Visor (Rosto)
+		var visor = MeshInstance3D.new()
+		var vmesh = BoxMesh.new()
+		vmesh.size = Vector3(0.6, 0.2, 0.2) if id < 1000 else Vector3(0.2, 0.2, 0.2)
+		visor.mesh = vmesh
+		var vmat = StandardMaterial3D.new()
+		vmat.albedo_color = Color.BLACK
+		visor.material_override = vmat
+		visor.position = Vector3(0, 0.2, -0.51 if id < 1000 else -0.41) # -Z é a frente no Godot
+		mesh_inst.add_child(visor)
 		# ---------------------------------------------------------------------
 		mesh_inst.position = pos
 		_scene_world_root_node.add_child(mesh_inst)
@@ -1158,7 +1237,11 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 
 	var visual = _active_visual_entities_map[id]
 	if is_local:
-		visual.position = pos
+		var y_offset = 0.5
+		if visual.mesh and visual.mesh is BoxMesh:
+			y_offset = visual.mesh.size.y / 2.0
+		visual.position = pos + Vector3(0, y_offset, 0)
+
 		var lbl = visual.get_node_or_null("CoordLabel") as Label3D
 		if lbl:
 			lbl.text = "ID: %d [L]\nX: %.1f | Z: %.1f" % [id, pos.x, pos.z]
@@ -1255,7 +1338,28 @@ func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Arr
 func _unhandled_input(event: InputEvent) -> void:
 	# Consome atalhos de depuração evitando colisões com a Interface 2D (Botões e Caixas de Texto).
 	# O isolamento em `_unhandled_input` previne tiros acidentais quando o jogador tenta interagir com a UI.
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			if event.pressed:
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			else:
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_current_zoom = max(5.0, _current_zoom - 2.0)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_current_zoom = min(200.0, _current_zoom + 2.0)
+
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if _camera_pivot:
+			_camera_pivot.rotation_degrees.y -= event.relative.x * 0.3
+			_camera_pivot.rotation_degrees.x -= event.relative.y * 0.3
+			_camera_pivot.rotation_degrees.x = clamp(_camera_pivot.rotation_degrees.x, -89.0, 15.0)
+
 	if event is InputEventKey and event.pressed and not event.echo:
+		# [SPACE] - Toggle Câmera Alta
+		if event.keycode == KEY_SPACE:
+			_is_camera_high = not _is_camera_high
+
 		# [N] - Toggle Netem (Network Emulation)
 		if event.keycode == KEY_N:
 			_is_network_emulation_active = not _is_network_emulation_active

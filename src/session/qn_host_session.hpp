@@ -47,6 +47,8 @@ private:
 	Ref<QNBitBuffer> _read_buf;
 	Ref<QNBitBuffer> _write_buf;
 
+	bool _sync_adjacent_grids = true;
+
 protected:
 	static void _bind_methods();
 
@@ -57,6 +59,8 @@ public:
 	void set_validator(const Ref<RefCounted> &v);
 	void set_dormancy_threshold(int ticks);
 	Ref<RefCounted> get_validator() const;
+	void set_sync_adjacent_grids(bool p_sync);
+	bool get_sync_adjacent_grids() const;
 	
 	void _on_validator_peer_rejected(int id, String reason, int strikes);
 
