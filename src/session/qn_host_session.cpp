@@ -397,7 +397,11 @@ void QNHostSession::tick_broadcast(int now) {
 				if (is_dormant) cid_pos = _registry[cid].pos;
 				else cid_pos = current_states[cid].pos;
 
-				if (cid_pos.distance_to(st.pos) > cid_aura) {
+				// O Server deve respeitar tanto o raio de viso do Observador quanto a "Aura" da Entidade Remota.
+				// Para que uma entidade seja vista, ela precisa estar dentro do raio do observador, OU a entidade ser to grande que seu raio atinge o observador.
+				double effective_radius = Math::max(cull_radius, cid_aura);
+
+				if (cid_pos.distance_to(st.pos) > effective_radius) {
 					it = candidates.erase(it);
 				} else {
 					if (is_dormant) {
@@ -451,11 +455,24 @@ void QNHostSession::tick_broadcast(int now) {
 		}
 		
 		for (int asleep_id : fell_asleep_this_tick) {
-			PackedByteArray sleep_pkt;
-			sleep_pkt.resize(5);
-			sleep_pkt.encode_u8(0, QNSerializer::TYPE_SLEEP);
-			sleep_pkt.encode_u32(1, asleep_id);
-			emit_signal("packet_ready", id, sleep_pkt);
+			if (_registry.find(asleep_id) == _registry.end()) continue;
+
+			double observer_aura = 250.0;
+			if (_profiles.find(id) != _profiles.end()) {
+				Ref<QNEntityProfile> observer_profile = _profiles[id];
+				if (observer_profile.is_valid()) {
+					observer_aura = observer_profile->get_spatial_culling_radius();
+				}
+			}
+
+			Vector3 asleep_pos = _registry[asleep_id].pos;
+			if (asleep_pos.distance_to(st.pos) <= observer_aura) {
+				PackedByteArray sleep_pkt;
+				sleep_pkt.resize(5);
+				sleep_pkt.encode_u8(0, QNSerializer::TYPE_SLEEP);
+				sleep_pkt.encode_u32(1, asleep_id);
+				emit_signal("packet_ready", id, sleep_pkt);
+			}
 		}
 		
 		_write_buf->seek(0);

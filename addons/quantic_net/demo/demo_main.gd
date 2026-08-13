@@ -442,6 +442,23 @@ func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3
 	mi.position.y = y_offset
 	return mi
 
+func _create_filled_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3D:
+	var mi = MeshInstance3D.new()
+	var mesh = CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = 0.05
+	mesh.radial_segments = 32
+	mi.mesh = mesh
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = mat
+	mi.position.y = y_offset
+	return mi
+
 
 func _create_aoi_grid(color: Color, size: Vector2, y_offset: float) -> Node3D:
 	var node = Node3D.new()
@@ -780,8 +797,18 @@ func _process(_delta: float) -> void:
 					if not visual.visible and is_visible:
 						# Evita o efeito fantasma (snap) de interpolação quando uma entidade acabou de nascer no raio de visão.
 						visual.position = target_pos
-					else:
-						# Interpolação agressiva para corrigir Buffer Underruns mascarando pacotes perdidos ou estrangulados pelo NETEM.
+						visual.visible = true
+					elif not is_visible:
+						visual.visible = false
+						if not is_sleeping and (now - last_up > SERVER_CULL_TIMEOUT_MS):
+							# Se o servidor parou de enviar e no dormncia, a entidade saiu do raio do servidor.
+							# Removemos completamente para evitar memory leaks e fantasmas eternos.
+							print("[CLIENT] Entidade %d ignorada por Timeout de Culling. Removendo..." % id)
+							visual.queue_free()
+							_active_visual_entities_map.erase(id)
+							continue
+					
+					if visual.visible:
 						visual.position = visual.position.lerp(
 							target_pos,
 							_delta * INTERP_LERP_SPEED,
@@ -1153,6 +1180,16 @@ func _on_peer_joined(peer_id: int) -> void:
 	if _is_acting_as_server:
 		QuanticNet.register_entity(peer_id, true, true, _entity_profile_player)
 		_active_profiles[peer_id] = _entity_profile_player
+		
+		# Sincroniza a Aura (Culling Radius) com os clientes para que eles no assumam o valor default de 20m
+		# 1. Informa o novo Peer sobre as Auras de todos que j esto no mapa
+		for id in _active_profiles.keys():
+			var rad = _active_profiles[id].get_spatial_culling_radius()
+			rpc_id(peer_id, "client_update_visual_radius", id, rad)
+			
+			# 2. Informa os Peers antigos sobre a Aura do novato
+			if id != peer_id and id < 1000:
+				rpc_id(id, "client_update_visual_radius", peer_id, _entity_profile_player.get_spatial_culling_radius())
 
 
 func _on_peer_left(peer_id: int) -> void:
@@ -1203,9 +1240,9 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		# Anel de Visão (FOV - Apenas para o Cliente Local - O que ele vê)
 		if is_local:
 			var fov_ring = _create_ring(
-				Color(0.0, 0.5, 1.0, 0.3),
+				Color(0.0, 0.5, 1.0, 1.0),
 				_client_local_culling_radius,
-				0.1,
+				0.1
 			)
 			fov_ring.name = "FOVRing"
 			mesh_inst.add_child(fov_ring)
@@ -1256,23 +1293,79 @@ func _update_dynamic_rings() -> void:
 		var is_local = (is_local_client and id == local_id)
 
 		# Atualiza Presence Ring
-		var presence_ring = vis.get_node_or_null("PresenceRing") as MeshInstance3D
-		if presence_ring:
-			presence_ring.visible = _show_culling_rings
-			var target_radius = vis.get_meta("presence_radius", 20.0)
-
-			if presence_ring.mesh.outer_radius != target_radius:
-				presence_ring.mesh.inner_radius = maxf(0.1, target_radius - 0.2)
-				presence_ring.mesh.outer_radius = target_radius
+		var presence_node = vis.get_node_or_null("PresenceRing")
+		if presence_node:
+			presence_node.visible = _show_culling_rings
+			var pradius = vis.get_meta("presence_radius", 20.0)
+			
+			var mesh = presence_node.mesh as TorusMesh
+			if mesh and mesh.outer_radius != pradius:
+				if pradius > mesh.outer_radius:
+					mesh.outer_radius = pradius
+					mesh.inner_radius = pradius - RING_THICKNESS
+				else:
+					mesh.inner_radius = pradius - RING_THICKNESS
+					mesh.outer_radius = pradius
 
 		# Atualiza FOV Ring
 		if is_local:
-			var fov_ring = vis.get_node_or_null("FOVRing") as MeshInstance3D
-			if fov_ring:
-				fov_ring.visible = _show_culling_rings
-				if fov_ring.mesh.outer_radius != _client_local_culling_radius:
-					fov_ring.mesh.inner_radius = maxf(0.1, _client_local_culling_radius - 0.2)
-					fov_ring.mesh.outer_radius = _client_local_culling_radius
+			var fov_node = vis.get_node_or_null("FOVRing")
+			if fov_node:
+				fov_node.visible = _show_culling_rings
+				var mesh = fov_node.mesh as TorusMesh
+				if mesh and mesh.outer_radius != _client_local_culling_radius:
+					# Proteção contra colapso de renderização da Godot
+					if _client_local_culling_radius > mesh.outer_radius:
+						mesh.outer_radius = _client_local_culling_radius
+						mesh.inner_radius = _client_local_culling_radius - RING_THICKNESS
+					else:
+						mesh.inner_radius = _client_local_culling_radius - RING_THICKNESS
+						mesh.outer_radius = _client_local_culling_radius
+
+	# Representação Visual da Grade Espacial do Core C++ (Broad-phase real)
+	if is_local_client:
+		var spatial_node = _scene_world_root_node.get_node_or_null("SpatialAreaVisualizer")
+		if not spatial_node:
+			spatial_node = MeshInstance3D.new()
+			spatial_node.name = "SpatialAreaVisualizer"
+			var box = BoxMesh.new()
+			box.size.y = 0.05
+			spatial_node.mesh = box
+			var mat = StandardMaterial3D.new()
+			mat.albedo_color = Color(0.6, 0.0, 1.0, 0.2) # Roxo translcido
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			spatial_node.material_override = mat
+			_scene_world_root_node.add_child(spatial_node)
+			
+		spatial_node.visible = _show_culling_rings
+		
+		if spatial_node.visible:
+			# Obter o raio REAL do cliente (o mesmo que o servidor conhece, usando a memria de profiles que corrigimos!)
+			var server_cull_radius = _active_profiles.get(local_id, _entity_profile_player).get_spatial_culling_radius()
+			var pos = _client_predicted_position
+			var cell_size = 100.0 # Hardcoded no C++
+			
+			var min_cx = floor((pos.x - server_cull_radius) / cell_size)
+			var max_cx = floor((pos.x + server_cull_radius) / cell_size)
+			var min_cz = floor((pos.z - server_cull_radius) / cell_size)
+			var max_cz = floor((pos.z + server_cull_radius) / cell_size)
+			
+			var min_x = min_cx * cell_size
+			var max_x = (max_cx + 1) * cell_size
+			var min_z = min_cz * cell_size
+			var max_z = (max_cz + 1) * cell_size
+			
+			var size_x = max_x - min_x
+			var size_z = max_z - min_z
+			
+			var bmesh = spatial_node.mesh as BoxMesh
+			if bmesh.size.x != size_x or bmesh.size.z != size_z:
+				bmesh.size.x = size_x
+				bmesh.size.z = size_z
+			
+			# A grade global na engine centralizada
+			spatial_node.position = Vector3(min_x + (size_x / 2.0), 0.025, min_z + (size_z / 2.0))
 
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
@@ -1433,6 +1526,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				var fov_ring = vis.get_node_or_null("FOVRing") as MeshInstance3D
 				if fov_ring:
 					fov_ring.visible = _show_culling_rings
+			
+			var spatial_node = _scene_world_root_node.get_node_or_null("SpatialAreaVisualizer")
+			if spatial_node:
+				spatial_node.visible = _show_culling_rings
+				
 			print("[DEMO] Culling Rings: ", "Exibidos" if _show_culling_rings else "Ocultos")
 
 		elif event.keycode >= KEY_0 and event.keycode <= KEY_9:
@@ -1510,6 +1608,12 @@ func client_update_visual_radius(peer_id: int, new_radius: float) -> void:
 	if _active_visual_entities_map.has(peer_id):
 		var vis = _active_visual_entities_map[peer_id]
 		vis.set_meta("presence_radius", new_radius)
+	
+	# Memoriza o raio no cliente para caso a entidade saia do range (seja deletada) e volte depois!
+	if not QuanticNet.is_server():
+		var prof = QNEntityProfile.new()
+		prof.init(60.0, 1.0, new_radius)
+		_active_profiles[peer_id] = prof
 
 
 func _send_shoot_packet(ptype: int, pos: Vector3) -> void:
