@@ -46,7 +46,7 @@ func peer_left(id: int) -> void:
 
 func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 	# print("[VALIDATOR] Validate called with pos: ", pos)
-	if absf(pos.x) > world_bounds or absf(pos.z) > world_bounds or pos.y < -2.0 or pos.y > 50.0:
+	if absf(pos.x) > world_bounds or absf(pos.z) > world_bounds or absf(pos.y) > world_bounds:
 		return _reject(id, peers.get(id), "fora do mundo")
 		
 	if not peers.has(id):
@@ -77,13 +77,14 @@ func validate(id: int, pos: Vector3, rot: Vector3, now: int) -> Dictionary:
 			var dist_nav = pos.distance_to(closest)
 			
 			var nav_horizontal = Vector2(pos.x, pos.z).distance_to(Vector2(closest.x, closest.z))
+			var nav_vertical = absf(pos.y - closest.y)
 
-			if nav_horizontal <= 2.0 and pos.y >= closest.y and pos.y <= closest.y + 50.0:
-				# Aceita posições aéreas (pulos/quedas/spawns) até 50 metros de altura se estiver acima do chão válido
+			if (nav_horizontal <= 2.0 and nav_vertical <= 2.0) or (nav_horizontal <= 2.0 and pos.y >= closest.y and pos.y <= closest.y + 50.0):
+				# Aceita posições sobre a malha de navegação (com tolerância para relevo 3D) ou aéreas (pulos)
 				pass
+			elif dist_nav > 5.0:
+				return _reject(id, st, "navmesh violation (> 5m)")
 			elif dist_nav > 2.0:
-				return _reject(id, st, "navmesh violation (> 2m)")
-			elif dist_nav > 0.1:
 				st.pos = closest
 				st.rot = rot
 				st.last_ts = now

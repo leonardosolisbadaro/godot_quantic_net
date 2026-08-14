@@ -198,7 +198,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 		
 		last_pkt_seq = (int)_read_buf->read_bits(16);
 		double x = _read_buf->read_float(-512.0, 512.0, 16);
-		double y = _read_buf->read_float(0.0, 10.0, 16);
+		double y = _read_buf->read_float(-512.0, 512.0, 16);
 		double z = _read_buf->read_float(-512.0, 512.0, 16);
 		last_pos = Vector3(x, y, z);
 		last_rot = _read_buf->read_quaternion().get_euler();

@@ -130,7 +130,39 @@ const ZOOM_MAX := 200.0
 const ZOOM_STEP := 2.0
 
 # ==============================================================================
-# 5. CONSTANTES DE NAVEGAÇÃO E DEBUG DO NAVMESH
+# 5. CONSTANTES DE TERRENO PROCEDURAL (HEIGHTMAP & NOISE)
+# ==============================================================================
+## Meia-dimensão (Half Size) do quadrado do terreno (500m = 1000x1000m total).
+const TERRAIN_HALF_SIZE := 500.0
+## Quantidade de subdivisões por eixo para gerar a malha densa do terreno (100x100 quads).
+const TERRAIN_SUBDIVISIONS := 100
+## Escala de amplitude vertical máxima em metros aplicada ao ruído do terreno.
+const TERRAIN_HEIGHT_SCALE := 15.0
+## Frequência espacial padrão do gerador FastNoiseLite para curvas suaves de colinas.
+const TERRAIN_NOISE_FREQUENCY := 0.005
+## Quantidade de oitavas fractais para adicionar microdetalhes ao relevo procedural.
+const TERRAIN_NOISE_OCTAVES := 4
+## Semente pseudoaleatória padrão para sincronização determinística entre servidor e cliente.
+const TERRAIN_SEED := 1337
+## Cor de albedo do terreno procedural iluminado (tom terra/grama estilizado).
+const TERRAIN_COLOR := Color(0.18, 0.22, 0.16)
+## Rugosidade da superfície do material do terreno para reduzir reflexos especulares excessivos.
+const TERRAIN_ROUGHNESS := 0.9
+## Caminho de persistência em disco do cache binário da NavigationMesh 3D.
+const TERRAIN_NAVMESH_CACHE_PATH := "user://terrain_navmesh_cache.res"
+## Inclinação máxima permitida para caminhabilidade na NavigationMesh (graus).
+const NAVMESH_MAX_SLOPE := 45.0
+## Altura padrão do agente para o cálculo do túnel de navegação.
+const NAVMESH_AGENT_HEIGHT := 2.0
+## Altura máxima de degrau que o agente consegue transpor verticalmente.
+const NAVMESH_AGENT_MAX_CLIMB := 0.5
+## Tamanho da célula de voxel da NavigationMesh no plano horizontal.
+const NAVMESH_CELL_SIZE := 0.5
+## Altura da célula de voxel da NavigationMesh no plano vertical.
+const NAVMESH_CELL_HEIGHT := 0.25
+
+# ==============================================================================
+# 6. CONSTANTES DE NAVEGAÇÃO E DEBUG DO NAVMESH
 # ==============================================================================
 ## Raio do agente para o cálculo geométrico dos limites navegáveis da NavMesh.
 const NAVMESH_AGENT_RADIUS := 0.5
@@ -146,7 +178,7 @@ const NAVMESH_WIREFRAME_ELEVATION := 0.06
 const NAVMESH_WIREFRAME_COLOR := Color(0.0, 0.7, 0.9, 0.25)
 
 # ==============================================================================
-# 6. CONSTANTES DE ENTIDADES, MALHAS E COORDENADAS
+# 7. CONSTANTES DE ENTIDADES, MALHAS E COORDENADAS
 # ==============================================================================
 ## Dimensões geométricas da caixa representativa do avatar do jogador (1x2x1 metros).
 const PLAYER_MESH_SIZE := Vector3(1.0, 2.0, 1.0)
@@ -176,7 +208,7 @@ const COORD_LABEL_PIXEL_SIZE := 0.015
 const COORD_LABEL_OUTLINE_SIZE := 4
 
 # ==============================================================================
-# 7. CONSTANTES DE ANÉIS DE CULLING E GRADE ESPACIAL
+# 8. CONSTANTES DE ANÉIS DE CULLING E GRADE ESPACIAL
 # ==============================================================================
 ## Espessura radial do torus geométrico utilizado nos anéis de depuração visual.
 const RING_THICKNESS := 0.2
@@ -206,7 +238,7 @@ const SPATIAL_GRID_DEBUG_COLOR := Color(0.6, 0.0, 1.0, 0.05)
 const SPATIAL_GRID_Y_OFFSET := 0.025
 
 # ==============================================================================
-# 8. CONSTANTES DE GAMEPLAY, MOVIMENTO E INTERPOLAÇÃO
+# 9. CONSTANTES DE GAMEPLAY, MOVIMENTO E INTERPOLAÇÃO
 # ==============================================================================
 ## Distância inicial padrão de culling visual local do cliente.
 const DEFAULT_VIEW_DISTANCE := 100.0
@@ -234,7 +266,7 @@ const PROP_ORBIT_SPACING := 3.0
 const PROP_HEIGHT := 0.5
 
 # ==============================================================================
-# 9. CONSTANTES DE TIRO, LASER E PROTOCOLO CUSTOMIZADO
+# 10. CONSTANTES DE TIRO, LASER E PROTOCOLO CUSTOMIZADO
 # ==============================================================================
 ## Identificador de operação (Opcode) para disparos instantâneos (Hitscan).
 const GAME_OP_SHOOT_HITSCAN := 32
@@ -264,7 +296,7 @@ const PACKET_OFFSET_POS_Y := 4
 const PACKET_OFFSET_POS_Z := 8
 
 # ==============================================================================
-# 10. CONSTANTES DE PERFIS DINÂMICOS DE TESTE (TECLADO 1 A 0)
+# 11. CONSTANTES DE PERFIS DINÂMICOS DE TESTE (TECLADO 1 A 0)
 # ==============================================================================
 ## Frequência de atualização inicial do perfil padrão de jogadores humanos.
 const PROFILE_PLAYER_HZ := 60.0
@@ -307,7 +339,7 @@ const CLIENT_DYNAMIC_PROFILE_HZ := 60.0
 const CLIENT_DYNAMIC_PROFILE_PRIO := 1.0
 
 # ==============================================================================
-# 11. CONSTANTES DE INTERFACE DO USUÁRIO (HUD)
+# 12. CONSTANTES DE INTERFACE DO USUÁRIO (HUD)
 # ==============================================================================
 ## Margem padrão em pixels para ancoragem de painéis na interface gráfica.
 const UI_MARGIN_STD := 20
@@ -346,8 +378,23 @@ var _global_network_parameters = {
 # Controle de estado da topologia local
 @export var enable_server_ram_profiling: bool = true
 @export var server_ram_log_interval_sec: float = 10.0
+
+@export_group("Procedural Terrain")
+## Ativa ou desativa a geração procedural de relevo 3D com FastNoiseLite.
+@export var enable_heightmap_terrain: bool = true
+## Escala máxima de elevação vertical do relevo (amplitude em metros).
+@export var terrain_height_scale: float = TERRAIN_HEIGHT_SCALE
+## Frequência do ruído do terreno (valores menores criam colinas mais amplas).
+@export var terrain_noise_frequency: float = TERRAIN_NOISE_FREQUENCY
+## Semente do gerador de ruído para controle de reprodução procedural.
+@export var terrain_seed: int = TERRAIN_SEED
+
 var auto_spawn_clients: bool = true
 var _is_acting_as_server: bool = false
+var _terrain_noise: FastNoiseLite
+var _terrain_mesh_instance: MeshInstance3D
+var _terrain_static_body: StaticBody3D
+var _terrain_faces: PackedVector3Array = PackedVector3Array()
 
 # ==============================================================================
 # PERFIS DE ENTIDADES (TICK RATES E CULLING)
@@ -549,29 +596,116 @@ func _notification(what: int) -> void:
 		get_tree().quit()
 
 
+func _init_terrain_noise() -> void:
+	_terrain_noise = FastNoiseLite.new()
+	_terrain_noise.seed = terrain_seed
+	_terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_terrain_noise.frequency = terrain_noise_frequency
+	_terrain_noise.fractal_octaves = TERRAIN_NOISE_OCTAVES
+
+
+## Retorna a altitude exata da malha de terreno em coordenadas globais (X, Z) em tempo O(1).
+func get_terrain_height(x: float, z: float) -> float:
+	if not enable_heightmap_terrain or _terrain_noise == null:
+		return 0.0
+	return _terrain_noise.get_noise_2d(x, z) * terrain_height_scale
+
+
+func _generate_terrain_mesh() -> ArrayMesh:
+	var st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hs := TERRAIN_HALF_SIZE
+	var step := (hs * 2.0) / float(TERRAIN_SUBDIVISIONS)
+	_terrain_faces.resize(TERRAIN_SUBDIVISIONS * TERRAIN_SUBDIVISIONS * 6)
+	var face_idx := 0
+
+	for i in range(TERRAIN_SUBDIVISIONS):
+		var z0 := -hs + i * step
+		var z1 := z0 + step
+		for j in range(TERRAIN_SUBDIVISIONS):
+			var x0 := -hs + j * step
+			var x1 := x0 + step
+
+			var y00 := get_terrain_height(x0, z0)
+			var y10 := get_terrain_height(x1, z0)
+			var y01 := get_terrain_height(x0, z1)
+			var y11 := get_terrain_height(x1, z1)
+
+			var p00 := Vector3(x0, y00, z0)
+			var p10 := Vector3(x1, y10, z0)
+			var p01 := Vector3(x0, y01, z1)
+			var p11 := Vector3(x1, y11, z1)
+
+			# Triângulo 1 (Anti-horário para face virada para cima)
+			st.add_vertex(p00)
+			st.add_vertex(p10)
+			st.add_vertex(p11)
+			_terrain_faces[face_idx] = p00
+			_terrain_faces[face_idx + 1] = p10
+			_terrain_faces[face_idx + 2] = p11
+			face_idx += 3
+
+			# Triângulo 2
+			st.add_vertex(p00)
+			st.add_vertex(p11)
+			st.add_vertex(p01)
+			_terrain_faces[face_idx] = p00
+			_terrain_faces[face_idx + 1] = p11
+			_terrain_faces[face_idx + 2] = p01
+			face_idx += 3
+
+	st.generate_normals()
+	st.index()
+	return st.commit()
+
+
 func _setup_scene() -> void:
+	_init_terrain_noise()
 	_scene_world_root_node = Node3D.new()
 	add_child(_scene_world_root_node)
 
-	# NavMesh para o validador do servidor (1000x1000m)
+	# NavMesh para o validador do servidor e clientes (1000x1000m)
 	var nav_region = NavigationRegion3D.new()
-	var nav_mesh = NavigationMesh.new()
-	nav_mesh.agent_radius = NAVMESH_AGENT_RADIUS
-	var hs := NAVMESH_HALF_SIZE
-	var v0 := Vector3(-hs, 0.0, -hs)
-	var v1 := Vector3(hs, 0.0, -hs)
-	var v2 := Vector3(hs, 0.0, hs)
-	var v3 := Vector3(-hs, 0.0, hs)
-	nav_mesh.vertices = PackedVector3Array([v0, v1, v2, v3])
-	nav_mesh.add_polygon(PackedInt32Array([0, 1, 2]))
-	nav_mesh.add_polygon(PackedInt32Array([0, 2, 3]))
+	var nav_mesh: NavigationMesh = null
+
+	var terrain_mesh: ArrayMesh = null
+	if enable_heightmap_terrain:
+		terrain_mesh = _generate_terrain_mesh()
+
+		# Criação do colisor físico para física, lasers e raycasts
+		_terrain_static_body = StaticBody3D.new()
+		var col_shape = CollisionShape3D.new()
+		col_shape.shape = terrain_mesh.create_trimesh_shape()
+		_terrain_static_body.add_child(col_shape)
+		_scene_world_root_node.add_child(_terrain_static_body)
+
+		# Tentativa de carregar a NavigationMesh do cache binário em disco (< 2ms)
+		if ResourceLoader.exists(TERRAIN_NAVMESH_CACHE_PATH):
+			nav_mesh = ResourceLoader.load(TERRAIN_NAVMESH_CACHE_PATH) as NavigationMesh
+
+		# Caso não exista em cache, gera diretamente a partir da malha indexada do terreno e salva
+		if nav_mesh == null or nav_mesh.get_polygon_count() == 0:
+			nav_mesh = NavigationMesh.new()
+			nav_mesh.create_from_mesh(terrain_mesh)
+			ResourceSaver.save(nav_mesh, TERRAIN_NAVMESH_CACHE_PATH)
+	else:
+		nav_mesh = NavigationMesh.new()
+		var hs := NAVMESH_HALF_SIZE
+		var v0 := Vector3(-hs, 0.0, -hs)
+		var v1 := Vector3(hs, 0.0, -hs)
+		var v2 := Vector3(hs, 0.0, hs)
+		var v3 := Vector3(-hs, 0.0, hs)
+		nav_mesh.vertices = PackedVector3Array([v0, v1, v2, v3])
+		nav_mesh.add_polygon(PackedInt32Array([0, 1, 2]))
+		nav_mesh.add_polygon(PackedInt32Array([0, 2, 3]))
+
 	nav_region.navigation_mesh = nav_mesh
 	_scene_world_root_node.add_child(nav_region)
 
 	if _is_acting_as_server:
 		return # Servidor opera de forma pura/headless (zero câmeras, luzes, chão ou malhas visuais)
 
-	# Uma câmera isométrica, uma luz direcional com sombras e um chão escuro (Apenas Clientes)
+	# Uma câmera isométrica, uma luz direcional com sombras e um chão/terreno (Apenas Clientes)
 	_camera_pivot = Node3D.new()
 	add_child(_camera_pivot)
 
@@ -591,23 +725,35 @@ func _setup_scene() -> void:
 	light.shadow_enabled = true
 	add_child(light)
 
-	# Chão (Floor)
-	var floor_mesh = MeshInstance3D.new()
-	var plane = PlaneMesh.new()
-	plane.size = FLOOR_PLANE_SIZE
-	floor_mesh.mesh = plane
-	var floor_mat = StandardMaterial3D.new()
-	floor_mat.albedo_color = FLOOR_COLOR
-	floor_mesh.material_override = floor_mat
-	_scene_world_root_node.add_child(floor_mesh)
+	# Terreno ou Chão plano (Floor)
+	if enable_heightmap_terrain and terrain_mesh != null:
+		_terrain_mesh_instance = MeshInstance3D.new()
+		_terrain_mesh_instance.mesh = terrain_mesh
+		var terrain_mat = StandardMaterial3D.new()
+		terrain_mat.albedo_color = TERRAIN_COLOR
+		terrain_mat.roughness = TERRAIN_ROUGHNESS
+		_terrain_mesh_instance.material_override = terrain_mat
+		_scene_world_root_node.add_child(_terrain_mesh_instance)
+	else:
+		var floor_mesh = MeshInstance3D.new()
+		var plane = PlaneMesh.new()
+		plane.size = FLOOR_PLANE_SIZE
+		floor_mesh.mesh = plane
+		var floor_mat = StandardMaterial3D.new()
+		floor_mat.albedo_color = FLOOR_COLOR
+		floor_mesh.material_override = floor_mat
+		_scene_world_root_node.add_child(floor_mesh)
 
 	# Visualização dinâmica do NavMesh (Overlay translúcido + Wireframe neon)
 	var nav_visual = _create_navmesh_visual(nav_mesh)
 	nav_visual.visible = false # Inicia oculta por padrão
 	_scene_world_root_node.add_child(nav_visual)
 
-	# Fix Initial Client Position
-	_client_predicted_position.y = 0.0
+	# Fix Initial Client Position em relação ao relevo do terreno
+	_client_predicted_position.y = get_terrain_height(
+		_client_predicted_position.x,
+		_client_predicted_position.z,
+	)
 
 
 func _create_navmesh_visual(nav_mesh: NavigationMesh) -> Node3D:
@@ -853,9 +999,10 @@ func _physics_process(delta: float) -> void:
 			var offset_time = _server_authoritative_props_time + (i * PROP_ORBIT_SPACING)
 			var pos = Vector3(
 				sin(offset_time) * PROP_ORBIT_RADIUS,
-				PROP_HEIGHT,
+				0.0,
 				cos(offset_time) * PROP_ORBIT_RADIUS + (i * PROP_ORBIT_SPACING),
 			)
+			pos.y = get_terrain_height(pos.x, pos.z) + PROP_HEIGHT
 
 			QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
 
@@ -908,7 +1055,10 @@ func _physics_process(delta: float) -> void:
 				move_dir = move_dir.normalized()
 				_client_predicted_rotation = Vector3(0, atan2(-move_dir.x, -move_dir.z), 0)
 
-		_client_predicted_position.y = 0.0
+		_client_predicted_position.y = get_terrain_height(
+			_client_predicted_position.x,
+			_client_predicted_position.z,
+		)
 
 		_update_visual(QuanticNet.get_unique_id(), _client_predicted_position, true)
 
@@ -992,9 +1142,10 @@ func _process(_delta: float) -> void:
 					visual.visible = is_visible
 					var lbl = visual.get_node_or_null("CoordLabel") as Label3D
 					if lbl:
-						lbl.text = "ID: %d [R]\nX: %.1f | Z: %.1f" % [
+						lbl.text = "ID: %d [R]\nX: %.1f | Y: %.1f | Z: %.1f" % [
 							id,
 							visual.position.x,
+							visual.position.y,
 							visual.position.z,
 						]
 
@@ -1414,7 +1565,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 
 		var lbl = visual.get_node_or_null("CoordLabel") as Label3D
 		if lbl:
-			lbl.text = "ID: %d [L]\nX: %.1f | Z: %.1f" % [id, pos.x, pos.z]
+			lbl.text = "ID: %d [L]\nX: %.1f | Y: %.1f | Z: %.1f" % [id, pos.x, pos.y, pos.z]
 
 
 func _update_dynamic_rings() -> void:
