@@ -143,10 +143,10 @@ const COORD_LABEL_OUTLINE_SIZE := 4
 # ==============================================================================
 ## Altura vertical de projeção da caixa AABB do Decal sobre o relevo (metros).
 const DECAL_PROJECTION_HEIGHT := 100.0
-## Fator de esmaecimento superior da projeção do Decal (upper fade).
-const DECAL_UPPER_FADE := 0.3
-## Fator de esmaecimento inferior da projeção do Decal (lower fade).
-const DECAL_LOWER_FADE := 0.3
+## Fator de esmaecimento superior da projeção do Decal (upper fade - 0.0 para 100% visibilidade).
+const DECAL_UPPER_FADE := 0.0
+## Fator de esmaecimento inferior da projeção do Decal (lower fade - 0.0 para 100% visibilidade).
+const DECAL_LOWER_FADE := 0.0
 ## Resolução em pixels da textura 2D procedural gerada em memória para os anéis de Decal.
 const DECAL_TEXTURE_SIZE := 512
 ## Espessura do traço do anel em pixels na textura procedural de 512x512.
@@ -447,8 +447,10 @@ var _auto_movement_elapsed_time: float = 0.0
 var _server_authoritative_props_time: float = 0.0
 var _client_local_culling_radius: float = DEFAULT_VIEW_DISTANCE
 var _show_culling_rings: bool = true
+var _show_spatial_grid: bool = true
 var _show_collider_visual: bool = true
 var _cached_ring_texture: ImageTexture = null
+var _hud_node: CanvasLayer = null
 var _ui_label_connection_status: Label
 
 # Labels do System Profiler (CPU, RAM, GPU, Engine)
@@ -909,6 +911,7 @@ func _create_decal_ring(color: Color, radius: float, ring_name: String) -> Decal
 	decal.upper_fade = DECAL_UPPER_FADE
 	decal.lower_fade = DECAL_LOWER_FADE
 	decal.distance_fade_enabled = false
+	decal.cull_mask = 1 # Projeta exclusivamente sobre o terreno (Layer 1)
 	return decal
 
 
@@ -932,7 +935,9 @@ func _create_capsule_collider_visual(id: int, is_local: bool) -> Node3D:
 
 	var cap_mat = StandardMaterial3D.new()
 	cap_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var base_col = LOCAL_PLAYER_COLOR if is_local else (REMOTE_PLAYER_COLOR if is_player else PROP_COLOR)
+	var base_col = LOCAL_PLAYER_COLOR if is_local else (
+		REMOTE_PLAYER_COLOR if is_player else PROP_COLOR
+	)
 	cap_mat.albedo_color = Color(base_col.r, base_col.g, base_col.b, COLLIDER_ALPHA)
 	cap_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	cap_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -973,6 +978,7 @@ func _setup_ui() -> void:
 	# Isso desvincula completamente as métricas textuais 2D do espaço tridimensional da Câmera (3D),
 	# evitando artefatos visuais quando o jogador se movimentar e mantendo o painel rígido na tela.
 	var hud = CanvasLayer.new()
+	_hud_node = hud
 
 	# Container do Topo - Exibe o Estado Bruto da Conexão ENet (Handshake e Sessão).
 	var top_panel = PanelContainer.new()
@@ -1003,8 +1009,11 @@ func _setup_ui() -> void:
 		"1 a 5      : Profile Peers (20 a 1Hz)",
 		"6 a 0      : Profile Culling (5 a 100m)",
 		"+ / -      : FOV Culling Local (Visão)",
+		"V          : Toggle Decals (AoI/FOV)",
+		".          : Toggle Sub-Grid (Spatial)",
 		",          : Toggle NavMesh Visual",
 		"C          : Toggle Colliders (Capsule)",
+		"H          : Toggle HUD / Profilers",
 	]
 
 	for s in shortcuts:
@@ -1453,8 +1462,13 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 
 		var id_to_check = QuanticNet.get_unique_id()
 		var t2 = QuanticNet.get_telemetry(id_to_check)
+		var is_synced = QuanticNet.is_clock_synced()
 
-		if t2:
+		if is_synced:
+			_network_round_trip_time = QuanticNet.clock_rtt()
+			_network_clock_offset = QuanticNet.clock_offset()
+
+		if t2 or is_synced:
 			var rtt_win = _round_trip_time_history.size()
 			_ui_diagnostic_label_rtt.text = "RTT (ms): %.0f | Avg(%d): %.0f | Min: %.0f | Max: %.0f" % [
 				_network_round_trip_time,
@@ -1471,7 +1485,10 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 				loss_min_disp,
 				_packet_loss_maximum,
 			]
-			_ui_diagnostic_label_offset.text = "Clock Offset: %.1f ms" % _network_clock_offset
+			_ui_diagnostic_label_offset.text = "Clock Offset: %.1f ms%s" % [
+				_network_clock_offset,
+				" (Synced)" if is_synced else "",
+			]
 		else:
 			_ui_diagnostic_label_rtt.text = "RTT (ms): Aguardando..."
 			_ui_diagnostic_label_loss.text = "Packet Loss: Aguardando..."
@@ -1756,7 +1773,7 @@ func _update_dynamic_rings() -> void:
 			spatial_node.material_override = mat
 			_scene_world_root_node.add_child(spatial_node)
 
-		spatial_node.visible = _show_culling_rings
+		spatial_node.visible = _show_spatial_grid
 
 		if spatial_node.visible:
 			var pos = _client_predicted_position
@@ -1826,7 +1843,10 @@ func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Arr
 	# O evento de Snapback (Reconciliação) é o coração do Anti-Cheat arquitetural.
 	# Quando o servidor flagra a predição local do cliente desrespeitando o modelo físico, ele dispara este sinal,
 	# forçando o cliente a aceitar o vetor do servidor e re-simular os inputs na fila (replay) que ainda não chegaram.
-	print("Snapback Recebido (Reconciliação Forçada): %s" % str(pos))
+	var reason_str = "Clamp (Velocidade/Limites)" if reason == 1 else (
+		"Reject (Fora do Mundo)" if reason == 2 else "Correção (%d)" % reason
+	)
+	print("[Anti-Cheat] Snapback Recebido (Seq: %d | Motivo: %s): %s" % [seq, reason_str, str(pos)])
 
 	_client_predicted_position = pos
 
@@ -1941,7 +1961,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			)
 			print("View Distance: ", _client_local_culling_radius)
 
-		elif event.keycode == KEY_H:
+		# [V] - Toggle Decals (AoI / FOV Rings)
+		elif event.keycode == KEY_V:
 			_show_culling_rings = not _show_culling_rings
 			for id in _active_visual_entities_map.keys():
 				var vis = _active_visual_entities_map[id]
@@ -1951,12 +1972,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				var fov_ring = vis.get_node_or_null("FOVRing") as Decal
 				if fov_ring:
 					fov_ring.visible = _show_culling_rings
+			print("Decals (Culling Rings): ", "Exibidos" if _show_culling_rings else "Ocultos")
 
+		# [H] - Toggle HUD (Interface / Profilers)
+		elif event.keycode == KEY_H:
+			if _hud_node:
+				_hud_node.visible = not _hud_node.visible
+				print("HUD: ", "Exibido" if _hud_node.visible else "Oculto")
+
+		# [.] (Ponto) - Toggle Sub-Grid Espacial (Área Roxa)
+		elif event.keycode == KEY_PERIOD:
+			_show_spatial_grid = not _show_spatial_grid
 			var spatial_node = _scene_world_root_node.get_node_or_null("SpatialAreaVisualizer")
 			if spatial_node:
-				spatial_node.visible = _show_culling_rings
-
-			print("Culling Rings: ", "Exibidos" if _show_culling_rings else "Ocultos")
+				spatial_node.visible = _show_spatial_grid
+			print("Sub-Grid Espacial: ", "Exibido" if _show_spatial_grid else "Oculto")
 
 		# [,] (Vírgula) - Toggle NavMesh Visual
 		elif event.keycode == KEY_COMMA:
