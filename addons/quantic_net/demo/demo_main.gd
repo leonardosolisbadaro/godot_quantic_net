@@ -222,12 +222,10 @@ const INTERP_LERP_SPEED := 5.0
 const ROTATION_SLERP_SPEED := 15.0
 ## Discrepância espacial máxima antes de cancelar a interpolação suave e forçar snap.
 const CULLING_SNAP_DISTANCE_THRESHOLD := 10.0
-## Raio da órbita circular do modo de movimentação automática de teste.
+## Raio da órbita da trajetória de movimentação automática de teste.
 const AUTO_MOVE_RADIUS := 8.0
-## Frequência angular do componente X na trajetória automática do avatar.
-const AUTO_MOVE_SPEED_X := 3.0
-## Frequência angular do componente Z na trajetória automática do avatar.
-const AUTO_MOVE_SPEED_Z := 2.0
+## Frequência angular da trajetória automática em forma de 8 (Lemniscata).
+const AUTO_MOVE_SPEED := 1.5
 ## Raio da órbita circular descrita pelos props autoritativos no servidor.
 const PROP_ORBIT_RADIUS := 4.0
 ## Espaçamento temporal de defasagem de fase entre props orbitando simultaneamente.
@@ -865,10 +863,10 @@ func _physics_process(delta: float) -> void:
 		not QuanticNet.is_server()
 		and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED
 	):
-		var speed = CLIENT_MOVE_SPEED
-		var input_dir = Vector3.ZERO
-
 		if not _is_auto_movement_enabled:
+			var speed = CLIENT_MOVE_SPEED
+			var input_dir = Vector3.ZERO
+
 			if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 				input_dir.z -= 1
 			if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
@@ -877,29 +875,38 @@ func _physics_process(delta: float) -> void:
 				input_dir.x -= 1
 			if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 				input_dir.x += 1
+
+			if input_dir.length_squared() > 0:
+				input_dir = input_dir.normalized()
+				if _camera_pivot:
+					input_dir = input_dir.rotated(Vector3.UP, _camera_pivot.rotation.y)
+
+				_client_predicted_rotation = Vector3(0, atan2(-input_dir.x, -input_dir.z), 0)
+
+			# Client-Side Prediction: Movimenta instantaneamente o avatar local na malha visual
+			# antes mesmo do servidor validar, garantindo responsividade imediata (Zero Input Lag).
+			_client_predicted_position += input_dir * speed * delta
 		else:
 			_auto_movement_elapsed_time += delta
-			input_dir.x = sin(_auto_movement_elapsed_time * AUTO_MOVE_SPEED_X)
-			input_dir.z = cos(_auto_movement_elapsed_time * AUTO_MOVE_SPEED_Z)
+			var t := _auto_movement_elapsed_time
 
-		if input_dir.length_squared() > 0:
-			input_dir = input_dir.normalized()
-			if _camera_pivot:
-				input_dir = input_dir.rotated(Vector3.UP, _camera_pivot.rotation.y)
+			# Trajetória paramétrica contínua (Lemniscata de Gerono / Figura em 8)
+			var offset_x = sin(t * AUTO_MOVE_SPEED) * AUTO_MOVE_RADIUS
+			var offset_z = sin(t * AUTO_MOVE_SPEED * 2.0) * (AUTO_MOVE_RADIUS * 0.5)
+			_client_predicted_position = _auto_movement_center_origin + Vector3(
+				offset_x,
+				0.0,
+				offset_z,
+			)
 
-			_client_predicted_rotation = Vector3(0, atan2(-input_dir.x, -input_dir.z), 0)
-
-		if (
-			_is_auto_movement_enabled
-			and _client_predicted_position.distance_to(_auto_movement_center_origin)
-			> AUTO_MOVE_RADIUS
-		):
-			input_dir = (_auto_movement_center_origin - _client_predicted_position).normalized()
-			_client_predicted_rotation = Vector3(0, atan2(-input_dir.x, -input_dir.z), 0)
-
-		# Client-Side Prediction: Movimenta instantaneamente o avatar local na malha visual
-		# antes mesmo do servidor validar, garantindo responsividade imediata (Zero Input Lag).
-		_client_predicted_position += input_dir * speed * delta
+			# Vetor velocidade analítico para orientação tangencial perfeitamente suave
+			var vel_x = cos(t * AUTO_MOVE_SPEED) * AUTO_MOVE_SPEED * AUTO_MOVE_RADIUS
+			var vel_z = cos(t * AUTO_MOVE_SPEED * 2.0) * 2.0 * AUTO_MOVE_SPEED * (AUTO_MOVE_RADIUS
+			* 0.5)
+			var move_dir = Vector3(vel_x, 0.0, vel_z)
+			if move_dir.length_squared() > 0.0001:
+				move_dir = move_dir.normalized()
+				_client_predicted_rotation = Vector3(0, atan2(-move_dir.x, -move_dir.z), 0)
 
 		_client_predicted_position.y = 0.0
 
@@ -1639,6 +1646,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_is_auto_movement_enabled = not _is_auto_movement_enabled
 			if _is_auto_movement_enabled:
 				_auto_movement_center_origin = _client_predicted_position
+				_auto_movement_elapsed_time = 0.0
 			print("Auto-move: ", _is_auto_movement_enabled)
 
 		# [+ / -] - Client View Distance (Visual Culling)

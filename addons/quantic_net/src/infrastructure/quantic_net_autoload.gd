@@ -326,7 +326,12 @@ func host(
 				id_bytes.resize(PEER_ID_BINARY_SIZE)
 				id_bytes.encode_u32(0, id)
 				pkt.append_array(id_bytes)
-				_hook.send_custom(BROADCAST_PEER_ID, pkt, CH_STATE, MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+				_hook.send_custom(
+					BROADCAST_PEER_ID,
+					pkt,
+					CH_STATE,
+					MultiplayerPeer.TRANSFER_MODE_RELIABLE,
+				)
 
 			peer_left.emit(id)
 	)
@@ -355,7 +360,13 @@ func join(ip: String, port: int, secret: String, netem: bool = false, config: Di
 		var lat = config.get("netem_latency", DEFAULT_NETEM_LATENCY_MS)
 		var jit = config.get("netem_jitter", DEFAULT_NETEM_JITTER_MS)
 		var dup = config.get("netem_dup", DEFAULT_NETEM_DUP)
-		_wire.set_netem_config(true, loss / PERCENT_NORMALIZER if loss > PERCENT_THRESHOLD else loss, lat, jit, dup)
+		_wire.set_netem_config(
+			true,
+			loss / PERCENT_NORMALIZER if loss > PERCENT_THRESHOLD else loss,
+			lat,
+			jit,
+			dup,
+		)
 
 	_hook = QNNetHook.new()
 	_hook.get_base().multiplayer_peer = _wire
@@ -474,9 +485,13 @@ func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -
 		return
 
 	if _is_server:
-		if _host_session and data.size() >= STATE_PACKET_MIN_SIZE and data[0] == QNSerializer.TYPE_STATE:
+		if (
+			_host_session and data.size() >= STATE_PACKET_MIN_SIZE
+			and data[0] == QNSerializer.TYPE_STATE
+		):
 			_host_session.on_client_snapshot(peer_id, data.slice(1), Time.get_ticks_msec())
-		elif (_command_session and data.size() >= MIN_PACKET_HEADER_SIZE and data[0] == QNSerializer.TYPE_INPUT):
+		elif (_command_session and data.size() >= MIN_PACKET_HEADER_SIZE
+		and data[0] == QNSerializer.TYPE_INPUT):
 			_command_session.on_client_input(peer_id, data, Time.get_ticks_msec())
 	else:
 		if data.size() >= MIN_PACKET_HEADER_SIZE:
@@ -565,7 +580,12 @@ func cleanup_entity(entity_id: int) -> void:
 		_client_session.cleanup_entity(entity_id)
 
 
-func query_raycast(origin: Vector3, direction: Vector3, max_dist: float = DEFAULT_QUERY_MAX_DIST, timestamp: int = DEFAULT_QUERY_TIMESTAMP) -> Dictionary:
+func query_raycast(
+	origin: Vector3,
+	direction: Vector3,
+	max_dist: float = DEFAULT_QUERY_MAX_DIST,
+	timestamp: int = DEFAULT_QUERY_TIMESTAMP,
+) -> Dictionary:
 	if _is_server and _host_session:
 		return _host_session.query_raycast(origin, direction, max_dist, timestamp)
 	return { }
