@@ -1,4 +1,4 @@
-﻿## @file test_qn_client_session_snapback.gd
+## @file test_qn_client_session_snapback.gd
 ## @path res://tests/unit/use_cases/test_qn_client_session_snapback.gd
 ##
 ## @description
@@ -49,7 +49,7 @@ func test_snapback_reescreve_estado_local_e_drena() -> void:
 	# Act: servidor corrige para origem, confirmando ate seq=2
 	sess.handle_packet(_snapback_pkt(2, Vector3.ZERO, 2), 1500)
 	# Assert
-	assert_true(sess.local_pos.distance_to(Vector3.ZERO) < 0.01, "posicao local reescrita pela autoridade")
+	assert_true(sess.local_pos.distance_to(Vector3.ZERO) < 0.02, "posicao local reescrita pela autoridade")
 	assert_eq(sess.pending_inputs(), 2, "seqs 3,4 seguem pendentes")
 	assert_eq(events.size(), 1, "sinal emitido")
 	assert_eq(events[0]["seq"], 2)

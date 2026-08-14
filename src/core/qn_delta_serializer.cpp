@@ -6,8 +6,8 @@
 
 using namespace godot;
 
-const double QNDeltaSerializer::POS_LO = -64.0;
-const double QNDeltaSerializer::POS_HI = 64.0;
+const double QNDeltaSerializer::POS_LO = -512.0;
+const double QNDeltaSerializer::POS_HI = 512.0;
 
 void QNDeltaSerializer::_bind_methods() {
 }

@@ -8,6 +8,7 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <deque>
 #include <map>
+#include <unordered_set>
 
 #include "core/qn_priority_accumulator.hpp"
 #include "core/qn_entity_profile.hpp"
@@ -34,6 +35,7 @@ private:
 	std::vector<int> _active_entities;
 	std::map<int, RegionData> _regions; // Region ID -> RegionData
 	std::unordered_map<int, int> _dormancy_ticks;
+	std::unordered_map<int, std::unordered_set<int>> _peer_known_entities;
 	int _dormancy_threshold_ticks = 60;
 	int _server_seq;
 	std::deque<QNWorldSnapshot> _world_history;
@@ -48,6 +50,8 @@ private:
 	Ref<QNBitBuffer> _write_buf;
 
 	bool _sync_adjacent_grids = true;
+	double _default_cull_radius = 250.0;
+	double _default_entity_aura = 250.0;
 
 protected:
 	static void _bind_methods();
@@ -61,6 +65,12 @@ public:
 	Ref<RefCounted> get_validator() const;
 	void set_sync_adjacent_grids(bool p_sync);
 	bool get_sync_adjacent_grids() const;
+
+	void set_default_cull_radius(double r);
+	double get_default_cull_radius() const;
+
+	void set_default_entity_aura(double r);
+	double get_default_entity_aura() const;
 	
 	void _on_validator_peer_rejected(int id, String reason, int strikes);
 

@@ -1,4 +1,4 @@
-﻿## @file test_qn_serializer.gd
+## @file test_qn_serializer.gd
 ## @path res://tests/unit/domain/test_qn_serializer.gd
 ##
 ## @description
@@ -40,19 +40,19 @@ func test_roundtrip_preserva_valores_dentro_da_precisao() -> void:
 	assert_almost_eq(
 		d.get("pos", Vector3.ZERO).x,
 		pos.x,
-		0.002,
+		0.02,
 		"Eixo X da posicao deve estar dentro da margem de erro de quantizacao",
 	)
 	assert_almost_eq(
 		d.get("pos", Vector3.ZERO).y,
 		pos.y,
-		0.002,
+		0.02,
 		"Eixo Y da posicao deve estar dentro da margem de erro",
 	)
 	assert_almost_eq(
 		d.get("pos", Vector3.ZERO).z,
 		pos.z,
-		0.002,
+		0.02,
 		"Eixo Z da posicao deve estar dentro da margem de erro",
 	)
 	assert_almost_eq(
@@ -70,7 +70,7 @@ func test_roundtrip_preserva_valores_dentro_da_precisao() -> void:
 
 
 func test_posicao_fora_do_range_satura_nos_limites() -> void:
-	# Arrange (Preparação): Uma posição muito além dos limites suportados pelo quantizador (ex: -64 a 64)
+	# Arrange (Preparação): Uma posição muito além dos limites suportados pelo quantizador (ex: -512 a 512)
 	var pos_out_of_bounds := Vector3(999.0, 0.0, -999.0)
 
 	# Act (Ação): Serializa e deserializa
@@ -80,14 +80,14 @@ func test_posicao_fora_do_range_satura_nos_limites() -> void:
 	# Assert (Verificação): Os valores devem ser grampeados (clamped) aos extremos permitidos
 	assert_almost_eq(
 		d.get("pos", Vector3.ZERO).x,
-		64.0,
-		0.01,
+		512.0,
+		0.05,
 		"Posicao X excedente deve saturar no limite superior",
 	)
 	assert_almost_eq(
 		d.get("pos", Vector3.ZERO).z,
-		-64.0,
-		0.01,
+		-512.0,
+		0.05,
 		"Posicao Z excedente deve saturar no limite inferior",
 	)
 

@@ -15,131 +15,316 @@
 ## - Network Emulation (NETEM): Injeção artificial de cenários adversos de rede (latência, perdas e duplicação) para testar a resiliência do Client-Side Prediction.
 ##
 ## @created 2026-08-06
-## @updated 2026-08-10
+## @updated 2026-08-14
 ##
 ## @since 0.5.0
-## @lastModifiedIn 0.8.0
+## @lastModifiedIn 0.9.0
 ##
 ## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 
 extends Node3D
 
 # ==============================================================================
-# CONSTANTES GLOBAIS DE SISTEMA E PERFORMANCE
+# 1. CONSTANTES DE TEMPO, FRAMERATE E CONVERSÃO MATEMÁTICA
 # ==============================================================================
+## Intervalo mínimo (em milissegundos) entre atualizações de métricas textuais na UI.
 const UI_UPDATE_RATE_MS := 250
+## Fator multiplicador para conversão de bytes para megabytes (1024 * 1024).
 const BYTES_TO_MB := 1048576.0
+## Fator multiplicador para conversão de segundos para milissegundos.
 const SEC_TO_MS := 1000.0
+## Taxa alvo de quadros por segundo para sincronização vertical e testes de carga.
 const TARGET_FPS := 60
+## Valor sentinela inicial máximo para comparações de mínimos em ponto flutuante.
 const SENTINEL_MAX_FLOAT := 9999.0
+## Valor sentinela inicial máximo para comparações de mínimos inteiros.
 const SENTINEL_MAX_INT := 9999
-
-const RTT_HISTORY_MAX := 50
-const MAX_PEERS := 32
+## Percentil inferior utilizado para quantificar o 1% Low de FPS (quedas bruscas).
 const PERCENTILE_1_LOW := 0.01
 
-# Constantes de Cena (Mundo 3D)
-const CAMERA_START_POS := Vector3(0, 8, 10)
-const CAMERA_START_ROT := Vector3(-35, 0, 0)
-# Limites do mundo físico instanciado (40x40 metros). O Culling Geral será um percentual disso.
-const FLOOR_SIZE := Vector2(40, 40)
+## Tamanho máximo da janela de histórico móvel de FPS (600 ticks = 10 segundos a 60Hz).
+const FPS_HISTORY_MAX := 600
+## Tamanho máximo da janela de histórico móvel do tempo de processamento de frame.
+const FRAME_TIME_HISTORY_MAX := 600
+## Tamanho máximo da janela de histórico móvel do RTT (Ping).
+const RTT_HISTORY_MAX := 50
+## Tamanho máximo da janela de histórico móvel de RAM do servidor (600 ticks = 10s a 60Hz).
+const SERVER_RAM_HISTORY_MAX := 600
+
+# ==============================================================================
+# 2. CONSTANTES DE REDE, ENDEREÇAMENTO E TOPOLOGIA (QUANTICNET)
+# ==============================================================================
+## Porta UDP padrão utilizada para bind e escuta do host autoritativo.
+const PORT := 4242
+## Token compartilhado de segurança para handshake e autorização inicial DTLS.
+const SECRET := "demo-secret"
+## Endereço IP padrão de loopback local para conexões de teste na mesma máquina.
+const DEFAULT_BIND_IP := "127.0.0.1"
+## Número máximo de conexões simultâneas suportadas na topologia da demo.
+const MAX_PEERS := 32
+## Limiar de ID de entidade: IDs < 1000 são avatares de peers; IDs >= 1000 são props de ambiente.
+const PEER_ID_THRESHOLD := 1000
+## IDs autoritativos dos props dinâmicos instanciados e governados exclusivamente pelo host.
 const SERVER_PROPS: Array[int] = [1001, 1002, 1003]
-# O Grid Culling dividirá o mundo em chunks menores. Aqui definimos que o AoI (Area of Interest) cobrirá 50% do chão.
-const GENERAL_AOI_RATIO := 0.5
 
-# Constantes de Interface
-const UI_MARGIN_STD := 20
-const UI_MARGIN_LARGE := 40
-const UI_SPACER := 15
-const OUTLINE_THICK := 4
-const OUTLINE_THIN := 3
+# ==============================================================================
+# 3. CONSTANTES DE ANTI-CHEAT, SEGURANÇA E NETEM (PARÂMETROS DE REDE)
+# ==============================================================================
+## Velocidade máxima elástica tolerada pelo validador antes de registrar infração.
+const NET_MAX_SPEED := 300.0
+## Distância máxima permitida antes de abortar interpolação e aplicar Snap corretivo.
+const NET_HARD_CAP := 500.0
+## Fronteira física invisível do mundo cúbico (entidades além deste limite são purgadas).
+const NET_WORLD_BOUNDS := 500.0
+## Quantidade máxima de violações permitidas antes da desconexão compulsória (Kick).
+const NET_MAX_STRIKES := 5
+## Tempo limite (em segundos) para finalizar as chaves criptográficas DTLS.
+const NET_AUTH_TIMEOUT := 3.0
+## Taxa padrão de transmissão e processamento em Hz do servidor de rede.
+const NET_SERVER_TICK_RATE := 20.0
+## Quantidade de ticks imóveis necessários para uma entidade entrar no estado dormente.
+const NET_DORMANCY_THRESHOLD_TICKS := 60
+## Tamanho espacial (em metros) de cada célula do grid de particionamento espacial.
+const NET_GRID_CULLING_SIZE := 100.0
+## Porcentagem padrão simulada de perda de pacotes no modo de emulação de rede.
+const NETEM_LOSS_DEFAULT := 10.0
+## Latência simulada base (em milissegundos) injetada na conexão via NETEM.
+const NETEM_LATENCY_DEFAULT := 150
+## Variância randômica (Jitter em milissegundos) adicionada ao RTT no NETEM.
+const NETEM_JITTER_DEFAULT := 50
+## Taxa percentual de duplicação simulada de pacotes no socket virtual.
+const NETEM_DUP_DEFAULT := 0.0
 
-# Constantes de Gameplay (Valores Extraídos para Configuração)
-const DEFAULT_VIEW_DISTANCE := 96.0 # 12.0 Raio dinâmico no qual o Cliente decide renderizar ou ocultar entidades locais.
-const CLIENT_MOVE_SPEED := 30.0 # 6.0 Deslocamento cravado do avatar. Variável blindada que o Servidor usará no Anti-Speedhack.
-const GAME_OP_SHOOT_HITSCAN = 32
-const GAME_OP_SHOOT_PHYSICS = 33
-const SHOOT_COOLDOWN_MS := 200
-const SERVER_CULL_TIMEOUT_MS := 2000 # Define quanto tempo o Client aguarda antes de "matar" uma entidade visualmente por inanição de pacotes.
-const INTERP_LERP_SPEED := 5.0 # Suavização visual (Client-Side Interpolation)
+# ==============================================================================
+# 4. CONSTANTES DE AMBIENTE 3D, CÂMERA E ILUMINAÇÃO
+# ==============================================================================
+## Dimensões em metros do plano de chão escuro renderizado para o cliente.
+const FLOOR_PLANE_SIZE := Vector2(1000.0, 1000.0)
+## Cor de albedo do material fosco do piso da cena.
+const FLOOR_COLOR := Color(0.15, 0.15, 0.15)
+## Ângulo e inclinação inicial da luz direcional solar com sombras ativadas.
+const SUN_LIGHT_ROTATION := Vector3(-45.0, 45.0, 0.0)
+## Rotação angular isométrica inicial do pivô de câmera.
+const CAMERA_START_ROT := Vector3(-35.0, 0.0, 0.0)
+## Comprimento padrão do braço da mola da câmera em terceira pessoa.
+const CAMERA_DEFAULT_SPRING_LENGTH := 25.0
+## Comprimento estendido do braço da mola para a visualização aérea panorâmica.
+const CAMERA_HIGH_SPRING_LENGTH := 150.0
+## Margem de colisão do SpringArm3D para evitar clipping com a geometria da cena.
+const CAMERA_SPRING_MARGIN := 0.5
+## Elevação vertical do ponto focal do pivô da câmera em relação aos pés do jogador.
+const CAMERA_TARGET_Y_OFFSET := 1.0
+## Velocidade de interpolação (lerp) suave do pivô e zoom da câmera.
+const CAMERA_LERP_SPEED := 5.0
+## Sensibilidade angular do mouse durante o controle em modo capturado.
+const MOUSE_SENSITIVITY := 0.3
+## Limite inferior de inclinação vertical (Pitch) da câmera (olhando para cima).
+const CAMERA_PITCH_MIN := -89.0
+## Limite superior de inclinação vertical (Pitch) da câmera (olhando para baixo).
+const CAMERA_PITCH_MAX := 15.0
+## Distância mínima permitida para aproximação máxima do zoom da câmera.
+const ZOOM_MIN := 5.0
+## Distância máxima permitida para afastamento do zoom da câmera.
+const ZOOM_MAX := 200.0
+## Passo de incremento ou decremento de zoom a cada rolagem da roda do mouse.
+const ZOOM_STEP := 2.0
 
-# Constantes de Padrão de Movimento (Auto-Move e Props)
+# ==============================================================================
+# 5. CONSTANTES DE NAVEGAÇÃO E DEBUG DO NAVMESH
+# ==============================================================================
+## Raio do agente para o cálculo geométrico dos limites navegáveis da NavMesh.
+const NAVMESH_AGENT_RADIUS := 0.5
+## Meia-dimensão (Half Size) do quadrado da malha de navegação (500m = 1000x1000m total).
+const NAVMESH_HALF_SIZE := 500.0
+## Elevação sutil em Y das faces poligonais do NavMesh para evitar Z-Fighting com o chão.
+const NAVMESH_FACES_ELEVATION := 0.05
+## Cor e transparência ciano da superfície translúcida de depuração da NavMesh.
+const NAVMESH_FACES_COLOR := Color(0.0, 0.4, 0.8, 0.05)
+## Elevação em Y das linhas de contorno do wireframe do NavMesh para sobrepor as faces.
+const NAVMESH_WIREFRAME_ELEVATION := 0.06
+## Cor e transparência das bordas do wireframe da malha de navegação.
+const NAVMESH_WIREFRAME_COLOR := Color(0.0, 0.7, 0.9, 0.25)
+
+# ==============================================================================
+# 6. CONSTANTES DE ENTIDADES, MALHAS E COORDENADAS
+# ==============================================================================
+## Dimensões geométricas da caixa representativa do avatar do jogador (1x2x1 metros).
+const PLAYER_MESH_SIZE := Vector3(1.0, 2.0, 1.0)
+## Dimensões geométricas da caixa representativa dos props dinâmicos (1x1x1 metro).
+const PROP_MESH_SIZE := Vector3(1.0, 1.0, 1.0)
+## Cor visual de destaque atribuída ao avatar do cliente local (verde).
+const LOCAL_PLAYER_COLOR := Color.GREEN
+## Cor visual padrão atribuída aos avatares de peers remotos (vermelho).
+const REMOTE_PLAYER_COLOR := Color.RED
+## Cor visual padrão atribuída às entidades inanimadas (props/amarelo).
+const PROP_COLOR := Color.YELLOW
+## Elevação padrão em Y para o centro de massa da entidade acima do chão.
+const ENTITY_DEFAULT_Y_OFFSET := 0.5
+## Dimensões da malha indicativa de orientação (viseira frontal) do jogador.
+const PLAYER_VISOR_SIZE := Vector3(0.6, 0.2, 0.2)
+## Dimensões da malha indicativa de orientação (viseira frontal) dos props.
+const PROP_VISOR_SIZE := Vector3(0.2, 0.2, 0.2)
+## Deslocamento espacial frontal da viseira indicativa na malha do jogador.
+const PLAYER_VISOR_OFFSET := Vector3(0.0, 0.2, -0.51)
+## Deslocamento espacial frontal da viseira indicativa na malha do prop.
+const PROP_VISOR_OFFSET := Vector3(0.0, 0.2, -0.41)
+## Deslocamento vertical da etiqueta flutuante 3D de coordenadas acima da entidade.
+const COORD_LABEL_OFFSET := Vector3(0.0, 1.5, 0.0)
+## Escala de amostragem de pixels para legibilidade do texto na Label3D.
+const COORD_LABEL_PIXEL_SIZE := 0.015
+## Espessura do contorno escuro da Label3D de coordenadas.
+const COORD_LABEL_OUTLINE_SIZE := 4
+
+# ==============================================================================
+# 7. CONSTANTES DE ANÉIS DE CULLING E GRADE ESPACIAL
+# ==============================================================================
+## Espessura radial do torus geométrico utilizado nos anéis de depuração visual.
+const RING_THICKNESS := 0.2
+## Quantidade de segmentos angulares longitudinais do torus de debug.
+const RING_SIDES := 64
+## Quantidade de anéis circulares transversais na geometria do torus.
+const RING_SEG := 32
+## Deslocamento em Y do anel de presença para evitar sobreposição plana com o piso.
+const RING_Y_OFFSET := 0.05
+## Nível de transparência (Alpha) da cor do anel de presença da entidade.
+const PRESENCE_RING_ALPHA := 0.25
+## Cor azul translúcida indicativa do anel de alcance de visão (FOV) do cliente local.
+const FOV_RING_COLOR := Color(0.0, 0.5, 1.0, 1.0)
+## Deslocamento em Y do anel de FOV local para sobrepor sutilmente o anel de presença.
+const FOV_RING_Y_OFFSET := 0.1
+## Raio de presença padrão de contingência para entidades sem metadados explícitos.
+const FALLBACK_PRESENCE_RADIUS := 20.0
+## Raio de presença padrão inicial assumido pelos avatares de rede.
+const DEFAULT_PRESENCE_RADIUS := 100.0
+## Dimensão lateral padrão da célula da grade espacial do core em C++.
+const SPATIAL_GRID_CELL_SIZE := 100.0
+## Altura da malha de visualização da célula espacial no chão.
+const SPATIAL_CELL_DEBUG_HEIGHT := 0.05
+## Cor roxa translúcida sutil para destaque da célula espacial ativa.
+const SPATIAL_GRID_DEBUG_COLOR := Color(0.6, 0.0, 1.0, 0.05)
+## Elevação vertical da malha de depuração da célula espacial ativa.
+const SPATIAL_GRID_Y_OFFSET := 0.025
+
+# ==============================================================================
+# 8. CONSTANTES DE GAMEPLAY, MOVIMENTO E INTERPOLAÇÃO
+# ==============================================================================
+## Distância inicial padrão de culling visual local do cliente.
+const DEFAULT_VIEW_DISTANCE := 100.0
+## Passo de ajuste para aumentar ou diminuir a distância de culling local via teclado (+/-).
+const VIEW_DISTANCE_STEP := 2.0
+## Limite mínimo inferior para o raio de visão e culling do cliente local.
+const VIEW_DISTANCE_MIN := 2.0
+## Velocidade linear máxima permitida para o deslocamento do avatar do cliente.
+const CLIENT_MOVE_SPEED := 30.0
+## Velocidade de interpolação exponencial (lerp) das entidades remotas na tela.
+const INTERP_LERP_SPEED := 5.0
+## Velocidade de rotação suave esférica (slerp) dos avatares para alinhamento direcional.
+const ROTATION_SLERP_SPEED := 15.0
+## Discrepância espacial máxima antes de cancelar a interpolação suave e forçar snap.
+const CULLING_SNAP_DISTANCE_THRESHOLD := 10.0
+## Raio da órbita circular do modo de movimentação automática de teste.
 const AUTO_MOVE_RADIUS := 8.0
+## Frequência angular do componente X na trajetória automática do avatar.
 const AUTO_MOVE_SPEED_X := 3.0
+## Frequência angular do componente Z na trajetória automática do avatar.
 const AUTO_MOVE_SPEED_Z := 2.0
+## Raio da órbita circular descrita pelos props autoritativos no servidor.
 const PROP_ORBIT_RADIUS := 4.0
+## Espaçamento temporal de defasagem de fase entre props orbitando simultaneamente.
 const PROP_ORBIT_SPACING := 3.0
+## Altura fixa de sustentação dos props acima do chão durante a órbita.
 const PROP_HEIGHT := 0.5
 
 # ==============================================================================
-# CONSTANTES E VARIÁVEIS DE REDE E CONFIGURAÇÕES DO QUANTICNET
+# 9. CONSTANTES DE TIRO, LASER E PROTOCOLO CUSTOMIZADO
 # ==============================================================================
-# Definem o canal de comunicação via Socket. A chave `SECRET` é vital para o Handshake DTLS;
-# ela atua como um pre-shared token, descartando imediatamente scanners TCP/UDP ou acessos espúrios
-# antes mesmo que o ENet aloque recursos, mitigando ataques de DDOS na camada de aplicação.
-const PORT := 4242
-const SECRET := "demo-secret"
-
-
-# Constantes de Visualização de Entidades (Meshes e Labels)
-const PLAYER_MESH_SIZE := Vector3(1, 2, 1)
-const PROP_MESH_SIZE := Vector3(1, 1, 1)
-const LOCAL_PLAYER_COLOR := Color.GREEN
-const REMOTE_PLAYER_COLOR := Color.RED
-const PROP_COLOR := Color.YELLOW
-const COORD_LABEL_OFFSET := Vector3(0, 1.5, 0)
-const COORD_LABEL_PIXEL_SIZE := 0.015
-const COORD_LABEL_OUTLINE_SIZE := 4
-
-# Constantes de Efeitos e Animações (Laser Hitscan/Físico)
+## Identificador de operação (Opcode) para disparos instantâneos (Hitscan).
+const GAME_OP_SHOOT_HITSCAN := 32
+## Identificador de operação (Opcode) para disparos com tempo de voo físico.
+const GAME_OP_SHOOT_PHYSICS := 33
+## Dimensões do feixe de laser instanciado nos disparos visuais.
 const LASER_MESH_SIZE := Vector3(0.2, 2.0, 0.2)
+## Cor ciano atribuída aos disparos do tipo Hitscan.
+const LASER_COLOR_HITSCAN := Color.AQUA
+## Cor laranja atribuída aos disparos do tipo Physics.
+const LASER_COLOR_PHYSICS := Color.ORANGE
+## Multiplicador de energia de emissão do material brilhante do laser.
 const LASER_EMISSION_ENERGY := 5.0
-const LASER_START_OFFSET := Vector3(0, 2, 0)
-const LASER_ANIM_OFFSET := Vector3(0, 10, 0)
+## Ponto de origem relativo acima do atirador para o surgimento do laser.
+const LASER_START_OFFSET := Vector3(0.0, 2.0, 0.0)
+## Vetor de deslocamento vertical da animação do feixe de laser.
+const LASER_ANIM_OFFSET := Vector3(0.0, 10.0, 0.0)
+## Duração em segundos da animação do disparo de laser antes de liberar o nó.
 const LASER_ANIM_DURATION := 0.5
+## Tamanho mínimo em bytes do payload de vetor de posição empacotado (3 floats de 4 bytes).
+const PACKET_POSITION_BYTE_SIZE := 12
+## Deslocamento de byte inicial do componente X no pacote binário de disparo.
+const PACKET_OFFSET_POS_X := 0
+## Deslocamento de byte inicial do componente Y no pacote binário de disparo.
+const PACKET_OFFSET_POS_Y := 4
+## Deslocamento de byte inicial do componente Z no pacote binário de disparo.
+const PACKET_OFFSET_POS_Z := 8
 
-# Constantes de Topologia e Endereçamento
-const DEFAULT_BIND_IP := "127.0.0.1"
-
-
-# Constantes de Perfis Dinâmicos (Tick Rates e Culling Radius)
-const PROFILE_PLAYER_HZ := 60.0 # Tick rate nativo de um jogador humano
-const PROFILE_PLAYER_PRIO := 1.0 # Prioridade base na fila do acumulador visual
-const PROFILE_PLAYER_CULL := 20.0 # Distância máxima onde a engine transmitirá estado
-
-const PROFILE_PROP_HZ := 5.0 # Props inanimados atualizam raramente
-const PROFILE_PROP_PRIO := 0.5 # Menor prioridade, só transmite se sobrar banda
+# ==============================================================================
+# 10. CONSTANTES DE PERFIS DINÂMICOS DE TESTE (TECLADO 1 A 0)
+# ==============================================================================
+## Frequência de atualização inicial do perfil padrão de jogadores humanos.
+const PROFILE_PLAYER_HZ := 60.0
+## Prioridade inicial do jogador na fila do acumulador de largura de banda.
+const PROFILE_PLAYER_PRIO := 1.0
+## Raio máximo padrão de transmissão do perfil do jogador.
+const PROFILE_PLAYER_CULL := 100.0
+## Frequência de atualização reduzida para props e objetos inanimados.
+const PROFILE_PROP_HZ := 5.0
+## Prioridade reduzida na fila de banda para entidades de cenário.
+const PROFILE_PROP_PRIO := 0.5
+## Raio de culling espacial restrito para props.
 const PROFILE_PROP_CULL := 20.0
 
-const PROFILE_NPC_HZ := 20.0 # NPCs se movem moderadamente
-const PROFILE_NPC_PRIO := 1.0
-const PROFILE_NPC_CULL := 20.0
+## Frequência selecionada pelo atalho de teclado 1 (20 Hz).
+const PROFILE_HZ_KEY_1 := 20.0
+## Frequência selecionada pelo atalho de teclado 2 (30 Hz).
+const PROFILE_HZ_KEY_2 := 30.0
+## Frequência selecionada pelo atalho de teclado 3 (60 Hz).
+const PROFILE_HZ_KEY_3 := 60.0
+## Frequência selecionada pelo atalho de teclado 4 (5 Hz).
+const PROFILE_HZ_KEY_4 := 5.0
+## Frequência selecionada pelo atalho de teclado 5 (1 Hz).
+const PROFILE_HZ_KEY_5 := 1.0
 
-const PROFILE_PROJECT_HZ := 60.0 # Balas e projéteis requerem fluidez máxima
-const PROFILE_PROJECT_PRIO := 3.0 # Prioridade extrema (fura a fila)
-const PROFILE_PROJECT_CULL := 50.0 # Devem ser vistos de longe
+## Raio de culling selecionado pelo atalho de teclado 6 (5 metros).
+const PROFILE_CULL_KEY_6 := 5.0
+## Raio de culling selecionado pelo atalho de teclado 7 (10 metros).
+const PROFILE_CULL_KEY_7 := 10.0
+## Raio de culling selecionado pelo atalho de teclado 8 (20 metros).
+const PROFILE_CULL_KEY_8 := 20.0
+## Raio de culling selecionado pelo atalho de teclado 9 (50 metros).
+const PROFILE_CULL_KEY_9 := 50.0
+## Raio de culling selecionado pelo atalho de teclado 0 (100 metros).
+const PROFILE_CULL_KEY_0 := 100.0
 
-# Constantes de Geração de Cena Visual
-const WORLD_FLOOR_COLOR := Color(0.2, 0.2, 0.2)
-const RING_THICKNESS := 0.2 # Espessura do anel de debug visual
-const RING_SIDES := 64 # Segmentos do torus de debug
-const RING_SEG := 32
-const RING_Y_OFFSET := 0.05
-const GRID_THICKNESS := 0.15 # Espessura da linha do grid visual
-const CAMERA_LERP_SPEED := 5.0 # Suavização do acompanhamento da câmera
-const LASER_COLOR_HITSCAN := Color.AQUA
-const LASER_COLOR_PHYSICS := Color.ORANGE
+## Frequência padrão memorizada no perfil dinâmico dos clientes.
+const CLIENT_DYNAMIC_PROFILE_HZ := 60.0
+## Prioridade padrão memorizada no perfil dinâmico dos clientes.
+const CLIENT_DYNAMIC_PROFILE_PRIO := 1.0
 
-# Constantes de Parâmetros de Host / Rede (Segurança e Anti-Cheat)
-const NET_MAX_SPEED := 300.0 # 30.0 Limiar elástico do Anti-Speedhack
-const NET_HARD_CAP := 500.0 # 50.0 Tolerância máxima de predição antes de Snap forçado
-const NET_WORLD_BOUNDS := 500.0 # Fronteira invisível aumentada para suportar o mapa
-const NET_MAX_STRIKES := 5 # Quantos strikes antes do jogador ser kickado
-const NET_AUTH_TIMEOUT := 3.0 # Tempo limite para resolver criptografia DTLS
-const NETEM_LOSS_DEFAULT := 10.0 # Porcentagem simulada de perdas de pacote
-const NETEM_LATENCY_DEFAULT := 150 # Ping base simulado
-const NETEM_JITTER_DEFAULT := 50 # Variância no Ping simulado
-const NETEM_DUP_DEFAULT := 0.0 # Simulação de clones udp
+# ==============================================================================
+# 11. CONSTANTES DE INTERFACE DO USUÁRIO (HUD)
+# ==============================================================================
+## Margem padrão em pixels para ancoragem de painéis na interface gráfica.
+const UI_MARGIN_STD := 20
+## Margem expandida em pixels para afastamento do topo na barra lateral de atalhos.
+const UI_MARGIN_LARGE := 40
+## Espaçamento vertical entre os painéis de System Profiler e Network Profiler.
+const UI_SPACER := 15
+## Espessura grossa de contorno escuro para realce de textos de controle.
+const OUTLINE_THICK := 4
+## Espessura fina de contorno escuro para os valores numéricos de diagnóstico.
+const OUTLINE_THIN := 3
+## Cor branca translúcida dos textos da lista de atalhos do teclado.
+const UI_SHORTCUTS_FONT_COLOR := Color(1.0, 1.0, 1.0, 0.8)
+## Cor branca translúcida dos textos de métricas do sistema e rede.
+const UI_METRICS_FONT_COLOR := Color(1.0, 1.0, 1.0, 0.9)
 
 
 # Dicionário passado para a Engine C++ (QuanticNet) durante a inicialização via `host()` ou `join()`.
@@ -154,29 +339,23 @@ var _global_network_parameters = {
 	"netem_latency": NETEM_LATENCY_DEFAULT, # Injeção de RTT base forçado na rede local (Loopback).
 	"netem_jitter": NETEM_JITTER_DEFAULT, # Flutuação randômica do atraso, imitando redes Mobile 4G instáveis.
 	"netem_dup": NETEM_DUP_DEFAULT, # Simula retransmissões fantasmas em roteadores congestionados.
-	"server_tick_rate": 20.0, # Taxa fixa do loop de rede desacoplado da engine de física.
-	"dormancy_threshold_ticks": 60, # Ticks sem movimento até declarar a entidade inerte e cessar o envio na banda.
-	# Determina se o Spatial Partitioning (Grid) C++ filtrará o envio global.
-	# Quando habilitado, o servidor estilhaça o mapa em setores menores, economizando a largura de banda.
-	# "grid_culling_enabled": true, # Obsoleto - Substituído por QNSpatialGrid no Core
-	"grid_culling_size": 100.0, # O tamanho fixo de cada célula do Spatial Partitioning do QuanticNet
-	"sync_adjacent_grids": false, # Habilita o envio de updates para chunks adjacentes ao jogador (Evita o cap de 50m/cell)
+	"server_tick_rate": NET_SERVER_TICK_RATE, # Taxa fixa do loop de rede desacoplado da engine de física.
+	"dormancy_threshold_ticks": NET_DORMANCY_THRESHOLD_TICKS, # Ticks sem movimento até declarar a entidade inerte e cessar o envio na banda.
+	"grid_culling_size": NET_GRID_CULLING_SIZE, # O tamanho fixo de cada célula do Spatial Partitioning do QuanticNet
+	"sync_adjacent_grids": true, # Habilita o envio de updates para chunks adjacentes ao jogador (Evita o cap de 50m/cell)
 }
 
 # Controle de estado da topologia local
+@export var enable_server_ram_profiling: bool = true
+@export var server_ram_log_interval_sec: float = 10.0
 var auto_spawn_clients: bool = true
 var _is_acting_as_server: bool = false
-var _local_peer_id: int = 0
 
 # ==============================================================================
 # PERFIS DE ENTIDADES (TICK RATES E CULLING)
 # ==============================================================================
 var _entity_profile_player: QNEntityProfile
 var _entity_profile_prop: QNEntityProfile
-var _entity_profile_npc: QNEntityProfile
-var _entity_profile_projectile: QNEntityProfile
-# var _profile_region_a: QNEntityProfile
-# var _profile_region_b: QNEntityProfile
 var _active_profiles: Dictionary = { }
 
 # ------------------------------------------------------------------------------
@@ -199,14 +378,11 @@ var _packet_loss_maximum: float = 0.0
 # VARIÁVEIS DE ESTADO DA INTERFACE E SISTEMA
 # ==============================================================================
 var _scene_world_root_node: Node3D
-var _chunk_manager: Node3D
 var _is_camera_high: bool = false
-var _current_zoom: float = 25.0
+var _current_zoom: float = CAMERA_DEFAULT_SPRING_LENGTH
 var _active_visual_entities_map: Dictionary = { }
-var _sleeping_entities: Dictionary = { }
 var _client_predicted_position: Vector3 = Vector3(0, 0, 0)
 var _client_predicted_rotation: Vector3 = Vector3(0, 0, 0)
-var _client_predicted_velocity_y: float = 0.0
 var _is_auto_movement_enabled: bool = false
 var _auto_movement_center_origin: Vector3 = Vector3.ZERO
 var _auto_movement_elapsed_time: float = 0.0
@@ -214,8 +390,6 @@ var _server_authoritative_props_time: float = 0.0
 var _client_local_culling_radius: float = DEFAULT_VIEW_DISTANCE
 var _show_culling_rings: bool = true
 var _ui_label_connection_status: Label
-var _ui_button_reconnect: Button
-var _cooldown_timer_last_shot_ms: int = 0 # Previne sobrecarga de Input na rede.
 
 # Labels do System Profiler (CPU, RAM, GPU, Engine)
 var _ui_diagnostic_label_fps: Label
@@ -248,12 +422,10 @@ var _is_network_emulation_active: bool = false
 
 # Histórico para o cálculo de métricas de estabilidade, como o percentil 1% Low.
 var _frames_per_second_history: Array[int] = []
-const FPS_HISTORY_MAX = 600
 var _frames_per_second_minimum: int = SENTINEL_MAX_INT
 var _frames_per_second_maximum: int = 0
 
 var _frame_time_history: Array[float] = []
-const FRAME_TIME_HISTORY_MAX = 600
 var _frame_time_minimum: float = SENTINEL_MAX_FLOAT
 var _frame_time_maximum: float = 0.0
 
@@ -261,20 +433,18 @@ var _physics_time_history: Array[float] = []
 var _physics_time_minimum: float = SENTINEL_MAX_FLOAT
 var _physics_time_maximum: float = 0.0
 
+# Histórico de RAM no Servidor
+var _server_ram_history: Array[float] = []
+var _server_ram_minimum: float = SENTINEL_MAX_FLOAT
+var _server_ram_maximum: float = 0.0
+var _server_ram_last_log_ms: int = 0
+
 # ==============================================================================
 # CICLO DE VIDA (LIFECYCLE) - O PONTO DE ENTRADA
 # ==============================================================================
 
 
 func _ready() -> void:
-	# Configura a UI de diagnóstico via código (Clean Architecture, zero painéis sujos na árvore)
-	_setup_ui()
-
-	# Corrige a anomalia visual da Câmera do Servidor
-	# A ilusão de ótica ocorria porque janelas de tamanhos diferentes mudam o FOV horizontal nativo da Godot (Keep Height).
-	# Cravamos um tamanho de tela padrão para que Servidor e Cliente mostrem o mesmo volume de mundo 3D.
-	# DisplayServer.window_set_size(Vector2i(1024, 768))
-
 	# Força o V-Sync para estabilizar os testes locais em 60Hz.
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
 
@@ -292,7 +462,7 @@ func _ready() -> void:
 		_is_network_emulation_active = true
 
 	if auto_spawn_clients and not is_server and not is_client:
-		print("[DEMO] Iniciando topologia automática: 1 Servidor, 2 Clientes...")
+		print("Iniciando topologia automática: 1 Servidor, 2 Clientes...")
 		is_server = true
 
 		# Cliente 1 (Conexão limpa e perfeita)
@@ -301,31 +471,33 @@ func _ready() -> void:
 		# Cliente 2 (Conexão caótica via emulador de rede)
 		OS.create_instance(["--client", "--netem"])
 
-		DisplayServer.window_set_title("QuanticNet - SERVER")
+		DisplayServer.window_set_title("1")
+
+	if is_server:
+		DisplayServer.window_set_title("1")
 
 	if is_client:
-		var title = "QuanticNet - CLIENT"
+		var title = "Connecting..."
 		if use_netem:
 			title += " (NETEM ON)"
 		DisplayServer.window_set_title(title)
 
 	_is_acting_as_server = is_server
 
+	# Configura a UI de diagnóstico via código (Apenas para Clientes)
+	if not _is_acting_as_server:
+		_setup_ui()
+
 	# Perfis Dinâmicos (Tick Rate vs Priority vs Culling Radius)
 	_entity_profile_player = QNEntityProfile.new()
 	_entity_profile_player.init(PROFILE_PLAYER_HZ, PROFILE_PLAYER_PRIO, PROFILE_PLAYER_CULL)
 	_entity_profile_prop = QNEntityProfile.new()
 	_entity_profile_prop.init(PROFILE_PROP_HZ, PROFILE_PROP_PRIO, PROFILE_PROP_CULL)
-	_entity_profile_npc = QNEntityProfile.new()
-	_entity_profile_npc.init(PROFILE_NPC_HZ, PROFILE_NPC_PRIO, PROFILE_NPC_CULL)
-	_entity_profile_projectile = QNEntityProfile.new()
-	_entity_profile_projectile.init(PROFILE_PROJECT_HZ, PROFILE_PROJECT_PRIO, PROFILE_PROJECT_CULL)
 
 	# Bindings de Sinais Assíncronos (Event-Driven Architecture)
 	# Delega respostas de eventos de rede originados no C++ para handlers locais no GDScript. Abordagem preferível ao pooling síncrono no _process para evitar gargalos.
 	# O QuanticNet emite sinais limpos quando eventos ocorrem nas entranhas do C++.
 	QuanticNet.connection_state_changed.connect(_on_conn_state)
-	QuanticNet.peer_sleep.connect(_on_peer_sleep)
 
 	# Autenticação e Topologia
 	QuanticNet.peer_joined.connect(_on_peer_joined)
@@ -340,18 +512,13 @@ func _ready() -> void:
 
 	# Força o FPS cravado inicial para o atalho F funcionar corretamente
 	Engine.max_fps = TARGET_FPS
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
 
-	# Inicialização do Handshake e da Camada de Transporte Segura (DTLS + ENet)
+	await get_tree().physics_frame
 	if _is_acting_as_server:
-		print("[DEMO] Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
+		print("Iniciando SERVIDOR QuanticNet (Porta %d)..." % PORT)
 		_global_network_parameters["navigation_map"] = get_world_3d().get_navigation_map()
 
 		if QuanticNet.host(PORT, SECRET, DEFAULT_BIND_IP, MAX_PEERS, _global_network_parameters) == OK:
-			# O Servidor registra a si mesmo (ID 1)
-			# Se o seu servidor é puramente uma máquina autoritativa (não há um humano jogando nele),
-			# ele não deveria ter um corpo físico na rede
-			# QuanticNet.register_entity(1, true, true, _entity_profile_player)
 			_active_profiles[1] = _entity_profile_player
 
 		# O Mundo Aberto não utiliza Regions (Instanciamento Rígido).
@@ -362,7 +529,7 @@ func _ready() -> void:
 			QuanticNet.register_entity(prop_id, false, true, _entity_profile_prop)
 			_active_profiles[prop_id] = _entity_profile_prop
 	else:
-		print("[DEMO] Iniciando CLIENTE QuanticNet...")
+		print("Iniciando CLIENTE QuanticNet...")
 		QuanticNet.join(DEFAULT_BIND_IP, PORT, SECRET, use_netem, _global_network_parameters)
 
 	# Encapsulamento de Rede e Bypass do SceneTree
@@ -372,17 +539,7 @@ func _ready() -> void:
 	# através dos túneis ultra-otimizados do nosso plugin.
 	get_tree().set_multiplayer(QuanticNet.get_tree().get_multiplayer(QuanticNet.get_path()), self.get_path())
 
-	print("[DEMO] Inicialização concluída. Conexão engatilhada e Sinais Ativos.")
-
-	# AUTOMATED TEST: Simulate KEY_1 after 3 seconds
-	# var t = get_tree().create_timer(3.0)
-	# t.timeout.connect(func():
-	# 	print("[TEST] Simulating KEY_1 press...")
-	# 	var ev = InputEventKey.new()
-	# 	ev.keycode = KEY_1
-	# 	ev.pressed = true
-	# 	Input.parse_input_event(ev)
-	# )
+	print("Inicialização concluída. Conexão engatilhada e Sinais Ativos.")
 
 
 func _notification(what: int) -> void:
@@ -395,14 +552,35 @@ func _notification(what: int) -> void:
 
 
 func _setup_scene() -> void:
-	# Uma câmera isométrica, uma luz direcional com sombras e um chão escuro.
+	_scene_world_root_node = Node3D.new()
+	add_child(_scene_world_root_node)
+
+	# NavMesh para o validador do servidor (1000x1000m)
+	var nav_region = NavigationRegion3D.new()
+	var nav_mesh = NavigationMesh.new()
+	nav_mesh.agent_radius = NAVMESH_AGENT_RADIUS
+	var hs := NAVMESH_HALF_SIZE
+	var v0 := Vector3(-hs, 0.0, -hs)
+	var v1 := Vector3(hs, 0.0, -hs)
+	var v2 := Vector3(hs, 0.0, hs)
+	var v3 := Vector3(-hs, 0.0, hs)
+	nav_mesh.vertices = PackedVector3Array([v0, v1, v2, v3])
+	nav_mesh.add_polygon(PackedInt32Array([0, 1, 2]))
+	nav_mesh.add_polygon(PackedInt32Array([0, 2, 3]))
+	nav_region.navigation_mesh = nav_mesh
+	_scene_world_root_node.add_child(nav_region)
+
+	if _is_acting_as_server:
+		return # Servidor opera de forma pura/headless (zero câmeras, luzes, chão ou malhas visuais)
+
+	# Uma câmera isométrica, uma luz direcional com sombras e um chão escuro (Apenas Clientes)
 	_camera_pivot = Node3D.new()
 	add_child(_camera_pivot)
 
 	_spring_arm = SpringArm3D.new()
-	_spring_arm.spring_length = 25.0
-	_spring_arm.margin = 0.5
-	_spring_arm.position.y = 1.0 # Look at player's head
+	_spring_arm.spring_length = CAMERA_DEFAULT_SPRING_LENGTH
+	_spring_arm.margin = CAMERA_SPRING_MARGIN
+	_spring_arm.position.y = CAMERA_TARGET_Y_OFFSET # Look at player's head
 	_camera_pivot.add_child(_spring_arm)
 
 	_camera = Camera3D.new()
@@ -411,19 +589,84 @@ func _setup_scene() -> void:
 	_camera_pivot.rotation_degrees = CAMERA_START_ROT
 
 	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-45, 45, 0)
+	light.rotation_degrees = SUN_LIGHT_ROTATION
 	light.shadow_enabled = true
 	add_child(light)
 
-	_scene_world_root_node = Node3D.new()
-	add_child(_scene_world_root_node)
+	# Chão (Floor)
+	var floor_mesh = MeshInstance3D.new()
+	var plane = PlaneMesh.new()
+	plane.size = FLOOR_PLANE_SIZE
+	floor_mesh.mesh = plane
+	var floor_mat = StandardMaterial3D.new()
+	floor_mat.albedo_color = FLOOR_COLOR
+	floor_mesh.material_override = floor_mat
+	_scene_world_root_node.add_child(floor_mesh)
 
-	# Gerenciador de Chunks (NavMesh e Visual dinâmicos)
-	_chunk_manager = preload("res://addons/quantic_net/demo/qn_chunk_manager.gd").new()
-	_scene_world_root_node.add_child(_chunk_manager)
+	# Visualização dinâmica do NavMesh (Overlay translúcido + Wireframe neon)
+	var nav_visual = _create_navmesh_visual(nav_mesh)
+	nav_visual.visible = false # Inicia oculta por padrão
+	_scene_world_root_node.add_child(nav_visual)
 
-	# Fix Initial Client Position (Nasce exatamente no chão plano)
-	_client_predicted_position.y = _chunk_manager.get_height(0, 0)
+	# Fix Initial Client Position
+	_client_predicted_position.y = 0.0
+
+
+func _create_navmesh_visual(nav_mesh: NavigationMesh) -> Node3D:
+	var root = Node3D.new()
+	root.name = "NavMeshVisual"
+
+	var verts = nav_mesh.vertices
+	var poly_count = nav_mesh.get_polygon_count()
+	if poly_count == 0 or verts.is_empty():
+		return root
+
+	# 1. Superfície Translúcida Discreta (Triângulos)
+	var st_faces = SurfaceTool.new()
+	st_faces.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(poly_count):
+		var poly = nav_mesh.get_polygon(i)
+		for j in range(1, poly.size() - 1):
+			st_faces.add_vertex(verts[poly[0]] + Vector3(0.0, NAVMESH_FACES_ELEVATION, 0.0))
+			st_faces.add_vertex(verts[poly[j]] + Vector3(0.0, NAVMESH_FACES_ELEVATION, 0.0))
+			st_faces.add_vertex(verts[poly[j + 1]] + Vector3(0.0, NAVMESH_FACES_ELEVATION, 0.0))
+
+	var faces_mesh = st_faces.commit()
+	var faces_inst = MeshInstance3D.new()
+	faces_inst.mesh = faces_mesh
+	var faces_mat = StandardMaterial3D.new()
+	faces_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	faces_mat.albedo_color = NAVMESH_FACES_COLOR # Ciano/azul sutil e transparente
+	faces_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	faces_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	faces_inst.material_override = faces_mat
+	faces_inst.name = "Faces"
+	root.add_child(faces_inst)
+
+	# 2. Contornos Wireframe Discretos (Bordas)
+	var st_lines = SurfaceTool.new()
+	st_lines.begin(Mesh.PRIMITIVE_LINES)
+	for i in range(poly_count):
+		var poly = nav_mesh.get_polygon(i)
+		for j in range(poly.size()):
+			var next_idx = (j + 1) % poly.size()
+			st_lines.add_vertex(verts[poly[j]] + Vector3(0.0, NAVMESH_WIREFRAME_ELEVATION, 0.0))
+			st_lines.add_vertex(
+				verts[poly[next_idx]] + Vector3(0.0, NAVMESH_WIREFRAME_ELEVATION, 0.0)
+			)
+
+	var lines_mesh = st_lines.commit()
+	var lines_inst = MeshInstance3D.new()
+	lines_inst.mesh = lines_mesh
+	var lines_mat = StandardMaterial3D.new()
+	lines_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	lines_mat.albedo_color = NAVMESH_WIREFRAME_COLOR # Linhas de contorno suaves
+	lines_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lines_inst.material_override = lines_mat
+	lines_inst.name = "Wireframe"
+	root.add_child(lines_inst)
+
+	return root
 
 
 func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3D:
@@ -442,78 +685,15 @@ func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3
 	mi.position.y = y_offset
 	return mi
 
-func _create_filled_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3D:
-	var mi = MeshInstance3D.new()
-	var mesh = CylinderMesh.new()
-	mesh.top_radius = radius
-	mesh.bottom_radius = radius
-	mesh.height = 0.05
-	mesh.radial_segments = 32
-	mi.mesh = mesh
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mi.material_override = mat
-	mi.position.y = y_offset
-	return mi
-
-
-func _create_aoi_grid(color: Color, size: Vector2, y_offset: float) -> Node3D:
-	var node = Node3D.new()
-	var thickness = GRID_THICKNESS
-
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-
-	# Top edge
-	var top = MeshInstance3D.new()
-	var box_top = BoxMesh.new()
-	box_top.size = Vector3(size.x, thickness, thickness)
-	top.mesh = box_top
-	top.position = Vector3(0, 0, -size.y / 2)
-	top.material_override = mat
-	node.add_child(top)
-
-	# Bottom edge
-	var bot = MeshInstance3D.new()
-	var box_bot = BoxMesh.new()
-	box_bot.size = Vector3(size.x, thickness, thickness)
-	bot.mesh = box_bot
-	bot.position = Vector3(0, 0, size.y / 2)
-	bot.material_override = mat
-	node.add_child(bot)
-
-	# Left edge
-	var left = MeshInstance3D.new()
-	var box_left = BoxMesh.new()
-	box_left.size = Vector3(thickness, thickness, size.y)
-	left.mesh = box_left
-	left.position = Vector3(-size.x / 2, 0, 0)
-	left.material_override = mat
-	node.add_child(left)
-
-	# Right edge
-	var right = MeshInstance3D.new()
-	var box_right = BoxMesh.new()
-	box_right.size = Vector3(thickness, thickness, size.y)
-	right.mesh = box_right
-	right.position = Vector3(size.x / 2, 0, 0)
-	right.material_override = mat
-	node.add_child(right)
-
-	node.position.y = y_offset
-	return node
-
 # ==============================================================================
 # APRESENTAÇÃO E MÉTRICAS DE DIAGNÓSTICO (CANVAS LAYER)
 # ==============================================================================
 
 
 func _setup_ui() -> void:
+	if _is_acting_as_server:
+		return
+
 	# Criação Dinâmica da UI no CanvasLayer.
 	# Isso desvincula completamente as métricas textuais 2D do espaço tridimensional da Câmera (3D),
 	# evitando artefatos visuais quando o jogador se movimentar e mantendo o painel rígido na tela.
@@ -548,12 +728,13 @@ func _setup_ui() -> void:
 		"1 a 5      : Profile Peers (20 a 1Hz)",
 		"6 a 0      : Profile Culling (5 a 100m)",
 		"+ / -      : FOV Culling Local (Visão)",
+		",          : Toggle NavMesh Visual",
 	]
 
 	for s in shortcuts:
 		var lbl = Label.new()
 		lbl.text = s
-		lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
+		lbl.add_theme_color_override("font_color", UI_SHORTCUTS_FONT_COLOR)
 		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 		lbl.add_theme_constant_override("outline_size", OUTLINE_THICK) # Outline para legibilidade contra luzes brilhantes
 		vbox_shortcuts.add_child(lbl)
@@ -594,7 +775,7 @@ func _setup_ui() -> void:
 		_ui_diagnostic_label_nodes,
 	]
 	for l in labels_sys:
-		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+		l.add_theme_color_override("font_color", UI_METRICS_FONT_COLOR)
 		l.add_theme_color_override("font_outline_color", Color.BLACK)
 		l.add_theme_constant_override("outline_size", OUTLINE_THIN)
 		diag_vbox.add_child(l)
@@ -623,7 +804,7 @@ func _setup_ui() -> void:
 		_ui_diagnostic_label_peers,
 	]
 	for l in labels_net:
-		l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+		l.add_theme_color_override("font_color", UI_METRICS_FONT_COLOR)
 		l.add_theme_color_override("font_outline_color", Color.BLACK)
 		l.add_theme_constant_override("outline_size", OUTLINE_THIN)
 		diag_vbox.add_child(l)
@@ -641,6 +822,32 @@ func _physics_process(delta: float) -> void:
 	# O _physics_process opera sincronamente a 60Hz. Toda a carga pesada de matemática vetorial,
 	# predição e serialização de pacotes UDP reside aqui para garantir determinismo.
 	if QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		# Profiling de Memória RAM no Servidor (Headless-Safe)
+		if enable_server_ram_profiling:
+			var ram_mb = Performance.get_monitor(Performance.MEMORY_STATIC) / BYTES_TO_MB
+			_server_ram_history.append(ram_mb)
+			if _server_ram_history.size() > SERVER_RAM_HISTORY_MAX:
+				_server_ram_history.pop_front()
+
+			if ram_mb < _server_ram_minimum:
+				_server_ram_minimum = ram_mb
+			if ram_mb > _server_ram_maximum:
+				_server_ram_maximum = ram_mb
+
+			var now = Time.get_ticks_msec()
+			var log_interval_ms = int(server_ram_log_interval_sec * SEC_TO_MS)
+			if now - _server_ram_last_log_ms >= log_interval_ms:
+				_server_ram_last_log_ms = now
+				var ram_sum = 0.0
+				for r in _server_ram_history:
+					ram_sum += r
+				var ram_avg = ram_sum / _server_ram_history.size() if _server_ram_history.size() > 0 else ram_mb
+				var min_disp = _server_ram_minimum if _server_ram_minimum != SENTINEL_MAX_FLOAT else ram_mb
+				print(
+					"[SERVER PROFILER] RAM (Static): %.2f MB | Avg(%d): %.2f MB | Min: %.2f MB | Max: %.2f MB"
+					% [ram_mb, _server_ram_history.size(), ram_avg, min_disp, _server_ram_maximum]
+				)
+
 		# Lógica Autoritativa de Servidor: O servidor tem o monopólio sobre o movimento dos Props.
 		_server_authoritative_props_time += delta
 		for i in range(SERVER_PROPS.size()):
@@ -653,16 +860,6 @@ func _physics_process(delta: float) -> void:
 			)
 
 			QuanticNet.update_entity_state(prop_id, pos, Vector3.ZERO, 0, Time.get_ticks_msec())
-
-			if _active_visual_entities_map.has(prop_id):
-				var mat = _active_visual_entities_map[prop_id].material_override as StandardMaterial3D
-				if QuanticNet.get_server_grid().is_in_bounds(pos):
-					mat.albedo_color = Color.YELLOW
-					mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-				else:
-					mat.albedo_color = Color.DIM_GRAY
-					mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-					mat.albedo_color.a = 0.3
 
 	elif (
 		not QuanticNet.is_server()
@@ -704,20 +901,7 @@ func _physics_process(delta: float) -> void:
 		# antes mesmo do servidor validar, garantindo responsividade imediata (Zero Input Lag).
 		_client_predicted_position += input_dir * speed * delta
 
-		if _chunk_manager:
-			var target_y = _chunk_manager.get_height(
-				_client_predicted_position.x,
-				_client_predicted_position.z,
-			)
-			if _client_predicted_position.y > target_y:
-				_client_predicted_velocity_y -= 9.8 * delta
-				_client_predicted_position.y += _client_predicted_velocity_y * delta
-				if _client_predicted_position.y <= target_y:
-					_client_predicted_position.y = target_y
-					_client_predicted_velocity_y = 0.0
-			else:
-				_client_predicted_position.y = target_y
-				_client_predicted_velocity_y = 0.0
+		_client_predicted_position.y = 0.0
 
 		_update_visual(QuanticNet.get_unique_id(), _client_predicted_position, true)
 
@@ -726,27 +910,19 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(_delta: float) -> void:
-	if _chunk_manager:
-		var poi = []
-		if QuanticNet.is_server():
-			var reg = QuanticNet.get_registry()
-			for id in reg.keys():
-				if reg[id].has("pos"):
-					poi.append(reg[id]["pos"])
-		else:
-			poi.append(_client_predicted_position)
-		_chunk_manager.update_chunks(poi)
+	if _is_acting_as_server:
+		return # O servidor opera de forma puramente lógica e sem renderização (Headless)
 
 	# O _process roda de forma assíncrona (destravado do tick rate de rede), preso apenas ao V-Sync do monitor.
 	# Por isso, toda a lógica de Snapshot Interpolation e Lerping visual vive exclusivamente aqui.
-	if not QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+	if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
 		if _camera_pivot:
 			var target_cam_pos = _client_predicted_position
 			var target_cam_rot = _camera_pivot.rotation_degrees
 			var target_spring = _current_zoom
 
 			if _is_camera_high:
-				target_spring = 150.0 # Apenas afasta a câmera, não trava a rotação
+				target_spring = CAMERA_HIGH_SPRING_LENGTH # Apenas afasta a câmera, não trava a rotação
 
 			_camera_pivot.position = _camera_pivot.position.lerp(
 				target_cam_pos,
@@ -765,13 +941,15 @@ func _process(_delta: float) -> void:
 				var visual = _active_visual_entities_map[id]
 				var current_quat = Quaternion.from_euler(visual.rotation)
 				var target_quat = Quaternion.from_euler(_client_predicted_rotation)
-				visual.rotation = current_quat.slerp(target_quat, _delta * 15.0).get_euler()
+				visual.rotation = current_quat \
+						.slerp(target_quat, _delta * ROTATION_SLERP_SPEED) \
+						.get_euler()
 			else:
 				var interp_state = QuanticNet.remote_state(id)
 				if not interp_state.is_empty():
 					var visual = _active_visual_entities_map[id]
 					var target_pos = interp_state.get("pos", visual.position)
-					var y_off = 0.5
+					var y_off = ENTITY_DEFAULT_Y_OFFSET
 					if visual.mesh and visual.mesh is BoxMesh:
 						y_off = visual.mesh.size.y / 2.0
 					target_pos.y += y_off
@@ -779,20 +957,13 @@ func _process(_delta: float) -> void:
 					var target_rot = interp_state.get("rot", visual.rotation)
 					var current_quat = Quaternion.from_euler(visual.rotation)
 					var target_quat = Quaternion.from_euler(target_rot)
-					visual.rotation = current_quat.slerp(target_quat, _delta * 15.0).get_euler()
-					var last_up = visual.get_meta("last_update", now)
-
-					# Culling Visual
-					var rad = visual.get_meta("presence_radius", 20.0)
+					visual.rotation = current_quat \
+							.slerp(target_quat, _delta * ROTATION_SLERP_SPEED) \
+							.get_euler()
+					# Culling Visual (FOV Local e Aura da Entidade)
+					var rad = visual.get_meta("presence_radius", DEFAULT_PRESENCE_RADIUS)
 					var dist = _client_predicted_position.distance_to(target_pos)
-
-					# O Servidor define a malha absoluta, então se a entidade chegou no pacote, ela está visível no servidor.
-					# Só precisamos nos preocupar com o culling local e se há atualização recente.
-					var is_sleeping = _sleeping_entities.get(id, false)
-					var is_visible = (
-						(dist <= _client_local_culling_radius) and (dist <= rad)
-						and (is_sleeping or (now - last_up <= SERVER_CULL_TIMEOUT_MS))
-					)
+					var is_visible = (dist <= _client_local_culling_radius) and (dist <= rad)
 
 					if not visual.visible and is_visible:
 						# Evita o efeito fantasma (snap) de interpolação quando uma entidade acabou de nascer no raio de visão.
@@ -800,19 +971,16 @@ func _process(_delta: float) -> void:
 						visual.visible = true
 					elif not is_visible:
 						visual.visible = false
-						if not is_sleeping and (now - last_up > SERVER_CULL_TIMEOUT_MS):
-							# Se o servidor parou de enviar e no dormncia, a entidade saiu do raio do servidor.
-							# Removemos completamente para evitar memory leaks e fantasmas eternos.
-							print("[CLIENT] Entidade %d ignorada por Timeout de Culling. Removendo..." % id)
-							visual.queue_free()
-							_active_visual_entities_map.erase(id)
-							continue
-					
+
 					if visual.visible:
-						visual.position = visual.position.lerp(
-							target_pos,
-							_delta * INTERP_LERP_SPEED,
-						)
+						# Se a discrepância for superior ao limiar (retorno de culling ou teleporte), aplica snap imediato em vez de patinar
+						if visual.position.distance_to(target_pos) > CULLING_SNAP_DISTANCE_THRESHOLD:
+							visual.position = target_pos
+						else:
+							visual.position = visual.position.lerp(
+								target_pos,
+								_delta * INTERP_LERP_SPEED,
+							)
 
 					visual.visible = is_visible
 					var lbl = visual.get_node_or_null("CoordLabel") as Label3D
@@ -823,57 +991,7 @@ func _process(_delta: float) -> void:
 							visual.position.z,
 						]
 
-		# Atualização Dinâmica Removida Daqui (Transferida para _update_dynamic_rings)
-
-	elif QuanticNet.is_server() and QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-		# Modo Monitor de Espectador (Server Capado).
-		# O Servidor não recebe "_on_state" de peers nativamente na camada de lógica, ele processa C++ e emite o registro final.
-		# Lemos o registro aqui para materializar visualmente os Peers e Props na Viewport local de diagnóstico do host.
-		var keys = QuanticNet.get_registry_keys()
-
-		for id in keys:
-			if id == QuanticNet.get_unique_id():
-				continue # Monitor não tem avatar próprio e não se renderiza
-
-			# O registro base já contém o estado completo.
-			var target_pos = QuanticNet.get_entity_position(id)
-
-			# Cria a malha (nó visual) se esta entidade for recém descoberta
-			if not _active_visual_entities_map.has(id):
-				_update_visual(id, target_pos, false)
-
-			# Interpolação suave para garantir que o Monitor exiba movimento fluido
-			# em vez de "pulos" instantâneos a cada tick de rede.
-			var vis = _active_visual_entities_map[id]
-			var y_off = 0.5
-			if vis.mesh and vis.mesh is BoxMesh:
-				y_off = vis.mesh.size.y / 2.0
-			target_pos.y += y_off
-			vis.position = vis.position.lerp(target_pos, _delta * INTERP_LERP_SPEED)
-
-			# Feedback visual do Filtro Geral renderizado nativamente no Host
-			var grid = QuanticNet.get_server_grid()
-			var is_inside_aoi = grid.is_in_bounds(target_pos) if grid else true
-
-			# Identificamos se é peer pelo ID, já que o remote_state não empacota flags internas
-			var is_peer = (id < 1000)
-			var mat = vis.material_override as StandardMaterial3D
-
-			if is_inside_aoi:
-				mat.albedo_color = Color.RED if is_peer else Color.YELLOW
-				mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-			else:
-				# Fantasma visual se a entidade transpassou as fronteiras físicas do Culling Geral
-				mat.albedo_color = Color.DIM_GRAY if is_peer else Color.DARK_KHAKI
-				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-				mat.albedo_color.a = 0.3
-
-			var lbl = vis.get_node_or_null("CoordLabel") as Label3D
-			if lbl:
-				lbl.text = "ID: %d [Srv]\nX: %.1f | Z: %.1f" % [id, vis.position.x, vis.position.z]
-
-	# Sempre atualiza a malha visual dos anéis, reagindo dinamicamente caso o profile mude.
-	if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
+		# Sempre atualiza a malha visual dos anéis, reagindo dinamicamente caso o profile mude.
 		_update_dynamic_rings()
 
 	# Histórico de FPS
@@ -928,6 +1046,9 @@ func _process(_delta: float) -> void:
 
 
 func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss: float) -> void:
+	if _is_acting_as_server:
+		return
+
 	var now_ms = Time.get_ticks_msec()
 
 	# (Throttle) Ignora a atualização visual se passou menos do que UI_UPDATE_RATE_MS desde a última
@@ -1012,11 +1133,6 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 		var ram_mb = Performance.get_monitor(Performance.MEMORY_STATIC) / BYTES_TO_MB
 		_ui_diagnostic_label_mem.text = "RAM (Static): %.2f MB" % ram_mb
 
-		var now_time = Time.get_ticks_msec()
-		if QuanticNet.is_server() and now_time - get_meta("last_ram_print", 0) > 5000:
-			print("[DEMO] Server RAM (Static): %.2f MB | FPS: %d" % [ram_mb, current_fps])
-			set_meta("last_ram_print", now_time)
-
 		var vram_mb = Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / BYTES_TO_MB
 		_ui_diagnostic_label_vram.text = "VRAM (Video): %.2f MB" % vram_mb
 
@@ -1067,71 +1183,70 @@ func _update_ui(current_fps: int, frame_ms: float, phys_ms: float, current_loss:
 			_ui_diagnostic_label_loss.text = "Packet Loss: Aguardando..."
 			_ui_diagnostic_label_offset.text = "Clock Offset: Aguardando..."
 
-		var total_entities = 0
-		var count_peers = 0
-		var count_props = 0
+		var visible_total = 0
+		var visible_peers = 0
+		var visible_props = 0
+
+		var known_total = 0
+		var known_peers = 0
+		var known_props = 0
 
 		if QuanticNet.is_server():
 			var registry = QuanticNet.get_registry()
 			for k in registry:
-				var st = registry[k]
-
-				total_entities += 1
-				if k < 1000:
-					count_peers += 1
+				visible_total += 1
+				known_total += 1
+				if k < PEER_ID_THRESHOLD:
+					visible_peers += 1
+					known_peers += 1
 				else:
-					count_props += 1
+					visible_props += 1
+					known_props += 1
+			_ui_diagnostic_label_peers.text = "Entities: %d (Peers: %d | Props: %d)" % [
+				visible_total,
+				visible_peers,
+				visible_props,
+			]
 		else:
 			for id in _active_visual_entities_map.keys():
-				if _active_visual_entities_map[id].visible:
-					total_entities += 1
-					if id < 1000:
-						count_peers += 1
-					else:
-						count_props += 1
+				known_total += 1
+				var is_peer = (id < PEER_ID_THRESHOLD)
+				if is_peer:
+					known_peers += 1
+				else:
+					known_props += 1
 
-		_ui_diagnostic_label_peers.text = "Entities: %d (Peers: %d | Props: %d)" % [
-			total_entities,
-			count_peers,
-			count_props,
-		]
+				if _active_visual_entities_map[id].visible:
+					visible_total += 1
+					if is_peer:
+						visible_peers += 1
+					else:
+						visible_props += 1
+
+			_ui_diagnostic_label_peers.text = "Entities (Visible/Known): %d/%d (Peers: %d/%d | Props: %d/%d)" % [
+				visible_total,
+				known_total,
+				visible_peers,
+				known_peers,
+				visible_props,
+				known_props,
+			]
 
 # ==============================================================================
 # BINDINGS ASSÍNCRONOS DE REDE (EVENT-DRIVEN ARCHITECTURE)
 # ==============================================================================
 
 
-func _on_peer_sleep(owner: int) -> void:
-	# O QuanticNet C++ usa TYPE_SLEEP tanto para Dormancy (AFK) quanto para Despawn (Saiu da Área de Interesse).
-	# Para evitar que fantasmas fiquem parados na tela quando o jogador teleporta para outro mapa ou sai da área,
-	# verificamos se a distância do último pacote recebido está muito próxima da borda do nosso Culling Radius.
-	if _active_visual_entities_map.has(owner):
-		var vis = _active_visual_entities_map[owner]
-		var rad = vis.get_meta("presence_radius", 20.0)
-		var interp_state = QuanticNet.remote_state(owner)
-		var last_pos = interp_state.get("pos", vis.position)
-		var dist = _client_predicted_position.distance_to(last_pos)
-
-		var margin := 2.0 # Tolerância para não despawnar falsamente quem dorme na borda exata
-		if dist > (rad + margin):
-			print(
-				"[CLIENT] Entidade %d ignorada (Despawn detectado por borda: %.1fm > %.1fm). Removendo nó visual."
-				% [owner, dist, rad + margin]
-			)
-			vis.queue_free()
-			_active_visual_entities_map.erase(owner)
-			return
-
-	print("[CLIENT] Recebeu TYPE_SLEEP: Entidade %d entrou em Dormancy!" % owner)
-	_sleeping_entities[owner] = true
-
-
 func _on_conn_state(state: int) -> void:
+	if _is_acting_as_server:
+		return
+
 	# Máquina de estados global exposta pelo Autoload do QuanticNet
 	match state:
 		QuanticNet.ConnectionState.DISCONNECTED:
 			_ui_label_connection_status.text = "DISCONNECTED"
 			_ui_label_connection_status.add_theme_color_override("font_color", Color.GRAY)
+			DisplayServer.window_set_title("Disconnected")
 			_clear_world()
 		QuanticNet.ConnectionState.CONNECTING:
 			_ui_label_connection_status.text = "CONNECTING..."
@@ -1142,9 +1257,15 @@ func _on_conn_state(state: int) -> void:
 		QuanticNet.ConnectionState.CONNECTED:
 			_ui_label_connection_status.text = "CONNECTED"
 			_ui_label_connection_status.add_theme_color_override("font_color", Color.GREEN)
+			var my_id = QuanticNet.get_unique_id()
+			var title = str(my_id)
+			if _is_network_emulation_active:
+				title += " (NETEM ON)"
+			DisplayServer.window_set_title(title)
 		QuanticNet.ConnectionState.FAILED:
 			_ui_label_connection_status.text = "FAILED"
 			_ui_label_connection_status.add_theme_color_override("font_color", Color.RED)
+			DisplayServer.window_set_title("Disconnected")
 			_clear_world()
 
 
@@ -1176,27 +1297,32 @@ func _on_pong_received(rtt: float, offset: float) -> void:
 
 
 func _on_peer_joined(peer_id: int) -> void:
-	print("[DEMO] Peer Joined: %d" % peer_id)
+	print("Peer Joined: %d" % peer_id)
 	if _is_acting_as_server:
 		QuanticNet.register_entity(peer_id, true, true, _entity_profile_player)
 		_active_profiles[peer_id] = _entity_profile_player
-		
-		# Sincroniza a Aura (Culling Radius) com os clientes para que eles no assumam o valor default de 20m
-		# 1. Informa o novo Peer sobre as Auras de todos que j esto no mapa
+
+		# Sincroniza a Aura (Culling Radius) com os clientes para que eles não assumam o valor default de 20m
+		# 1. Informa o novo Peer sobre as Auras de todos que já estão no mapa
 		for id in _active_profiles.keys():
 			var rad = _active_profiles[id].get_spatial_culling_radius()
 			rpc_id(peer_id, "client_update_visual_radius", id, rad)
-			
+
 			# 2. Informa os Peers antigos sobre a Aura do novato
-			if id != peer_id and id < 1000:
-				rpc_id(id, "client_update_visual_radius", peer_id, _entity_profile_player.get_spatial_culling_radius())
+			if id != peer_id and id < PEER_ID_THRESHOLD:
+				rpc_id(
+					id,
+					"client_update_visual_radius",
+					peer_id,
+					_entity_profile_player.get_spatial_culling_radius(),
+				)
 
 
 func _on_peer_left(peer_id: int) -> void:
-	print("[DEMO] Peer Left: %d" % peer_id)
 	if _is_acting_as_server:
 		QuanticNet.unregister_entity(peer_id)
 		_active_profiles.erase(peer_id)
+		return
 
 	if _active_visual_entities_map.has(peer_id):
 		var v = _active_visual_entities_map[peer_id]
@@ -1208,7 +1334,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 	if not _active_visual_entities_map.has(id):
 		var mesh_inst = MeshInstance3D.new()
 		var box = BoxMesh.new()
-		box.size = PLAYER_MESH_SIZE if id < 1000 else PROP_MESH_SIZE
+		box.size = PLAYER_MESH_SIZE if id < PEER_ID_THRESHOLD else PROP_MESH_SIZE
 		mesh_inst.mesh = box
 		var mat = StandardMaterial3D.new()
 		var entity_color: Color
@@ -1217,7 +1343,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		if is_local:
 			entity_color = LOCAL_PLAYER_COLOR
 			presence_radius = _entity_profile_player.get_spatial_culling_radius()
-		elif id < 1000:
+		elif id < PEER_ID_THRESHOLD:
 			entity_color = REMOTE_PLAYER_COLOR
 			presence_radius = _active_profiles \
 					.get(id, _entity_profile_player) \
@@ -1232,7 +1358,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 
 		# Anel de Presença (AoI da Entidade - Quem a vê)
 		var presence_color = entity_color
-		presence_color.a = 0.25 # Translúcido
+		presence_color.a = PRESENCE_RING_ALPHA # Translúcido
 		var presence_ring = _create_ring(presence_color, presence_radius, RING_Y_OFFSET)
 		presence_ring.name = "PresenceRing"
 		mesh_inst.add_child(presence_ring)
@@ -1240,9 +1366,9 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		# Anel de Visão (FOV - Apenas para o Cliente Local - O que ele vê)
 		if is_local:
 			var fov_ring = _create_ring(
-				Color(0.0, 0.5, 1.0, 1.0),
+				FOV_RING_COLOR,
 				_client_local_culling_radius,
-				0.1
+				FOV_RING_Y_OFFSET,
 			)
 			fov_ring.name = "FOVRing"
 			mesh_inst.add_child(fov_ring)
@@ -1260,12 +1386,12 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		# Visor (Rosto)
 		var visor = MeshInstance3D.new()
 		var vmesh = BoxMesh.new()
-		vmesh.size = Vector3(0.6, 0.2, 0.2) if id < 1000 else Vector3(0.2, 0.2, 0.2)
+		vmesh.size = PLAYER_VISOR_SIZE if id < PEER_ID_THRESHOLD else PROP_VISOR_SIZE
 		visor.mesh = vmesh
 		var vmat = StandardMaterial3D.new()
 		vmat.albedo_color = Color.BLACK
 		visor.material_override = vmat
-		visor.position = Vector3(0, 0.2, -0.51 if id < 1000 else -0.41) # -Z é a frente no Godot
+		visor.position = PLAYER_VISOR_OFFSET if id < PEER_ID_THRESHOLD else PROP_VISOR_OFFSET # -Z é a frente no Godot
 		mesh_inst.add_child(visor)
 		# ---------------------------------------------------------------------
 		mesh_inst.position = pos
@@ -1274,7 +1400,7 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 
 	var visual = _active_visual_entities_map[id]
 	if is_local:
-		var y_offset = 0.5
+		var y_offset = ENTITY_DEFAULT_Y_OFFSET
 		if visual.mesh and visual.mesh is BoxMesh:
 			y_offset = visual.mesh.size.y / 2.0
 		visual.position = pos + Vector3(0, y_offset, 0)
@@ -1296,8 +1422,8 @@ func _update_dynamic_rings() -> void:
 		var presence_node = vis.get_node_or_null("PresenceRing")
 		if presence_node:
 			presence_node.visible = _show_culling_rings
-			var pradius = vis.get_meta("presence_radius", 20.0)
-			
+			var pradius = vis.get_meta("presence_radius", FALLBACK_PRESENCE_RADIUS)
+
 			var mesh = presence_node.mesh as TorusMesh
 			if mesh and mesh.outer_radius != pradius:
 				if pradius > mesh.outer_radius:
@@ -1324,49 +1450,56 @@ func _update_dynamic_rings() -> void:
 
 	# Representação Visual da Grade Espacial do Core C++ (Broad-phase real)
 	if is_local_client:
-		var spatial_node = _scene_world_root_node.get_node_or_null("SpatialAreaVisualizer")
+		var spatial_node = _scene_world_root_node.get_node_or_null("SpatialAreaVisualizer") as MeshInstance3D
 		if not spatial_node:
 			spatial_node = MeshInstance3D.new()
 			spatial_node.name = "SpatialAreaVisualizer"
-			var box = BoxMesh.new()
-			box.size.y = 0.05
-			spatial_node.mesh = box
+			var box_mesh = BoxMesh.new()
+			box_mesh.size = Vector3(
+				SPATIAL_GRID_CELL_SIZE,
+				SPATIAL_CELL_DEBUG_HEIGHT,
+				SPATIAL_GRID_CELL_SIZE,
+			)
+			spatial_node.mesh = box_mesh
 			var mat = StandardMaterial3D.new()
-			mat.albedo_color = Color(0.6, 0.0, 1.0, 0.2) # Roxo translcido
+			mat.albedo_color = SPATIAL_GRID_DEBUG_COLOR # Roxo BEM translúcido para ser sutil
 			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			spatial_node.material_override = mat
 			_scene_world_root_node.add_child(spatial_node)
-			
+
 		spatial_node.visible = _show_culling_rings
-		
+
 		if spatial_node.visible:
 			var pos = _client_predicted_position
-			var cell_size = 100.0 # Hardcoded no C++
-			
+			var cell_size = SPATIAL_GRID_CELL_SIZE
+
 			var cx = floor(pos.x / cell_size)
 			var cz = floor(pos.z / cell_size)
-			
+
 			var min_x = cx * cell_size
 			var max_x = (cx + 1) * cell_size
 			var min_z = cz * cell_size
 			var max_z = (cz + 1) * cell_size
-			
+
 			var size_x = max_x - min_x
 			var size_z = max_z - min_z
-			
+
 			var bmesh = spatial_node.mesh as BoxMesh
-			if bmesh.size.x != size_x or bmesh.size.z != size_z:
-				bmesh.size.x = size_x
-				bmesh.size.z = size_z
-			
+			if bmesh:
+				if bmesh.size.x != size_x or bmesh.size.z != size_z:
+					bmesh.size = Vector3(size_x, SPATIAL_CELL_DEBUG_HEIGHT, size_z)
+
 			# A grade global na engine centralizada
-			spatial_node.position = Vector3(min_x + (size_x / 2.0), 0.025, min_z + (size_z / 2.0))
+			spatial_node.position = Vector3(
+				min_x + (size_x / 2.0),
+				SPATIAL_GRID_Y_OFFSET,
+				min_z + (size_z / 2.0),
+			)
 
 
 func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 	# Recepção de Snapshot (Estado Oficial do Servidor).
-	_sleeping_entities.erase(owner)
 
 	# Se o Host também for um jogador na mesma tela (e o cubo dele precisar existir fisicamente),
 	# mas você quer forçar os clientes a ignorarem o pacote visual apenas dele, você pode bloquear
@@ -1379,9 +1512,6 @@ func _on_state(owner: int, pos: Vector3, rot: Vector3, custom: int) -> void:
 	if owner != QuanticNet.get_unique_id():
 		if not _active_visual_entities_map.has(owner):
 			_update_visual(owner, pos, false)
-
-		var visual = _active_visual_entities_map[owner]
-		visual.set_meta("last_update", Time.get_ticks_msec())
 
 
 func _spawn_laser(start_pos: Vector3, color: Color) -> void:
@@ -1408,7 +1538,7 @@ func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Arr
 	# O evento de Snapback (Reconciliação) é o coração do Anti-Cheat arquitetural.
 	# Quando o servidor flagra a predição local do cliente desrespeitando o modelo físico, ele dispara este sinal,
 	# forçando o cliente a aceitar o vetor do servidor e re-simular os inputs na fila (replay) que ainda não chegaram.
-	print("[DEMO] Snapback Recebido (Reconciliação Forçada): %s" % str(pos))
+	print("Snapback Recebido (Reconciliação Forçada): %s" % str(pos))
 
 	_client_predicted_position = pos
 
@@ -1425,6 +1555,9 @@ func _on_snapback(seq: int, pos: Vector3, rot: Vector3, reason: int, replay: Arr
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _is_acting_as_server:
+		return
+
 	# Consome atalhos de depuração evitando colisões com a Interface 2D (Botões e Caixas de Texto).
 	# O isolamento em `_unhandled_input` previne tiros acidentais quando o jogador tenta interagir com a UI.
 	if event is InputEventMouseButton:
@@ -1434,15 +1567,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_current_zoom = max(5.0, _current_zoom - 2.0)
+			_current_zoom = max(ZOOM_MIN, _current_zoom - ZOOM_STEP)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_current_zoom = min(200.0, _current_zoom + 2.0)
+			_current_zoom = min(ZOOM_MAX, _current_zoom + ZOOM_STEP)
 
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		if _camera_pivot:
-			_camera_pivot.rotation_degrees.y -= event.relative.x * 0.3
-			_camera_pivot.rotation_degrees.x -= event.relative.y * 0.3
-			_camera_pivot.rotation_degrees.x = clamp(_camera_pivot.rotation_degrees.x, -89.0, 15.0)
+			_camera_pivot.rotation_degrees.y -= event.relative.x * MOUSE_SENSITIVITY
+			_camera_pivot.rotation_degrees.x -= event.relative.y * MOUSE_SENSITIVITY
+			_camera_pivot.rotation_degrees.x = clamp(
+				_camera_pivot.rotation_degrees.x,
+				CAMERA_PITCH_MIN,
+				CAMERA_PITCH_MAX,
+			)
 
 	if event is InputEventKey and event.pressed and not event.echo:
 		# [SPACE] - Toggle Câmera Alta
@@ -1459,7 +1596,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 			QuanticNet.set_netem_config(loss, lat, jit, dup)
 			var status = "ON (Loss: %.0f%% | Lat: %dms | Jit: %dms)" % [loss, lat, jit] if _is_network_emulation_active else "OFF"
-			print("[DEMO] NETEM Toggle: %s" % status)
+			print("NETEM Toggle: %s" % status)
 
 		# [F1] - Resetar Métricas de System
 		elif event.keycode == KEY_F1:
@@ -1472,7 +1609,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_physics_time_history.clear()
 			_physics_time_minimum = SENTINEL_MAX_FLOAT
 			_physics_time_maximum = 0.0
-			print("[DEMO] System Profiler resetado!")
+			print("System Profiler resetado!")
 
 		# [F2] - Resetar Métricas de Network
 		elif event.keycode == KEY_F2:
@@ -1482,7 +1619,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_packet_loss_history.clear()
 			_packet_loss_minimum = SENTINEL_MAX_FLOAT
 			_packet_loss_maximum = 0.0
-			print("[DEMO] Network Profiler resetado!")
+			print("Network Profiler resetado!")
 
 		# [F] - Toggle V-Sync e Max FPS (Teste de Stress visual)
 		elif event.keycode == KEY_F:
@@ -1493,7 +1630,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				Engine.max_fps = 0
 				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 			print(
-				"[DEMO] FPS Limitado: ",
+				"FPS Limitado: ",
 				"SIM (60Hz)" if Engine.max_fps == 60 else "NÃO (Unlimited)",
 			)
 
@@ -1502,15 +1639,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			_is_auto_movement_enabled = not _is_auto_movement_enabled
 			if _is_auto_movement_enabled:
 				_auto_movement_center_origin = _client_predicted_position
-			print("[DEMO] Auto-move: ", _is_auto_movement_enabled)
+			print("Auto-move: ", _is_auto_movement_enabled)
 
 		# [+ / -] - Client View Distance (Visual Culling)
 		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
-			_client_local_culling_radius += 2.0
-			print("[DEMO] View Distance: ", _client_local_culling_radius)
+			_client_local_culling_radius += VIEW_DISTANCE_STEP
+			print("View Distance: ", _client_local_culling_radius)
 		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
-			_client_local_culling_radius = maxf(2.0, _client_local_culling_radius - 2.0)
-			print("[DEMO] View Distance: ", _client_local_culling_radius)
+			_client_local_culling_radius = maxf(
+				VIEW_DISTANCE_MIN,
+				_client_local_culling_radius - VIEW_DISTANCE_STEP,
+			)
+			print("View Distance: ", _client_local_culling_radius)
 
 		elif event.keycode == KEY_H:
 			_show_culling_rings = not _show_culling_rings
@@ -1522,12 +1662,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				var fov_ring = vis.get_node_or_null("FOVRing") as MeshInstance3D
 				if fov_ring:
 					fov_ring.visible = _show_culling_rings
-			
+
 			var spatial_node = _scene_world_root_node.get_node_or_null("SpatialAreaVisualizer")
 			if spatial_node:
 				spatial_node.visible = _show_culling_rings
-				
-			print("[DEMO] Culling Rings: ", "Exibidos" if _show_culling_rings else "Ocultos")
+
+			print("Culling Rings: ", "Exibidos" if _show_culling_rings else "Ocultos")
+
+		# [,] (Vírgula) - Toggle NavMesh Visual
+		elif event.keycode == KEY_COMMA:
+			var nav_vis = _scene_world_root_node.get_node_or_null("NavMeshVisual")
+			if nav_vis:
+				nav_vis.visible = not nav_vis.visible
+				print("NavMesh Visual: ", "Exibido" if nav_vis.visible else "Oculto")
 
 		elif event.keycode >= KEY_0 and event.keycode <= KEY_9:
 			var target_tick = -1.0
@@ -1535,25 +1682,25 @@ func _unhandled_input(event: InputEvent) -> void:
 
 			match event.keycode:
 				KEY_1:
-					target_tick = 20.0
+					target_tick = PROFILE_HZ_KEY_1
 				KEY_2:
-					target_tick = 30.0
+					target_tick = PROFILE_HZ_KEY_2
 				KEY_3:
-					target_tick = 60.0
+					target_tick = PROFILE_HZ_KEY_3
 				KEY_4:
-					target_tick = 5.0
+					target_tick = PROFILE_HZ_KEY_4
 				KEY_5:
-					target_tick = 1.0
+					target_tick = PROFILE_HZ_KEY_5
 				KEY_6:
-					target_cull = 5.0
+					target_cull = PROFILE_CULL_KEY_6
 				KEY_7:
-					target_cull = 10.0
+					target_cull = PROFILE_CULL_KEY_7
 				KEY_8:
-					target_cull = 20.0
+					target_cull = PROFILE_CULL_KEY_8
 				KEY_9:
-					target_cull = 50.0
+					target_cull = PROFILE_CULL_KEY_9
 				KEY_0:
-					target_cull = 100.0
+					target_cull = PROFILE_CULL_KEY_0
 
 			_request_profile_change(target_tick, target_cull)
 
@@ -1564,15 +1711,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _request_profile_change(tick: float, culling: float) -> void:
 	# O cliente APENAS solicita a alteração ao Servidor. A classe global NÃO é mutada.
-	print("[DEBUG] _request_profile_change called with tick: ", tick, " culling: ", culling)
 	if QuanticNet.get_state() == QuanticNet.ConnectionState.CONNECTED:
-		print("[DEBUG] Client is connected, sending RPC to server!")
 		rpc_id(1, "server_update_profile", tick, culling)
 	elif _is_acting_as_server:
-		print("[DEBUG] Is server, applying profile directly!")
 		server_update_profile(tick, culling)
-	else:
-		print("[DEBUG] Client is NOT connected! State is: ", QuanticNet.get_state())
 
 
 @rpc("any_peer", "call_local")
@@ -1596,7 +1738,7 @@ func server_update_profile(new_tick: float, new_culling: float) -> void:
 		_active_profiles[peer_id] = new_prof
 		QuanticNet.change_entity_profile(peer_id, new_prof)
 		rpc("client_update_visual_radius", peer_id, c)
-		print("[DEMO] Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c])
+		print("Perfil Atualizado para Peer %d: %.1fHz | Culling: %.1fm" % [peer_id, t, c])
 
 
 @rpc("authority", "call_local")
@@ -1604,28 +1746,22 @@ func client_update_visual_radius(peer_id: int, new_radius: float) -> void:
 	if _active_visual_entities_map.has(peer_id):
 		var vis = _active_visual_entities_map[peer_id]
 		vis.set_meta("presence_radius", new_radius)
-	
+
 	# Memoriza o raio no cliente para caso a entidade saia do range (seja deletada) e volte depois!
 	if not QuanticNet.is_server():
 		var prof = QNEntityProfile.new()
-		prof.init(60.0, 1.0, new_radius)
+		prof.init(CLIENT_DYNAMIC_PROFILE_HZ, CLIENT_DYNAMIC_PROFILE_PRIO, new_radius)
 		_active_profiles[peer_id] = prof
 
 
-func _send_shoot_packet(ptype: int, pos: Vector3) -> void:
-	var data = PackedByteArray()
-	data.resize(12)
-	data.encode_float(0, pos.x)
-	data.encode_float(4, pos.y)
-	data.encode_float(8, pos.z)
-	QuanticNet.send_game_packet(1, ptype, data, true) # Send to Server
-
-
 func _on_custom_packet_received(peer_id: int, ptype: int, data: PackedByteArray) -> void:
-	# print("[DEBUG] Custom Packet from %d (Type %d, Size %d)" % [peer_id, ptype, data.size()])
 	if ptype == GAME_OP_SHOOT_HITSCAN or ptype == GAME_OP_SHOOT_PHYSICS:
-		if data.size() >= 12:
-			var pos = Vector3(data.decode_float(0), data.decode_float(4), data.decode_float(8))
+		if data.size() >= PACKET_POSITION_BYTE_SIZE:
+			var pos = Vector3(
+				data.decode_float(PACKET_OFFSET_POS_X),
+				data.decode_float(PACKET_OFFSET_POS_Y),
+				data.decode_float(PACKET_OFFSET_POS_Z),
+			)
 			var color = LASER_COLOR_HITSCAN if ptype == GAME_OP_SHOOT_HITSCAN else LASER_COLOR_PHYSICS
 
 			if QuanticNet.is_server():
@@ -1634,9 +1770,9 @@ func _on_custom_packet_received(peer_id: int, ptype: int, data: PackedByteArray)
 					if other_id != peer_id and other_id > 1:
 						QuanticNet.send_game_packet(other_id, ptype, data, true)
 
-				# Se o servidor tbm for visual, spawna localmente
+				# Se o servidor também for visual, spawna localmente
 				if not OS.has_feature("dedicated_server") and peer_id != 1:
 					_spawn_laser(pos, color)
 			else:
-				# Sou cliente e recebi isso do servidor (significa q outro cliente atirou)
+				# Sou cliente e recebi isso do servidor (significa que outro cliente atirou)
 				_spawn_laser(pos, color)

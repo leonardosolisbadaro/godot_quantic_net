@@ -6,8 +6,8 @@
 
 using namespace godot;
 
-const double QNSerializer::POS_LO = -64.0;
-const double QNSerializer::POS_HI = 64.0;
+const double QNSerializer::POS_LO = -512.0;
+const double QNSerializer::POS_HI = 512.0;
 
 void QNSerializer::_bind_methods() {
 	ClassDB::bind_static_method("QNSerializer", D_METHOD("encode_state_seq", "seq", "pos", "rot", "ts_msec", "custom_id"), &QNSerializer::encode_state_seq);

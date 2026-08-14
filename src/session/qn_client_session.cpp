@@ -116,9 +116,9 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 	for (int i = 0; i < count; i++) {
 		const QNClientInputState &h = _state_history[i];
 		_write_buf->write_bits(h.seq & 0xFFFF, 16);
-		_write_buf->write_float(h.pos.x, -64.0, 64.0, 16);
+		_write_buf->write_float(h.pos.x, -512.0, 512.0, 16);
 		_write_buf->write_float(h.pos.y, 0.0, 10.0, 16);
-		_write_buf->write_float(h.pos.z, -64.0, 64.0, 16);
+		_write_buf->write_float(h.pos.z, -512.0, 512.0, 16);
 		_write_buf->write_quaternion(Quaternion::from_euler(h.rot));
 		_write_buf->write_bits(h.ts & 0xFFFFFFFF, 32);
 		_write_buf->write_bits(h.custom_id & 0xFF, 5);

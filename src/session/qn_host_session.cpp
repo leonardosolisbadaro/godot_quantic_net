@@ -30,6 +30,10 @@ void QNHostSession::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_validator", "validator"), &QNHostSession::set_validator);
 	ClassDB::bind_method(D_METHOD("get_validator"), &QNHostSession::get_validator);
 	ClassDB::bind_method(D_METHOD("set_dormancy_threshold", "ticks"), &QNHostSession::set_dormancy_threshold);
+	ClassDB::bind_method(D_METHOD("set_default_cull_radius", "r"), &QNHostSession::set_default_cull_radius);
+	ClassDB::bind_method(D_METHOD("get_default_cull_radius"), &QNHostSession::get_default_cull_radius);
+	ClassDB::bind_method(D_METHOD("set_default_entity_aura", "r"), &QNHostSession::set_default_entity_aura);
+	ClassDB::bind_method(D_METHOD("get_default_entity_aura"), &QNHostSession::get_default_entity_aura);
 	ClassDB::bind_method(D_METHOD("register_entity", "entity_id", "is_peer", "has_initial_state", "profile"), &QNHostSession::register_entity, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("on_peer_authenticated", "peer_id", "profile"), &QNHostSession::on_peer_authenticated, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("unregister_entity", "entity_id"), &QNHostSession::unregister_entity);
@@ -127,6 +131,11 @@ void QNHostSession::on_peer_authenticated(int peer_id, Ref<QNEntityProfile> prof
 void QNHostSession::unregister_entity(int entity_id) {
 	_registry.erase(entity_id);
 	_profiles.erase(entity_id);
+	_dormancy_ticks.erase(entity_id);
+	_peer_known_entities.erase(entity_id);
+	for (auto &pair : _peer_known_entities) {
+		pair.second.erase(entity_id);
+	}
 	
 	auto it = std::find(_active_entities.begin(), _active_entities.end(), entity_id);
 	if (it != _active_entities.end()) {
@@ -153,6 +162,8 @@ void QNHostSession::update_entity_state(int entity_id, const Vector3 &pos, const
 		st.ts = ts;
 		st.custom_id = custom_id;
 		st.seq = _server_seq;
+
+		_grid->update_entity(entity_id, pos);
 	}
 }
 
@@ -186,9 +197,9 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 		if ((_read_buf->get_position() + 133) / 8 > data.size()) break;
 		
 		last_pkt_seq = (int)_read_buf->read_bits(16);
-		double x = _read_buf->read_float(-64.0, 64.0, 16);
+		double x = _read_buf->read_float(-512.0, 512.0, 16);
 		double y = _read_buf->read_float(0.0, 10.0, 16);
-		double z = _read_buf->read_float(-64.0, 64.0, 16);
+		double z = _read_buf->read_float(-512.0, 512.0, 16);
 		last_pos = Vector3(x, y, z);
 		last_rot = _read_buf->read_quaternion().get_euler();
 		last_ts = (int)_read_buf->read_bits(32);
@@ -311,12 +322,12 @@ void QNHostSession::tick_broadcast(int now) {
 		QNEntityState &st = _registry[id];
 		if (!st.has_state) continue;
 		
-		if (std::find(sleeping_entities.begin(), sleeping_entities.end(), id) != sleeping_entities.end()) {
-			continue; // Do not serialize sleeping entities
-		}
+		bool is_sleeping = (std::find(sleeping_entities.begin(), sleeping_entities.end(), id) != sleeping_entities.end());
 		
 		double tick_rate_hz = 20.0;
-		if (_profiles.find(id) != _profiles.end()) {
+		if (is_sleeping) {
+			tick_rate_hz = 1.0; // Heartbeat periódico para entidades dormentes (1 Hz = 95% economia de banda e resiliência UDP)
+		} else if (_profiles.find(id) != _profiles.end()) {
 			Ref<QNEntityProfile> profile = _profiles[id];
 			if (profile.is_valid()) tick_rate_hz = profile->get_tick_rate_hz();
 		}
@@ -365,8 +376,8 @@ void QNHostSession::tick_broadcast(int now) {
 		
 		candidates.clear();
 		selected_states.clear();
-		
-		double cull_radius = 250.0; // Use a large arbitrary default for lookup if they don't have profile
+
+		double cull_radius = _default_cull_radius; // Use a large arbitrary default for lookup if they don't have profile
 		if (_profiles.find(id) != _profiles.end()) {
 			Ref<QNEntityProfile> observer_profile = _profiles[id];
 			if (observer_profile.is_valid()) cull_radius = observer_profile->get_spatial_culling_radius();
@@ -384,49 +395,60 @@ void QNHostSession::tick_broadcast(int now) {
 		auto it = candidates.begin();
 		while (it != candidates.end()) {
 			int cid = *it;
-			bool is_dormant = current_states.find(cid) == current_states.end() && _registry[cid].has_state;
 			
-			if (current_states.find(cid) != current_states.end() || is_dormant) {
-				double cid_aura = 250.0;
+			if (current_states.find(cid) != current_states.end()) {
+				double cid_aura = _default_entity_aura;
 				if (_profiles.find(cid) != _profiles.end()) {
 					Ref<QNEntityProfile> cid_profile = _profiles[cid];
 					if (cid_profile.is_valid()) cid_aura = cid_profile->get_spatial_culling_radius();
 				}
 
-				Vector3 cid_pos;
-				if (is_dormant) cid_pos = _registry[cid].pos;
-				else cid_pos = current_states[cid].pos;
+				Vector3 cid_pos = current_states[cid].pos;
 
-				// O Server deve respeitar tanto o raio de viso do Observador quanto a "Aura" da Entidade Remota.
-				// Para que uma entidade seja vista, ela precisa estar dentro do raio do observador, OU a entidade ser to grande que seu raio atinge o observador.
-				double effective_radius = Math::max(cull_radius, cid_aura);
+				// O Server respeita a interseção mútua (Math::min) entre o FOV do Observador e a Aura de Presença da Entidade.
+				double effective_radius = Math::min(cull_radius, cid_aura);
 
 				if (_sync_adjacent_grids && cid_pos.distance_to(st.pos) > effective_radius) {
 					it = candidates.erase(it);
 				} else {
-					if (is_dormant) {
-						bool observer_has_it = false;
-						if (base_snapshot && base_snapshot->states.find(cid) != base_snapshot->states.end()) {
-							observer_has_it = true;
-						}
-						if (!observer_has_it) {
-							// O observador (peer atual) entrou na aura desta entidade dorminhoca e precisa dela!
-							// Adicionamos aos current_states para que o Accumulator a selecione e force um I-Frame.
-							current_states[cid] = _registry[cid];
-							++it;
-						} else {
-							// O observador já conhece esta entidade dorminhoca, não precisamos gastar banda.
-							it = candidates.erase(it);
-						}
-					} else {
-						++it;
-					}
+					_peer_known_entities[id].insert(cid);
+					++it;
 				}
 			} else {
 				it = candidates.erase(it);
 			}
 		}
 		
+		// Detecta entidades que saíram do escopo de visão/presença deste observador (AoI Exit)
+		std::vector<int> left_scope_entities;
+		for (int known_cid : _peer_known_entities[id]) {
+			if (known_cid != id && std::find(candidates.begin(), candidates.end(), known_cid) == candidates.end()) {
+				if (_registry.find(known_cid) != _registry.end() && _registry[known_cid].has_state) {
+					double known_aura = _default_entity_aura;
+					if (_profiles.find(known_cid) != _profiles.end()) {
+						Ref<QNEntityProfile> kp = _profiles[known_cid];
+						if (kp.is_valid()) known_aura = kp->get_spatial_culling_radius();
+					}
+					double eff_r = Math::min(cull_radius, known_aura);
+					Vector3 kpos = _registry[known_cid].pos;
+					if (kpos.distance_to(st.pos) <= eff_r) {
+						// A entidade ainda está dentro do alcance efetivo (dormindo), mantemos no escopo
+						continue;
+					}
+				}
+				left_scope_entities.push_back(known_cid);
+			}
+		}
+		for (int left_id : left_scope_entities) {
+			_peer_known_entities[id].erase(left_id);
+
+			PackedByteArray left_pkt;
+			left_pkt.resize(5);
+			left_pkt.encode_u8(0, QNSerializer::TYPE_PEER_LEFT);
+			left_pkt.encode_u32(1, left_id);
+			emit_signal("packet_ready", id, left_pkt);
+		}
+
 		if (current_states.find(id) != current_states.end()) {
 			if (std::find(candidates.begin(), candidates.end(), id) == candidates.end()) {
 				candidates.push_back(id);
@@ -457,7 +479,7 @@ void QNHostSession::tick_broadcast(int now) {
 		for (int asleep_id : fell_asleep_this_tick) {
 			if (_registry.find(asleep_id) == _registry.end()) continue;
 
-			double observer_aura = 250.0;
+			double observer_aura = _default_cull_radius;
 			if (_profiles.find(id) != _profiles.end()) {
 				Ref<QNEntityProfile> observer_profile = _profiles[id];
 				if (observer_profile.is_valid()) {
@@ -465,8 +487,17 @@ void QNHostSession::tick_broadcast(int now) {
 				}
 			}
 
+			double asleep_aura = _default_entity_aura;
+			if (_profiles.find(asleep_id) != _profiles.end()) {
+				Ref<QNEntityProfile> asleep_profile = _profiles[asleep_id];
+				if (asleep_profile.is_valid()) {
+					asleep_aura = asleep_profile->get_spatial_culling_radius();
+				}
+			}
+
+			double effective_radius = Math::min(observer_aura, asleep_aura);
 			Vector3 asleep_pos = _registry[asleep_id].pos;
-			if (asleep_pos.distance_to(st.pos) <= observer_aura) {
+			if (asleep_pos.distance_to(st.pos) <= effective_radius) {
 				PackedByteArray sleep_pkt;
 				sleep_pkt.resize(5);
 				sleep_pkt.encode_u8(0, QNSerializer::TYPE_SLEEP);
@@ -557,3 +588,21 @@ void QNHostSession::set_sync_adjacent_grids(bool p_sync) {
 bool QNHostSession::get_sync_adjacent_grids() const {
 	return _sync_adjacent_grids;
 }
+
+void QNHostSession::set_default_cull_radius(double r) {
+	_default_cull_radius = r;
+}
+
+double QNHostSession::get_default_cull_radius() const {
+	return _default_cull_radius;
+}
+
+void QNHostSession::set_default_entity_aura(double r) {
+	_default_entity_aura = r;
+}
+
+double QNHostSession::get_default_entity_aura() const {
+	return _default_entity_aura;
+}
+
+
