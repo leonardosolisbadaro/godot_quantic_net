@@ -1,4 +1,4 @@
-﻿## @file test_qn_host_session.gd
+## @file test_qn_host_session.gd
 ## @path res://tests/unit/use_cases/test_qn_host_session.gd
 ##
 ## @description
@@ -41,7 +41,7 @@ func test_snapshot_valido_aceito_e_atualiza_registry() -> void:
 	session.validator = autofree(QNServerValidator.new()) as QNServerValidator
 	session.on_peer_authenticated(10)
 	var pos := Vector3(1, 0, 1)
-	var pkt := PackedByteArray([0, 0])
+	var pkt := PackedByteArray([0, 0, 0, 0, 0])
 	pkt.append_array(
 		QNSerializer.encode_state_history(
 			[{ "seq": 10, "pos": pos, "rot": Vector3.ZERO, "ts": 1000, "custom_id": 0 }]
@@ -63,7 +63,7 @@ func test_snapshot_com_speedhack_gera_clamp_e_snapback() -> void:
 	session.on_peer_authenticated(10)
 
 	# Snapshot inicial
-	var pkt0 := PackedByteArray([0, 0])
+	var pkt0 := PackedByteArray([0, 0, 0, 0, 0])
 	pkt0.append_array(
 		QNSerializer.encode_state_history(
 			[{ "seq": 1, "pos": Vector3.ZERO, "rot": Vector3.ZERO, "ts": 1000, "custom_id": 0 }]
@@ -78,7 +78,7 @@ func test_snapshot_com_speedhack_gera_clamp_e_snapback() -> void:
 	)
 
 	# Speedhack (10 metros em 1 segundo - max speed = 6)
-	var pkt1 := PackedByteArray([0, 0])
+	var pkt1 := PackedByteArray([0, 0, 0, 0, 0])
 	pkt1.append_array(
 		QNSerializer.encode_state_history(
 			[
@@ -125,7 +125,7 @@ func test_snapshot_fora_do_mundo_gera_reject_e_kick() -> void:
 			rejections.append(s))
 
 	# Y = -100 (fora dos limites)
-	var pkt := PackedByteArray([0, 0])
+	var pkt := PackedByteArray([0, 0, 0, 0, 0])
 	pkt.append_array(
 		QNSerializer.encode_state_history(
 			[

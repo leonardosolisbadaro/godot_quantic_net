@@ -158,35 +158,20 @@ func test_isolamento_netem_entre_dois_clientes() -> void:
 
 	cli_lat.set_netem_config(0.0, 200, 0, 0.0)
 
-	# Marcamos o tempo, damos tick no clock e esperamos PONG no client
-	var t0 = Time.get_ticks_msec()
+	var elapsed_sim := 0.0
+	var duration := 3.0
+	while elapsed_sim < duration:
+		cli_lat.submit_state(Vector3.ZERO, Vector3.ZERO, 0, dt)
+		cli_fast.submit_state(Vector3.ZERO, Vector3.ZERO, 0, dt)
 
-	# Damos um submit force em ambos com dt = 0.06 para forcar envio imediato
-	cli_lat.submit_state(Vector3.ZERO, Vector3.ZERO, 0, 0.06)
-	cli_fast.submit_state(Vector3.ZERO, Vector3.ZERO, 0, 0.06)
+		await wait_process_frames(1, "waiting netem isolation")
+		elapsed_sim += dt
 
-	# Espera PONG do cli_fast (rtt de loopback, < 50ms)
-	var rtt_fast = -1
-	var rtt_lat = -1
-	elapsed = 0
-	while elapsed < 2000:
-		cli_lat.submit_state(Vector3.ZERO, Vector3.ZERO, 0, 0.016)
-		cli_fast.submit_state(Vector3.ZERO, Vector3.ZERO, 0, 0.016)
+	assert_true(cli_fast.is_clock_synced(), "fast sincronizou clock")
+	assert_true(cli_lat.is_clock_synced(), "lat sincronizou clock")
 
-		if cli_fast.is_clock_synced() and rtt_fast == -1:
-			rtt_fast = Time.get_ticks_msec() - t0
-		if cli_lat.is_clock_synced() and rtt_lat == -1:
-			rtt_lat = Time.get_ticks_msec() - t0
+	var rtt_fast = cli_fast.clock_rtt()
+	var rtt_lat = cli_lat.clock_rtt()
 
-		if rtt_fast != -1 and rtt_lat != -1:
-			break
-
-		await wait_process_frames(1, "waiting pongs")
-		elapsed += 16
-
-	assert_true(rtt_fast != -1, "fast recebeu pong")
-	assert_true(rtt_lat != -1, "lat recebeu pong")
-
-	if rtt_fast != -1 and rtt_lat != -1:
-		assert_true(rtt_fast < 100, "cli_fast foi rapido (rtt=" + str(rtt_fast) + ")")
-		assert_true(rtt_lat >= 150, "cli_lat demorou pelo netem local (rtt=" + str(rtt_lat) + ")")
+	assert_true(rtt_fast < 100.0, "cli_fast foi rapido (rtt=" + str(rtt_fast) + ")")
+	assert_true(rtt_lat >= 150.0, "cli_lat demorou pelo netem local (rtt=" + str(rtt_lat) + ")")

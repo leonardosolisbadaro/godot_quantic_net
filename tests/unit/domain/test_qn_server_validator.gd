@@ -1,4 +1,4 @@
-﻿## @file test_qn_server_validator.gd
+## @file test_qn_server_validator.gd
 ## @path res://tests/unit/domain/test_qn_server_validator.gd
 ##
 ## @description
@@ -145,4 +145,4 @@ func test_rejeicao_emite_sinal_com_razao_e_strikes() -> void:
 	v.validate(7, Vector3(50, 0, 0), Vector3.ZERO, 50)
 
 	# Assert
-	assert_signal_emitted_with_parameters(v, "peer_rejected", [7, "speed=1000.0 m/s", 1])
+	assert_signal_emitted_with_parameters(v, "peer_rejected", [7, "speed=H:1000.0 V:0.0 m/s", 1])

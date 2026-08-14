@@ -623,6 +623,26 @@ func is_clock_synced() -> bool:
 	return false
 
 
+func clock_rtt() -> float:
+	if not _is_server and _client_session:
+		return _client_session.clock_rtt()
+	return 0.0
+
+
+func clock_offset() -> float:
+	if not _is_server and _client_session:
+		return _client_session.clock_offset()
+	return 0.0
+
+
+func server_time(now: int = -1) -> int:
+	if now < 0:
+		now = Time.get_ticks_msec()
+	if not _is_server and _client_session:
+		return _client_session.server_time(now)
+	return now
+
+
 func get_registry() -> Dictionary:
 	if _is_server and _host_session:
 		return _host_session.get_registry()
@@ -761,12 +781,9 @@ func send_game_packet(
 	if _hook == null:
 		return
 
-	var pkt = PackedByteArray()
-	pkt.resize(CUSTOM_PACKET_HEADER_SIZE + data.size())
-	pkt.encode_u8(CUSTOM_PACKET_OPCODE_OFFSET, ptype)
-	if data.size() > 0:
-		for i in range(data.size()):
-			pkt.encode_u8(CUSTOM_PACKET_PAYLOAD_OFFSET + i, data[i])
+	var pkt := PackedByteArray([ptype])
+	if not data.is_empty():
+		pkt.append_array(data)
 
 	var mode = MultiplayerPeer.TRANSFER_MODE_RELIABLE if reliable else MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
 	_hook.send_custom(to_peer, pkt, CH_STATE, mode)

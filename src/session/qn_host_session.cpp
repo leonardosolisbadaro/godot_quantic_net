@@ -58,6 +58,7 @@ void QNHostSession::_bind_methods() {
 	
 	ClassDB::bind_method(D_METHOD("set_sync_adjacent_grids", "sync"), &QNHostSession::set_sync_adjacent_grids);
 	ClassDB::bind_method(D_METHOD("get_sync_adjacent_grids"), &QNHostSession::get_sync_adjacent_grids);
+	ClassDB::bind_method(D_METHOD("_on_validator_peer_rejected", "id", "reason", "strikes"), &QNHostSession::_on_validator_peer_rejected);
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "validator"), "set_validator", "get_validator");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sync_adjacent_grids"), "set_sync_adjacent_grids", "get_sync_adjacent_grids");
@@ -106,7 +107,7 @@ void QNHostSession::clear_regions() {
 void QNHostSession::register_entity(int entity_id, bool is_peer, bool has_initial_state, Ref<QNEntityProfile> profile) {
 	if (_registry.find(entity_id) == _registry.end()) {
 		_active_entities.push_back(entity_id);
-	_dormancy_ticks[entity_id] = 0;
+		_dormancy_ticks[entity_id] = 0;
 	}
 	QNEntityState st;
 	st.is_peer = is_peer;
@@ -120,7 +121,9 @@ void QNHostSession::register_entity(int entity_id, bool is_peer, bool has_initia
 	if (profile.is_valid()) {
 		_profiles[entity_id] = profile;
 	} else {
-		_profiles.erase(entity_id);
+		Ref<QNEntityProfile> def_profile;
+		def_profile.instantiate();
+		_profiles[entity_id] = def_profile;
 	}
 }
 
@@ -203,7 +206,7 @@ void QNHostSession::on_client_snapshot(int peer_id, const PackedByteArray &data,
 		last_pos = Vector3(x, y, z);
 		last_rot = _read_buf->read_quaternion().get_euler();
 		last_ts = (int)_read_buf->read_bits(32);
-		last_custom_id = (int)_read_buf->read_bits(5);
+		last_custom_id = (int)_read_buf->read_bits(8);
 	}
 	
 	int peer_last_seq = st.seq;
@@ -451,19 +454,7 @@ void QNHostSession::tick_broadcast(int now) {
 			}
 		}
 		
-		// Map for QNPriorityAccumulator (needs Dict logic temporarily or rewrite)
-		Dictionary gd_registry;
-		Dictionary gd_current_states;
-		for (int cid : candidates) {
-			Dictionary dict = _registry[cid].to_dict();
-			if (_profiles.find(cid) != _profiles.end()) {
-				dict["profile"] = _profiles[cid];
-			}
-			gd_registry[cid] = dict;
-			gd_current_states[cid] = current_states[cid].to_dict();
-		}
-		
-		_accumulator->select_entities(id, candidates, gd_registry, gd_current_states, st.pos, 1200, 19, selected_states);
+		_accumulator->select_entities_fast(id, candidates, _registry, current_states, _profiles, st.pos, 1200, 19, selected_states);
 		
 		for (int j = 0; j < selected_states.size(); j++) {
 			int selected_id = selected_states[j];
@@ -517,15 +508,8 @@ void QNHostSession::tick_broadcast(int now) {
 		emit_signal("packet_ready", id, _write_buf->get_buffer());
 	}
 	
-	// Fast Dictionary generation for rewind buffer
-	Dictionary gd_current_states;
-	for (int i = 0; i < _active_entities.size(); i++) {
-		int id = _active_entities[i];
-		if (current_states.find(id) != current_states.end()) {
-			gd_current_states[id] = current_states[id].to_dict();
-		}
-	}
-	_rewind_buffer->push_state_internal(now, gd_current_states, _active_entities);
+	// Gravação nativa no buffer de histórico temporal (Zero alocações de Dictionary)
+	_rewind_buffer->push_state_native(now, current_states, _active_entities);
 }
 
 Dictionary QNHostSession::query_raycast(const Vector3 &origin, const Vector3 &direction, double max_dist, int timestamp) const {
@@ -544,7 +528,12 @@ Dictionary QNHostSession::get_registry() {
 	Dictionary gd_registry;
 	for (int id : _active_entities) {
 		if (_registry.find(id) != _registry.end()) {
-			gd_registry[id] = _registry[id].to_dict();
+			Dictionary d = _registry[id].to_dict();
+			d["id"] = id;
+			if (_profiles.find(id) != _profiles.end()) {
+				d["profile"] = _profiles[id];
+			}
+			gd_registry[id] = d;
 		}
 	}
 	return gd_registry;

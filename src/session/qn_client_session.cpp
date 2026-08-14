@@ -121,7 +121,7 @@ bool QNClientSession::submit_state(const Vector3 &pos, const Vector3 &rot, int c
 		_write_buf->write_float(h.pos.z, -512.0, 512.0, 16);
 		_write_buf->write_quaternion(Quaternion::from_euler(h.rot));
 		_write_buf->write_bits(h.ts & 0xFFFFFFFF, 32);
-		_write_buf->write_bits(h.custom_id & 0xFF, 5);
+		_write_buf->write_bits(h.custom_id & 0xFF, 8);
 	}
 	
 	PackedByteArray pkt = _write_buf->get_buffer();

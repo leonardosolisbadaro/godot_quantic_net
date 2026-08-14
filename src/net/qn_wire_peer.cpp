@@ -354,7 +354,15 @@ void QNWirePeer::_worker_loop() {
 				uint64_t ep_id = ep->get_instance_id();
 				
 				if (type == ENetConnection::EVENT_CONNECT) {
-					int id = _is_server_flag ? _next_id++ : 1;
+					int id = 1;
+					if (_is_server_flag) {
+						do {
+							id = _next_id++;
+							if (_next_id >= 1000) {
+								_next_id = 2;
+							}
+						} while (_worker_id_to_ep.find(id) != _worker_id_to_ep.end());
+					}
 					_worker_ep_to_id[ep_id] = id;
 					_worker_id_to_ep[id] = ep;
 					

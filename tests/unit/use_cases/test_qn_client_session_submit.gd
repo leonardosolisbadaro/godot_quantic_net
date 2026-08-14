@@ -1,4 +1,4 @@
-﻿## @file test_qn_client_session_submit.gd
+## @file test_qn_client_session_submit.gd
 ## @path res://tests/unit/use_cases/test_qn_client_session_submit.gd
 ##
 ## @description
@@ -67,8 +67,8 @@ func test_pacote_tem_formato_do_protocolo_com_seq_crescente() -> void:
 	# Assert: seq 1 e 2, tipo STATE, posicao quantizada
 	assert_eq(_sent.size(), 2)
 	assert_eq(_sent[0]["data"].decode_u8(0), QNSerializer.TYPE_STATE) # TYPE_STATE
-	var hist1: Array = QNSerializer.decode_state_history(_sent[0]["data"].slice(3))
-	var hist2: Array = QNSerializer.decode_state_history(_sent[1]["data"].slice(3))
+	var hist1: Array = QNSerializer.decode_state_history(_sent[0]["data"].slice(6))
+	var hist2: Array = QNSerializer.decode_state_history(_sent[1]["data"].slice(6))
 	assert_eq(hist1[0]["seq"], 1, "primeiro envio seq=1")
 	assert_eq(hist2[0]["seq"], 2, "segundo envio seq=2")
 

@@ -5,9 +5,11 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include "core/qn_types.hpp"
 #include <deque>
 #include <vector>
 #include <map>
+#include <unordered_map>
 
 namespace godot {
 
@@ -48,6 +50,7 @@ public:
 
 	void push_state(int timestamp, const Dictionary &world_snapshot);
 	void push_state_internal(int timestamp, const Dictionary &world_snapshot, const std::vector<int> &active_entities);
+	void push_state_native(int timestamp, const std::unordered_map<int, QNEntityState> &current_states, const std::vector<int> &active_entities);
 	void clear();
 	
 	// Agnostic Time-Travel Queries

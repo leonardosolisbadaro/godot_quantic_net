@@ -74,6 +74,27 @@ void QNWorldHistoryBuffer::push_state_internal(int timestamp, const Dictionary &
 	}
 }
 
+void QNWorldHistoryBuffer::push_state_native(int timestamp, const std::unordered_map<int, QNEntityState> &current_states, const std::vector<int> &active_entities) {
+	QNWorldSnapshot snap;
+	snap.ts = timestamp;
+	for (int i = 0; i < active_entities.size(); i++) {
+		int id = active_entities[i];
+		auto it = current_states.find(id);
+		if (it == current_states.end()) continue;
+		const QNEntityState &st = it->second;
+		QNEntitySnapshot es;
+		es.pos = st.pos;
+		es.type = st.type;
+		es.extents = st.extents;
+		snap.entities[id] = es;
+	}
+
+	_history.push_front(snap);
+	if (_history.size() > _max_history_ticks) {
+		_history.pop_back();
+	}
+}
+
 void QNWorldHistoryBuffer::clear() {
 	_history.clear();
 }
