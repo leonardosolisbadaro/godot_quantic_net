@@ -1,64 +1,63 @@
-# TODO: QuanticNet (Core Infrastructure) v0.9.0-beta
+# 📋 TODO: QuanticNet (Core Infrastructure) v0.9.0
 
-Plugin de network autoritativo (`QuanticNet`) construído em C++ (GDExtension) para Godot 4.7.
-Este repositório é estritamente infraestrutura *Bare Metal*. Demos de gameplay e MMOs concretos residem no repositório externo [godot_quantic_net_demos](https://github.com/leonardosolisbadaro/godot_quantic_net_demos).
+Plugin de rede autoritativo de alto desempenho construído em C++ (GDExtension) para a Godot Engine 4.7+.
 
----
-
-## 🚨 FASE 1: O Sistema de Chunks e Validação Híbrida (AAA)
-
-*Foco total na engenharia de mapas e segurança geométrica contínua.*
-
-### PR 1 — Arquitetura Híbrida: Validação Server-Side (NavMesh & Raycasts)
-
-* [x] Exportar NavMesh (NavigationRegion3D) do mapa e carregá-lo no contexto do Servidor Dedicado.
-* [x] Implementar um callback (Hook) ou iterador no Servidor para interceptar posições recebidas de clientes.
-* [x] Utilizar `NavigationServer3D.map_get_closest_point` para validar se a coordenada (X, Z) do pacote de movimento é permitida.
-
-### PR 2 — Chunk Manager (Seamless Grid)
-
-* [ ] Criar `qn_chunk_manager.gd` na Demo.
-* [ ] Gerar Grid de chão 3D dinamicamente a partir da coordenada (0,0) (Ex: raio 3x3 chunks).
-* [ ] Substituir o `open_world_floor` estático pelo carregamento dinâmico do Grid.
-* [ ] Adicionar lógica de Streaming (Load/Unload chunks ao afastar do centro).
-
-### PR 3 — Validação Híbrida em Relevos
-
-* [ ] Alterar o `qn_chunk_manager.gd` para gerar malhas 3D e NavMeshes com relevos matemáticos (rampas/escadas).
-* [ ] Validar a detecção de Flyhack (eixo Y) e a geração de Snapbacks verticais no Servidor.
+> ⚠️ **Fronteira Arquitetural:** Este repositório é estritamente a **infraestrutura do motor (Bare Metal)**. Todas as demonstrações de gameplay, sistemas de chunks de terreno, geração procedural, inventários e inteligência artificial de NPCs residem no repositório parceiro oficial [godot_quantic_net_demos](https://github.com/leonardosolisbadaro/godot_quantic_net_demos).
 
 ---
 
-## 🌐 FASE 2: Gameplay Autoritativo
+## 🏛️ ESTADO ATUAL: FUNDAÇÕES CONCLUÍDAS (v0.9.0) ✅
 
-*Foco em testar e aplicar 100% do potencial da API do QuanticNet em um cenário de MMO real.*
+### 1. Motor C++ e Gestão de Memória Zero-Allocation
 
-### PR 1 — Integração de OpCodes Complexos
+- [x] **Fast Native Priority Accumulator:** `QNPriorityAccumulator::select_entities_fast()` operando diretamente sobre vetores e mapas nativos de C++, eliminando 100% das alocações de `Dictionary`/`Variant` no tick de broadcast.
+- [x] **Zero-Allocation World History Buffer:** `QNWorldHistoryBuffer::push_state_native()` gravando snapshots físicos contíguos de POD structs sem instanciar nós ou dicionários.
+- [x] **Safe Peer ID Wrap-Around Cycle:** Ciclo de identificadores de peer restrito ao intervalo seguro $[2, 999]$, pulando conexões ativas e prevenindo colisões com o limiar de entidades de ambiente (`PEER_ID_THRESHOLD = 1000`).
+- [x] **Padronização de OpCodes de 8 Bits:** Campo `custom_id` padronizado para 8 bits em toda a cadeia de serialização e desserialização UDP, permitindo $256$ tags de estado de animação/gameplay simultâneas.
 
-* [ ] Utilizar `send_game_packet` para gerenciar a conjuração de magias (cast bars e interrupções autoritativas).
-* [ ] Substituir projéteis simulados no cliente por Raycasts validados com Lag Compensation (`query_raycast` no passado).
+### 2. Sincronização Temporal e Telemetria
 
-### PR 2 — Culling Avançado e Instâncias (Monstros e NPCs)
+- [x] **Algoritmo de Relógio Contínuo (`QNClockSync`):** Convergência estatística de RTT e Offset via EMA (Exponential Moving Average) e descarte de picos espúrios.
+- [x] **APIs de Consulta Expostas no Autoload:** `QuanticNet.is_clock_synced()`, `QuanticNet.clock_rtt()`, `QuanticNet.clock_offset()`, `QuanticNet.server_time()`.
+- [x] **Loss Tracker com Janela Deslizante de 64 Bits:** Rastreamento de perda de pacotes por peer com proteção contra wrap-around de 16 bits.
 
-* [ ] Instanciar NPCs patrulhando livremente pelos Chunks carregados.
-* [ ] Associar perfis de baixa prioridade (`QNEntityProfile`) aos NPCs distantes e garantir que o *Spatial Culling* poupe a banda dos clientes.
+### 3. I/O Offloading e Transporte Seguro
+
+- [x] **Worker Thread Dedicada (`QNWirePeer`):** Polling contínuo de sockets ENet e desembalamento de bits rodando em thread paralela em C++, comunicando-se com a Main Thread via Lock-Free Ring Buffer.
+- [x] **Segurança DTLS Nativa:** Handshake com criptografia de ponta a ponta e token compartilhado (`QNDTLSBootstrap`).
+- [x] **Network Emulation (NetEmul):** Injeção em tempo real de latência, jitter, perda e duplicação de pacotes em C++.
+
+### 4. Paradigmas de Sincronização e Anti-Cheat
+
+- [x] **Dual Paradigm (State-Based vs Command-Based):** Suporte tanto a envio de estados preditos (Client-Side Prediction com Zero Input Lag) quanto a inputs determinísticos com *Dynamic Jitter Buffer* no servidor.
+- [x] **Lag Compensation (Rollback):** Rebobinamento temporal autoritativo para testes de colisão no passado (`query_raycast`, `query_box`, `query_sphere`).
+- [x] **Validador de Movimento Híbrido:** Verificação de limites de velocidade elástica (*Clamp*), detecção de teletransporte (*Reject/Kick*) e integração com NavMesh do Godot via RID.
 
 ---
 
-## 🗄️ HISTÓRICO E LEGADO (Concluído em v0.8.0)
+## 🎯 PRÓXIMAS METAS DO MOTOR (Rumo à v1.0.0)
 
-* **Tick Server-Side Independente & Dormancy:** _physics_process substituído por acumulador. Entidades agora entram em sono profundo (TYPE_SLEEP).
-* **Transporte Nativo:** ENet/DTLS integrado via GDExtension.
-* **Paradigma Híbrido:** Suporte a Command-Based (submit_input) e State-Based (submit_state).
-* **Worker Threads (I/O Offloading):** Desserialização e ENet rodando em thread paralela via `QNWirePeer` com Lock-Free Ring Buffers.
-* **Input Jitter Buffer:** Catch-up físico e absorção dinâmica de flutuações de rede no Host.
-* **Otimização de Memória Extrema:** Estruturas POD Contíguas (`QNEntityState`) sem overhead.
-* **Queries Espaciais & Lag Compensation:** `QNWorldHistoryBuffer` (Histórico de 60 frames passados).
-* **Entity Profiles & Regions:** Culling espacial (AABB) dinâmico e perfis assíncronos.
+### Milestone 1 — Otimizações SIMD e Vetorização
+
+- [ ] Implementar comparações *Bitwise XOR* vetorizadas (instruções AVX2/SSE) no cálculo de Delta Encoding do `QNHostSession`.
+- [ ] Vetorizar a detecção de AABB do `QNSpatialGrid` para acelerar o particionamento com mais de $10.000$ entidades ativas.
+
+### Milestone 2 — Suporte a Networked RigidBodies
+
+- [ ] Adicionar struct nativa `QNRigidBodyState` para sincronização de corpos físicos com velocidade linear e angular compactadas.
+- [ ] Integrar perfil de prioridade especial para detritos e veículos (`RIGID_BODY_PROFILE`).
+
+### Milestone 3 — Server Meshing Hooks (Escalabilidade Distribuída)
+
+- [ ] Criar interface de Hand-off de entidades entre múltiplos nós dedicados de servidor em nuvem.
+- [ ] Roteamento transparente de pacotes entre instâncias regionais sem desconexão do cliente.
 
 ---
 
-## 🧊 ICEBOX (Tarefas Congeladas)
+## 🎮 METAS DO REPOSITÓRIO DE DEMOS (`godot_quantic_net_demos`)
 
-* **Ack-Tracking no Delta Serializer:** Removido da linha principal para focar no design de domínio. Aguardando a fase de stress test para ser reimplementado.
-* **Solver Cinemático Stateless em C++ (`QNKinematicSolver`):** Congelada aguardando necessidade real de colisão nativa pesada.
+Todas as implementações de conteúdo e mecânicas de jogo avançam no repositório de demos:
+
+- [ ] **Chunk Manager (Seamless Streaming):** Geração e streaming contínuo de malhas de terreno e NavMeshes.
+- [ ] **Open World MMO Stress Test:** Simulação de multidão com centenas de avatares e NPCs patrulhando autonomamente.
+- [ ] **Combat & Spells System:** Conjuração de magias, projéteis balísticos e combate corpo a corpo validado por Lag Compensation.
