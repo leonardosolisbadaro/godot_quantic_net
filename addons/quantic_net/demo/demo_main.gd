@@ -104,6 +104,10 @@ const FLOOR_PLANE_SIZE := Vector2(1000.0, 1000.0)
 const FLOOR_COLOR := Color(0.15, 0.15, 0.15)
 ## Ângulo e inclinação inicial da luz direcional solar com sombras ativadas.
 const SUN_LIGHT_ROTATION := Vector3(-45.0, 45.0, 0.0)
+## Alcance máximo em metros da sombra ortogonal ultraleve da luz solar em torno do jogador.
+const SUN_SHADOW_MAX_DISTANCE := 60.0
+## Proporção de distância onde o esmaecimento suave da sombra se inicia.
+const SUN_SHADOW_FADE_START := 0.7
 ## Rotação angular isométrica inicial do pivô de câmera.
 const CAMERA_START_ROT := Vector3(-35.0, 0.0, 0.0)
 ## Comprimento padrão do braço da mola da câmera em terceira pessoa.
@@ -137,9 +141,9 @@ const TERRAIN_HALF_SIZE := 500.0
 ## Quantidade de subdivisões por eixo para gerar a malha densa do terreno (100x100 quads).
 const TERRAIN_SUBDIVISIONS := 100
 ## Escala de amplitude vertical máxima em metros aplicada ao ruído do terreno.
-const TERRAIN_HEIGHT_SCALE := 15.0
-## Frequência espacial padrão do gerador FastNoiseLite para curvas suaves de colinas.
-const TERRAIN_NOISE_FREQUENCY := 0.005
+const TERRAIN_HEIGHT_SCALE := 35.0
+## Frequência espacial padrão do gerador FastNoiseLite para curvas amplas de colinas e montanhas.
+const TERRAIN_NOISE_FREQUENCY := 0.004
 ## Quantidade de oitavas fractais para adicionar microdetalhes ao relevo procedural.
 const TERRAIN_NOISE_OCTAVES := 4
 ## Semente pseudoaleatória padrão para sincronização determinística entre servidor e cliente.
@@ -148,8 +152,8 @@ const TERRAIN_SEED := 1337
 const TERRAIN_COLOR := Color(0.18, 0.22, 0.16)
 ## Rugosidade da superfície do material do terreno para reduzir reflexos especulares excessivos.
 const TERRAIN_ROUGHNESS := 0.9
-## Caminho de persistência em disco do cache binário da NavigationMesh 3D.
-const TERRAIN_NAVMESH_CACHE_PATH := "user://terrain_navmesh_cache.res"
+## Padrão de formatação do caminho de cache em disco da NavigationMesh 3D.
+const TERRAIN_NAVMESH_CACHE_TEMPLATE := "user://terrain_navmesh_s%d_h%d_f%d.res"
 ## Inclinação máxima permitida para caminhabilidade na NavigationMesh (graus).
 const NAVMESH_MAX_SLOPE := 45.0
 ## Altura padrão do agente para o cálculo do túnel de navegação.
@@ -210,20 +214,20 @@ const COORD_LABEL_OUTLINE_SIZE := 4
 # ==============================================================================
 # 8. CONSTANTES DE ANÉIS DE CULLING E GRADE ESPACIAL
 # ==============================================================================
-## Espessura radial do torus geométrico utilizado nos anéis de depuração visual.
-const RING_THICKNESS := 0.2
-## Quantidade de segmentos angulares longitudinais do torus de debug.
-const RING_SIDES := 64
-## Quantidade de anéis circulares transversais na geometria do torus.
-const RING_SEG := 32
-## Deslocamento em Y do anel de presença para evitar sobreposição plana com o piso.
-const RING_Y_OFFSET := 0.05
+## Altura vertical de projeção da caixa AABB do Decal sobre o relevo (metros).
+const DECAL_PROJECTION_HEIGHT := 100.0
+## Fator de esmaecimento superior da projeção do Decal (upper fade).
+const DECAL_UPPER_FADE := 0.3
+## Fator de esmaecimento inferior da projeção do Decal (lower fade).
+const DECAL_LOWER_FADE := 0.3
+## Resolução em pixels da textura 2D procedural gerada em memória para os anéis de Decal.
+const DECAL_TEXTURE_SIZE := 512
+## Espessura do traço do anel em pixels na textura procedural de 512x512.
+const DECAL_RING_THICKNESS_PX := 2.0
 ## Nível de transparência (Alpha) da cor do anel de presença da entidade.
-const PRESENCE_RING_ALPHA := 0.25
+const PRESENCE_RING_ALPHA := 0.6
 ## Cor azul translúcida indicativa do anel de alcance de visão (FOV) do cliente local.
-const FOV_RING_COLOR := Color(0.0, 0.5, 1.0, 1.0)
-## Deslocamento em Y do anel de FOV local para sobrepor sutilmente o anel de presença.
-const FOV_RING_Y_OFFSET := 0.1
+const FOV_RING_COLOR := Color(0.0, 0.7, 1.0, 0.9)
 ## Raio de presença padrão de contingência para entidades sem metadados explícitos.
 const FALLBACK_PRESENCE_RADIUS := 20.0
 ## Raio de presença padrão inicial assumido pelos avatares de rede.
@@ -434,6 +438,7 @@ var _auto_movement_elapsed_time: float = 0.0
 var _server_authoritative_props_time: float = 0.0
 var _client_local_culling_radius: float = DEFAULT_VIEW_DISTANCE
 var _show_culling_rings: bool = true
+var _cached_ring_texture: ImageTexture = null
 var _ui_label_connection_status: Label
 
 # Labels do System Profiler (CPU, RAM, GPU, Engine)
@@ -680,14 +685,19 @@ func _setup_scene() -> void:
 		_scene_world_root_node.add_child(_terrain_static_body)
 
 		# Tentativa de carregar a NavigationMesh do cache binário em disco (< 2ms)
-		if ResourceLoader.exists(TERRAIN_NAVMESH_CACHE_PATH):
-			nav_mesh = ResourceLoader.load(TERRAIN_NAVMESH_CACHE_PATH) as NavigationMesh
+		var cache_file = TERRAIN_NAVMESH_CACHE_TEMPLATE % [
+			terrain_seed,
+			int(terrain_height_scale),
+			int(terrain_noise_frequency * 10000.0),
+		]
+		if ResourceLoader.exists(cache_file):
+			nav_mesh = ResourceLoader.load(cache_file) as NavigationMesh
 
 		# Caso não exista em cache, gera diretamente a partir da malha indexada do terreno e salva
 		if nav_mesh == null or nav_mesh.get_polygon_count() == 0:
 			nav_mesh = NavigationMesh.new()
 			nav_mesh.create_from_mesh(terrain_mesh)
-			ResourceSaver.save(nav_mesh, TERRAIN_NAVMESH_CACHE_PATH)
+			ResourceSaver.save(nav_mesh, cache_file)
 	else:
 		nav_mesh = NavigationMesh.new()
 		var hs := NAVMESH_HALF_SIZE
@@ -723,6 +733,9 @@ func _setup_scene() -> void:
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = SUN_LIGHT_ROTATION
 	light.shadow_enabled = true
+	light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	light.directional_shadow_max_distance = SUN_SHADOW_MAX_DISTANCE
+	light.directional_shadow_fade_start = SUN_SHADOW_FADE_START
 	add_child(light)
 
 	# Terreno ou Chão plano (Floor)
@@ -813,21 +826,44 @@ func _create_navmesh_visual(nav_mesh: NavigationMesh) -> Node3D:
 	return root
 
 
-func _create_ring(color: Color, radius: float, y_offset: float) -> MeshInstance3D:
-	var mi = MeshInstance3D.new()
-	var mesh = TorusMesh.new()
-	mesh.inner_radius = radius - RING_THICKNESS
-	mesh.outer_radius = radius
-	mesh.rings = RING_SIDES
-	mesh.ring_segments = RING_SEG
-	mi.mesh = mesh
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mi.material_override = mat
-	mi.position.y = y_offset
-	return mi
+## Gera e armazena em cache a textura 2D procedural do anel com antialiasing para projeção via Decal.
+func _get_ring_texture() -> ImageTexture:
+	if _cached_ring_texture != null:
+		return _cached_ring_texture
+	var img_size := DECAL_TEXTURE_SIZE
+	var img = Image.create(img_size, img_size, false, Image.FORMAT_RGBA8)
+	var center := Vector2(img_size * 0.5, img_size * 0.5)
+	var outer_r := float(img_size) * 0.48
+	var mid_r := outer_r - (DECAL_RING_THICKNESS_PX * 0.5)
+	var half_w := DECAL_RING_THICKNESS_PX * 0.5
+
+	for y in range(img_size):
+		for x in range(img_size):
+			var d = Vector2(x + 0.5, y + 0.5).distance_to(center)
+			var dist_to_mid = absf(d - mid_r)
+			if dist_to_mid <= half_w + 1.5:
+				var t = clampf(1.0 - (dist_to_mid / (half_w + 1.5)), 0.0, 1.0)
+				# Curva cúbica hermite suave (Smoothstep)
+				var alpha = t * t * (3.0 - 2.0 * t)
+				img.set_pixel(x, y, Color(1.0, 1.0, 1.0, alpha))
+			else:
+				img.set_pixel(x, y, Color(1.0, 1.0, 1.0, 0.0))
+
+	_cached_ring_texture = ImageTexture.create_from_image(img)
+	return _cached_ring_texture
+
+
+## Cria um projetor GPU nativo (Decal) para desenhar o anel de AoI/FOV perfeitamente sobre o relevo 3D.
+func _create_decal_ring(color: Color, radius: float, ring_name: String) -> Decal:
+	var decal = Decal.new()
+	decal.name = ring_name
+	decal.size = Vector3(radius * 2.0, DECAL_PROJECTION_HEIGHT, radius * 2.0)
+	decal.texture_albedo = _get_ring_texture()
+	decal.modulate = color
+	decal.upper_fade = DECAL_UPPER_FADE
+	decal.lower_fade = DECAL_LOWER_FADE
+	decal.distance_fade_enabled = false
+	return decal
 
 # ==============================================================================
 # APRESENTAÇÃO E MÉTRICAS DE DIAGNÓSTICO (CANVAS LAYER)
@@ -1048,8 +1084,9 @@ func _physics_process(delta: float) -> void:
 
 			# Vetor velocidade analítico para orientação tangencial perfeitamente suave
 			var vel_x = cos(t * AUTO_MOVE_SPEED) * AUTO_MOVE_SPEED * AUTO_MOVE_RADIUS
-			var vel_z = cos(t * AUTO_MOVE_SPEED * 2.0) * 2.0 * AUTO_MOVE_SPEED * (AUTO_MOVE_RADIUS
-			* 0.5)
+			var vel_z = cos(t * AUTO_MOVE_SPEED * 2.0) * 2.0 * AUTO_MOVE_SPEED * (
+				AUTO_MOVE_RADIUS * 0.5
+			)
 			var move_dir = Vector3(vel_x, 0.0, vel_z)
 			if move_dir.length_squared() > 0.0001:
 				move_dir = move_dir.normalized()
@@ -1106,10 +1143,8 @@ func _process(_delta: float) -> void:
 				if not interp_state.is_empty():
 					var visual = _active_visual_entities_map[id]
 					var target_pos = interp_state.get("pos", visual.position)
-					var y_off = ENTITY_DEFAULT_Y_OFFSET
-					if visual.mesh and visual.mesh is BoxMesh:
-						y_off = visual.mesh.size.y / 2.0
-					target_pos.y += y_off
+					var y_off = visual.mesh.size.y / 2.0 if (visual.mesh and visual.mesh is BoxMesh) else ENTITY_DEFAULT_Y_OFFSET
+					target_pos.y = get_terrain_height(target_pos.x, target_pos.z) + y_off
 
 					var target_rot = interp_state.get("rot", visual.rotation)
 					var current_quat = Quaternion.from_euler(visual.rotation)
@@ -1117,6 +1152,7 @@ func _process(_delta: float) -> void:
 					visual.rotation = current_quat \
 							.slerp(target_quat, _delta * ROTATION_SLERP_SPEED) \
 							.get_euler()
+
 					# Culling Visual (FOV Local e Aura da Entidade)
 					var rad = visual.get_meta("presence_radius", DEFAULT_PRESENCE_RADIUS)
 					var dist = _client_predicted_position.distance_to(target_pos)
@@ -1138,6 +1174,10 @@ func _process(_delta: float) -> void:
 								target_pos,
 								_delta * INTERP_LERP_SPEED,
 							)
+							visual.position.y = get_terrain_height(
+								visual.position.x,
+								visual.position.z,
+							) + y_off
 
 					visual.visible = is_visible
 					var lbl = visual.get_node_or_null("CoordLabel") as Label3D
@@ -1514,21 +1554,19 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 		mesh_inst.material_override = mat
 		mesh_inst.set_meta("presence_radius", presence_radius)
 
-		# Anel de Presença (AoI da Entidade - Quem a vê)
+		# Anel de Presença (AoI da Entidade - Projetado via Decal sobre o terreno)
 		var presence_color = entity_color
 		presence_color.a = PRESENCE_RING_ALPHA # Translúcido
-		var presence_ring = _create_ring(presence_color, presence_radius, RING_Y_OFFSET)
-		presence_ring.name = "PresenceRing"
+		var presence_ring = _create_decal_ring(presence_color, presence_radius, "PresenceRing")
 		mesh_inst.add_child(presence_ring)
 
-		# Anel de Visão (FOV - Apenas para o Cliente Local - O que ele vê)
+		# Anel de Visão (FOV - Apenas para o Cliente Local - Projetado via Decal)
 		if is_local:
-			var fov_ring = _create_ring(
+			var fov_ring = _create_decal_ring(
 				FOV_RING_COLOR,
 				_client_local_culling_radius,
-				FOV_RING_Y_OFFSET,
+				"FOVRing",
 			)
-			fov_ring.name = "FOVRing"
 			mesh_inst.add_child(fov_ring)
 
 		# --- [DIAGNOSTIC] Label3D para prova determinística de coordenadas ---
@@ -1576,35 +1614,27 @@ func _update_dynamic_rings() -> void:
 		var vis = _active_visual_entities_map[id]
 		var is_local = (is_local_client and id == local_id)
 
-		# Atualiza Presence Ring
-		var presence_node = vis.get_node_or_null("PresenceRing")
+		# Atualiza Presence Ring (Decal)
+		var presence_node = vis.get_node_or_null("PresenceRing") as Decal
 		if presence_node:
 			presence_node.visible = _show_culling_rings
 			var pradius = vis.get_meta("presence_radius", FALLBACK_PRESENCE_RADIUS)
+			var target_size = Vector3(pradius * 2.0, DECAL_PROJECTION_HEIGHT, pradius * 2.0)
+			if presence_node.size != target_size:
+				presence_node.size = target_size
 
-			var mesh = presence_node.mesh as TorusMesh
-			if mesh and mesh.outer_radius != pradius:
-				if pradius > mesh.outer_radius:
-					mesh.outer_radius = pradius
-					mesh.inner_radius = pradius - RING_THICKNESS
-				else:
-					mesh.inner_radius = pradius - RING_THICKNESS
-					mesh.outer_radius = pradius
-
-		# Atualiza FOV Ring
+		# Atualiza FOV Ring (Decal)
 		if is_local:
-			var fov_node = vis.get_node_or_null("FOVRing")
+			var fov_node = vis.get_node_or_null("FOVRing") as Decal
 			if fov_node:
 				fov_node.visible = _show_culling_rings
-				var mesh = fov_node.mesh as TorusMesh
-				if mesh and mesh.outer_radius != _client_local_culling_radius:
-					# Proteção contra colapso de renderização da Godot
-					if _client_local_culling_radius > mesh.outer_radius:
-						mesh.outer_radius = _client_local_culling_radius
-						mesh.inner_radius = _client_local_culling_radius - RING_THICKNESS
-					else:
-						mesh.inner_radius = _client_local_culling_radius - RING_THICKNESS
-						mesh.outer_radius = _client_local_culling_radius
+				var target_fov_size = Vector3(
+					_client_local_culling_radius * 2.0,
+					DECAL_PROJECTION_HEIGHT,
+					_client_local_culling_radius * 2.0,
+				)
+				if fov_node.size != target_fov_size:
+					fov_node.size = target_fov_size
 
 	# Representação Visual da Grade Espacial do Core C++ (Broad-phase real)
 	if is_local_client:
@@ -1815,10 +1845,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_show_culling_rings = not _show_culling_rings
 			for id in _active_visual_entities_map.keys():
 				var vis = _active_visual_entities_map[id]
-				var presence_ring = vis.get_node_or_null("PresenceRing") as MeshInstance3D
+				var presence_ring = vis.get_node_or_null("PresenceRing") as Decal
 				if presence_ring:
 					presence_ring.visible = _show_culling_rings
-				var fov_ring = vis.get_node_or_null("FOVRing") as MeshInstance3D
+				var fov_ring = vis.get_node_or_null("FOVRing") as Decal
 				if fov_ring:
 					fov_ring.visible = _show_culling_rings
 

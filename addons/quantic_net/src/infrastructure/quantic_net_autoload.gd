@@ -490,8 +490,10 @@ func _on_custom_packet(peer_id: int, data: PackedByteArray, _channel: int = 1) -
 			and data[0] == QNSerializer.TYPE_STATE
 		):
 			_host_session.on_client_snapshot(peer_id, data.slice(1), Time.get_ticks_msec())
-		elif (_command_session and data.size() >= MIN_PACKET_HEADER_SIZE
-		and data[0] == QNSerializer.TYPE_INPUT):
+		elif (
+			_command_session and data.size() >= MIN_PACKET_HEADER_SIZE
+			and data[0] == QNSerializer.TYPE_INPUT
+		):
 			_command_session.on_client_input(peer_id, data, Time.get_ticks_msec())
 	else:
 		if data.size() >= MIN_PACKET_HEADER_SIZE:

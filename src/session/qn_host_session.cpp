@@ -377,14 +377,10 @@ void QNHostSession::tick_broadcast(int now) {
 		candidates.clear();
 		selected_states.clear();
 
-		double cull_radius = _default_cull_radius; // Use a large arbitrary default for lookup if they don't have profile
-		if (_profiles.find(id) != _profiles.end()) {
-			Ref<QNEntityProfile> observer_profile = _profiles[id];
-			if (observer_profile.is_valid()) cull_radius = observer_profile->get_spatial_culling_radius();
-		}
+		double observer_vision = _default_cull_radius; // Alcance de visão/percepção do observador
 
 		if (_sync_adjacent_grids) {
-			_grid->get_entities_in_radius_internal(st.pos, cull_radius, candidates);
+			_grid->get_entities_in_radius_internal(st.pos, observer_vision, candidates);
 		} else {
 			PackedInt32Array chunk_ents = _grid->get_entities_in_chunk(st.pos);
 			for (int j = 0; j < chunk_ents.size(); j++) {
@@ -405,8 +401,8 @@ void QNHostSession::tick_broadcast(int now) {
 
 				Vector3 cid_pos = current_states[cid].pos;
 
-				// O Server respeita a interseção mútua (Math::min) entre o FOV do Observador e a Aura de Presença da Entidade.
-				double effective_radius = Math::min(cull_radius, cid_aura);
+				// O Server verifica se o observador está dentro da Aura de Presença da Entidade Candidata (e dentro do alcance de visão)
+				double effective_radius = Math::min(observer_vision, cid_aura);
 
 				if (_sync_adjacent_grids && cid_pos.distance_to(st.pos) > effective_radius) {
 					it = candidates.erase(it);
@@ -429,7 +425,7 @@ void QNHostSession::tick_broadcast(int now) {
 						Ref<QNEntityProfile> kp = _profiles[known_cid];
 						if (kp.is_valid()) known_aura = kp->get_spatial_culling_radius();
 					}
-					double eff_r = Math::min(cull_radius, known_aura);
+					double eff_r = Math::min(observer_vision, known_aura);
 					Vector3 kpos = _registry[known_cid].pos;
 					if (kpos.distance_to(st.pos) <= eff_r) {
 						// A entidade ainda está dentro do alcance efetivo (dormindo), mantemos no escopo
@@ -479,14 +475,6 @@ void QNHostSession::tick_broadcast(int now) {
 		for (int asleep_id : fell_asleep_this_tick) {
 			if (_registry.find(asleep_id) == _registry.end()) continue;
 
-			double observer_aura = _default_cull_radius;
-			if (_profiles.find(id) != _profiles.end()) {
-				Ref<QNEntityProfile> observer_profile = _profiles[id];
-				if (observer_profile.is_valid()) {
-					observer_aura = observer_profile->get_spatial_culling_radius();
-				}
-			}
-
 			double asleep_aura = _default_entity_aura;
 			if (_profiles.find(asleep_id) != _profiles.end()) {
 				Ref<QNEntityProfile> asleep_profile = _profiles[asleep_id];
@@ -495,7 +483,7 @@ void QNHostSession::tick_broadcast(int now) {
 				}
 			}
 
-			double effective_radius = Math::min(observer_aura, asleep_aura);
+			double effective_radius = Math::min(observer_vision, asleep_aura);
 			Vector3 asleep_pos = _registry[asleep_id].pos;
 			if (asleep_pos.distance_to(st.pos) <= effective_radius) {
 				PackedByteArray sleep_pkt;

@@ -21,9 +21,8 @@ if ($runningInstances) {
     # Define working directory
     $cwd = "C:\Users\LEONARDO\Documents\godot_quantic_net"
 
-    # Start Server (Headless)
-    # Start-Process -FilePath $godotExe -ArgumentList "--path $cwd --headless -- --server" -WorkingDirectory $cwd
-    Start-Process -FilePath $godotExe -ArgumentList "--path $cwd -- --server" -WorkingDirectory $cwd
+    # Start Server (True Headless - Apenas Console sem janela gráfica)
+    Start-Process -FilePath $godotExe -ArgumentList "--path $cwd --headless -- --server" -WorkingDirectory $cwd
     
     # Start Client 1 (Normal)
     Start-Process -FilePath $godotExe -ArgumentList "--path $cwd -- --client" -WorkingDirectory $cwd
