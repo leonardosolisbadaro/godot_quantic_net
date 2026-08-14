@@ -25,34 +25,7 @@
 extends Node3D
 
 # ==============================================================================
-# 1. CONSTANTES DE TEMPO, FRAMERATE E CONVERSÃO MATEMÁTICA
-# ==============================================================================
-## Intervalo mínimo (em milissegundos) entre atualizações de métricas textuais na UI.
-const UI_UPDATE_RATE_MS := 250
-## Fator multiplicador para conversão de bytes para megabytes (1024 * 1024).
-const BYTES_TO_MB := 1048576.0
-## Fator multiplicador para conversão de segundos para milissegundos.
-const SEC_TO_MS := 1000.0
-## Taxa alvo de quadros por segundo para sincronização vertical e testes de carga.
-const TARGET_FPS := 60
-## Valor sentinela inicial máximo para comparações de mínimos em ponto flutuante.
-const SENTINEL_MAX_FLOAT := 9999.0
-## Valor sentinela inicial máximo para comparações de mínimos inteiros.
-const SENTINEL_MAX_INT := 9999
-## Percentil inferior utilizado para quantificar o 1% Low de FPS (quedas bruscas).
-const PERCENTILE_1_LOW := 0.01
-
-## Tamanho máximo da janela de histórico móvel de FPS (600 ticks = 10 segundos a 60Hz).
-const FPS_HISTORY_MAX := 600
-## Tamanho máximo da janela de histórico móvel do tempo de processamento de frame.
-const FRAME_TIME_HISTORY_MAX := 600
-## Tamanho máximo da janela de histórico móvel do RTT (Ping).
-const RTT_HISTORY_MAX := 50
-## Tamanho máximo da janela de histórico móvel de RAM do servidor (600 ticks = 10s a 60Hz).
-const SERVER_RAM_HISTORY_MAX := 600
-
-# ==============================================================================
-# 2. CONSTANTES DE REDE, ENDEREÇAMENTO E TOPOLOGIA (QUANTICNET)
+# 1. CONSTANTES DE REDE, ENDEREÇAMENTO E TOPOLOGIA (QUANTICNET)
 # ==============================================================================
 ## Porta UDP padrão utilizada para bind e escuta do host autoritativo.
 const PORT := 4242
@@ -66,9 +39,15 @@ const MAX_PEERS := 32
 const PEER_ID_THRESHOLD := 1000
 ## IDs autoritativos dos props dinâmicos instanciados e governados exclusivamente pelo host.
 const SERVER_PROPS: Array[int] = [1001, 1002, 1003]
+## Taxa padrão de transmissão e processamento em Hz do servidor de rede.
+const NET_SERVER_TICK_RATE := 20.0
+## Quantidade de ticks imóveis necessários para uma entidade entrar no estado dormente.
+const NET_DORMANCY_THRESHOLD_TICKS := 60
+## Tamanho espacial (em metros) de cada célula do grid de particionamento espacial.
+const NET_GRID_CULLING_SIZE := 100.0
 
 # ==============================================================================
-# 3. CONSTANTES DE ANTI-CHEAT, SEGURANÇA E NETEM (PARÂMETROS DE REDE)
+# 2. CONSTANTES DE ANTI-CHEAT, LIMITES FÍSICOS E NETEM (PARÂMETROS DE REDE)
 # ==============================================================================
 ## Velocidade máxima elástica tolerada pelo validador antes de registrar infração.
 const NET_MAX_SPEED := 300.0
@@ -80,12 +59,6 @@ const NET_WORLD_BOUNDS := 500.0
 const NET_MAX_STRIKES := 5
 ## Tempo limite (em segundos) para finalizar as chaves criptográficas DTLS.
 const NET_AUTH_TIMEOUT := 3.0
-## Taxa padrão de transmissão e processamento em Hz do servidor de rede.
-const NET_SERVER_TICK_RATE := 20.0
-## Quantidade de ticks imóveis necessários para uma entidade entrar no estado dormente.
-const NET_DORMANCY_THRESHOLD_TICKS := 60
-## Tamanho espacial (em metros) de cada célula do grid de particionamento espacial.
-const NET_GRID_CULLING_SIZE := 100.0
 ## Porcentagem padrão simulada de perda de pacotes no modo de emulação de rede.
 const NETEM_LOSS_DEFAULT := 10.0
 ## Latência simulada base (em milissegundos) injetada na conexão via NETEM.
@@ -96,7 +69,151 @@ const NETEM_JITTER_DEFAULT := 50
 const NETEM_DUP_DEFAULT := 0.0
 
 # ==============================================================================
-# 4. CONSTANTES DE AMBIENTE 3D, CÂMERA E ILUMINAÇÃO
+# 3. CONSTANTES DE GAMEPLAY, MOVIMENTO E INTERPOLAÇÃO
+# ==============================================================================
+## Velocidade linear máxima permitida para o deslocamento do avatar do cliente.
+const CLIENT_MOVE_SPEED := 30.0
+## Velocidade de interpolação exponencial (lerp) das entidades remotas na tela.
+const INTERP_LERP_SPEED := 5.0
+## Velocidade de rotação suave esférica (slerp) dos avatares para alinhamento direcional.
+const ROTATION_SLERP_SPEED := 15.0
+## Discrepância espacial máxima antes de cancelar a interpolação suave e forçar snap.
+const CULLING_SNAP_DISTANCE_THRESHOLD := 10.0
+## Raio da órbita da trajetória de movimentação automática de teste.
+const AUTO_MOVE_RADIUS := 8.0
+## Frequência angular da trajetória automática em forma de 8 (Lemniscata).
+const AUTO_MOVE_SPEED := 1.5
+## Raio da órbita circular descrita pelos props autoritativos no servidor.
+const PROP_ORBIT_RADIUS := 4.0
+## Espaçamento temporal de defasagem de fase entre props orbitando simultaneamente.
+const PROP_ORBIT_SPACING := 3.0
+## Altura fixa de sustentação dos props acima do chão durante a órbita.
+const PROP_HEIGHT := 0.5
+## Distância inicial padrão de culling visual local do cliente.
+const DEFAULT_VIEW_DISTANCE := 100.0
+## Passo de ajuste para aumentar ou diminuir a distância de culling local via teclado (+/-).
+const VIEW_DISTANCE_STEP := 2.0
+## Limite mínimo inferior para o raio de visão e culling do cliente local.
+const VIEW_DISTANCE_MIN := 2.0
+
+# ==============================================================================
+# 4. CONSTANTES DE ENTIDADES, MALHAS E COLISORES FÍSICOS (CAPSULES)
+# ==============================================================================
+## Dimensões geométricas da caixa representativa do avatar do jogador (1x2x1 metros).
+const PLAYER_MESH_SIZE := Vector3(1.0, 2.0, 1.0)
+## Dimensões geométricas da caixa representativa dos props dinâmicos (1x1x1 metro).
+const PROP_MESH_SIZE := Vector3(1.0, 1.0, 1.0)
+## Raio geométrico da cápsula de colisão do jogador (metros).
+const PLAYER_COLLIDER_RADIUS := 0.5
+## Altura total da cápsula de colisão do jogador (metros).
+const PLAYER_COLLIDER_HEIGHT := 2.0
+## Raio geométrico da cápsula de colisão dos props (metros).
+const PROP_COLLIDER_RADIUS := 0.5
+## Altura total da cápsula de colisão dos props (metros).
+const PROP_COLLIDER_HEIGHT := 1.0
+## Transparência (Alpha) da cápsula de colisão de depuração.
+const COLLIDER_ALPHA := 0.35
+## Raio da esfera indicadora do ponto de contato na base da cápsula.
+const CONTACT_POINT_RADIUS := 0.08
+## Cor visual de destaque atribuída ao avatar do cliente local (verde).
+const LOCAL_PLAYER_COLOR := Color.GREEN
+## Cor visual padrão atribuída aos avatares de peers remotos (vermelho).
+const REMOTE_PLAYER_COLOR := Color.RED
+## Cor visual padrão atribuída às entidades inanimadas (props/amarelo).
+const PROP_COLOR := Color.YELLOW
+## Elevação padrão em Y para o centro de massa da entidade acima do chão.
+const ENTITY_DEFAULT_Y_OFFSET := 0.5
+## Dimensões da malha indicativa de orientação (viseira frontal) do jogador.
+const PLAYER_VISOR_SIZE := Vector3(0.6, 0.2, 0.2)
+## Dimensões da malha indicativa de orientação (viseira frontal) dos props.
+const PROP_VISOR_SIZE := Vector3(0.2, 0.2, 0.2)
+## Deslocamento espacial frontal da viseira indicativa na malha do jogador.
+const PLAYER_VISOR_OFFSET := Vector3(0.0, 0.2, -0.51)
+## Deslocamento espacial frontal da viseira indicativa na malha do prop.
+const PROP_VISOR_OFFSET := Vector3(0.0, 0.2, -0.41)
+## Deslocamento vertical da etiqueta flutuante 3D de coordenadas acima da entidade.
+const COORD_LABEL_OFFSET := Vector3(0.0, 1.5, 0.0)
+## Escala de amostragem de pixels para legibilidade do texto na Label3D.
+const COORD_LABEL_PIXEL_SIZE := 0.015
+## Espessura do contorno escuro da Label3D de coordenadas.
+const COORD_LABEL_OUTLINE_SIZE := 4
+
+# ==============================================================================
+# 5. CONSTANTES DE ANÉIS DE CULLING (DECALS GPU) E GRADE ESPACIAL
+# ==============================================================================
+## Altura vertical de projeção da caixa AABB do Decal sobre o relevo (metros).
+const DECAL_PROJECTION_HEIGHT := 100.0
+## Fator de esmaecimento superior da projeção do Decal (upper fade).
+const DECAL_UPPER_FADE := 0.3
+## Fator de esmaecimento inferior da projeção do Decal (lower fade).
+const DECAL_LOWER_FADE := 0.3
+## Resolução em pixels da textura 2D procedural gerada em memória para os anéis de Decal.
+const DECAL_TEXTURE_SIZE := 512
+## Espessura do traço do anel em pixels na textura procedural de 512x512.
+const DECAL_RING_THICKNESS_PX := 2.0
+## Nível de transparência (Alpha) da cor do anel de presença da entidade.
+const PRESENCE_RING_ALPHA := 0.6
+## Cor azul translúcida indicativa do anel de alcance de visão (FOV) do cliente local.
+const FOV_RING_COLOR := Color(0.0, 0.7, 1.0, 0.9)
+## Raio de presença padrão de contingência para entidades sem metadados explícitos.
+const FALLBACK_PRESENCE_RADIUS := 20.0
+## Raio de presença padrão inicial assumido pelos avatares de rede.
+const DEFAULT_PRESENCE_RADIUS := 100.0
+## Dimensão lateral padrão da célula da grade espacial do core em C++.
+const SPATIAL_GRID_CELL_SIZE := 100.0
+## Altura da malha de visualização da célula espacial no chão.
+const SPATIAL_CELL_DEBUG_HEIGHT := 0.05
+## Cor roxa translúcida sutil para destaque da célula espacial ativa.
+const SPATIAL_GRID_DEBUG_COLOR := Color(0.6, 0.0, 1.0, 0.05)
+## Elevação vertical da malha de depuração da célula espacial ativa.
+const SPATIAL_GRID_Y_OFFSET := 0.025
+
+# ==============================================================================
+# 6. CONSTANTES DE TERRENO PROCEDURAL (HEIGHTMAP, RUÍDO E NAVMESH)
+# ==============================================================================
+## Meia-dimensão (Half Size) do quadrado do terreno (500m = 1000x1000m total).
+const TERRAIN_HALF_SIZE := 500.0
+## Quantidade de subdivisões por eixo para gerar a malha densa do terreno (100x100 quads).
+const TERRAIN_SUBDIVISIONS := 100
+## Escala de amplitude vertical máxima em metros aplicada ao ruído do terreno.
+const TERRAIN_HEIGHT_SCALE := 35.0
+## Frequência espacial padrão do gerador FastNoiseLite para curvas amplas de colinas e montanhas.
+const TERRAIN_NOISE_FREQUENCY := 0.004
+## Quantidade de oitavas fractais para adicionar microdetalhes ao relevo procedural.
+const TERRAIN_NOISE_OCTAVES := 4
+## Semente pseudoaleatória padrão para sincronização determinística entre servidor e cliente.
+const TERRAIN_SEED := 1337
+## Cor de albedo do terreno procedural iluminado (tom terra/grama estilizado).
+const TERRAIN_COLOR := Color(0.18, 0.22, 0.16)
+## Rugosidade da superfície do material do terreno para reduzir reflexos especulares excessivos.
+const TERRAIN_ROUGHNESS := 0.9
+## Padrão de formatação do caminho de cache em disco da NavigationMesh 3D.
+const TERRAIN_NAVMESH_CACHE_TEMPLATE := "user://terrain_navmesh_s%d_h%d_f%d.res"
+## Inclinação máxima permitida para caminhabilidade na NavigationMesh (graus).
+const NAVMESH_MAX_SLOPE := 45.0
+## Altura padrão do agente para o cálculo do túnel de navegação.
+const NAVMESH_AGENT_HEIGHT := 2.0
+## Altura máxima de degrau que o agente consegue transpor verticalmente.
+const NAVMESH_AGENT_MAX_CLIMB := 0.5
+## Tamanho da célula de voxel da NavigationMesh no plano horizontal.
+const NAVMESH_CELL_SIZE := 0.5
+## Altura da célula de voxel da NavigationMesh no plano vertical.
+const NAVMESH_CELL_HEIGHT := 0.25
+## Raio do agente para o cálculo geométrico dos limites navegáveis da NavMesh.
+const NAVMESH_AGENT_RADIUS := 0.5
+## Meia-dimensão (Half Size) do quadrado da malha de navegação (500m = 1000x1000m total).
+const NAVMESH_HALF_SIZE := 500.0
+## Elevação sutil em Y das faces poligonais do NavMesh para evitar Z-Fighting com o chão.
+const NAVMESH_FACES_ELEVATION := 0.05
+## Cor e transparência ciano da superfície translúcida de depuração da NavMesh.
+const NAVMESH_FACES_COLOR := Color(0.0, 0.4, 0.8, 0.05)
+## Elevação em Y das linhas de contorno do wireframe do NavMesh para sobrepor as faces.
+const NAVMESH_WIREFRAME_ELEVATION := 0.06
+## Cor e transparência das bordas do wireframe da malha de navegação.
+const NAVMESH_WIREFRAME_COLOR := Color(0.0, 0.7, 0.9, 0.25)
+
+# ==============================================================================
+# 7. CONSTANTES DE AMBIENTE 3D, CÂMERA E ILUMINAÇÃO
 # ==============================================================================
 ## Dimensões em metros do plano de chão escuro renderizado para o cliente.
 const FLOOR_PLANE_SIZE := Vector2(1000.0, 1000.0)
@@ -134,143 +251,7 @@ const ZOOM_MAX := 200.0
 const ZOOM_STEP := 2.0
 
 # ==============================================================================
-# 5. CONSTANTES DE TERRENO PROCEDURAL (HEIGHTMAP & NOISE)
-# ==============================================================================
-## Meia-dimensão (Half Size) do quadrado do terreno (500m = 1000x1000m total).
-const TERRAIN_HALF_SIZE := 500.0
-## Quantidade de subdivisões por eixo para gerar a malha densa do terreno (100x100 quads).
-const TERRAIN_SUBDIVISIONS := 100
-## Escala de amplitude vertical máxima em metros aplicada ao ruído do terreno.
-const TERRAIN_HEIGHT_SCALE := 35.0
-## Frequência espacial padrão do gerador FastNoiseLite para curvas amplas de colinas e montanhas.
-const TERRAIN_NOISE_FREQUENCY := 0.004
-## Quantidade de oitavas fractais para adicionar microdetalhes ao relevo procedural.
-const TERRAIN_NOISE_OCTAVES := 4
-## Semente pseudoaleatória padrão para sincronização determinística entre servidor e cliente.
-const TERRAIN_SEED := 1337
-## Cor de albedo do terreno procedural iluminado (tom terra/grama estilizado).
-const TERRAIN_COLOR := Color(0.18, 0.22, 0.16)
-## Rugosidade da superfície do material do terreno para reduzir reflexos especulares excessivos.
-const TERRAIN_ROUGHNESS := 0.9
-## Padrão de formatação do caminho de cache em disco da NavigationMesh 3D.
-const TERRAIN_NAVMESH_CACHE_TEMPLATE := "user://terrain_navmesh_s%d_h%d_f%d.res"
-## Inclinação máxima permitida para caminhabilidade na NavigationMesh (graus).
-const NAVMESH_MAX_SLOPE := 45.0
-## Altura padrão do agente para o cálculo do túnel de navegação.
-const NAVMESH_AGENT_HEIGHT := 2.0
-## Altura máxima de degrau que o agente consegue transpor verticalmente.
-const NAVMESH_AGENT_MAX_CLIMB := 0.5
-## Tamanho da célula de voxel da NavigationMesh no plano horizontal.
-const NAVMESH_CELL_SIZE := 0.5
-## Altura da célula de voxel da NavigationMesh no plano vertical.
-const NAVMESH_CELL_HEIGHT := 0.25
-
-# ==============================================================================
-# 6. CONSTANTES DE NAVEGAÇÃO E DEBUG DO NAVMESH
-# ==============================================================================
-## Raio do agente para o cálculo geométrico dos limites navegáveis da NavMesh.
-const NAVMESH_AGENT_RADIUS := 0.5
-## Meia-dimensão (Half Size) do quadrado da malha de navegação (500m = 1000x1000m total).
-const NAVMESH_HALF_SIZE := 500.0
-## Elevação sutil em Y das faces poligonais do NavMesh para evitar Z-Fighting com o chão.
-const NAVMESH_FACES_ELEVATION := 0.05
-## Cor e transparência ciano da superfície translúcida de depuração da NavMesh.
-const NAVMESH_FACES_COLOR := Color(0.0, 0.4, 0.8, 0.05)
-## Elevação em Y das linhas de contorno do wireframe do NavMesh para sobrepor as faces.
-const NAVMESH_WIREFRAME_ELEVATION := 0.06
-## Cor e transparência das bordas do wireframe da malha de navegação.
-const NAVMESH_WIREFRAME_COLOR := Color(0.0, 0.7, 0.9, 0.25)
-
-# ==============================================================================
-# 7. CONSTANTES DE ENTIDADES, MALHAS E COORDENADAS
-# ==============================================================================
-## Dimensões geométricas da caixa representativa do avatar do jogador (1x2x1 metros).
-const PLAYER_MESH_SIZE := Vector3(1.0, 2.0, 1.0)
-## Dimensões geométricas da caixa representativa dos props dinâmicos (1x1x1 metro).
-const PROP_MESH_SIZE := Vector3(1.0, 1.0, 1.0)
-## Cor visual de destaque atribuída ao avatar do cliente local (verde).
-const LOCAL_PLAYER_COLOR := Color.GREEN
-## Cor visual padrão atribuída aos avatares de peers remotos (vermelho).
-const REMOTE_PLAYER_COLOR := Color.RED
-## Cor visual padrão atribuída às entidades inanimadas (props/amarelo).
-const PROP_COLOR := Color.YELLOW
-## Elevação padrão em Y para o centro de massa da entidade acima do chão.
-const ENTITY_DEFAULT_Y_OFFSET := 0.5
-## Dimensões da malha indicativa de orientação (viseira frontal) do jogador.
-const PLAYER_VISOR_SIZE := Vector3(0.6, 0.2, 0.2)
-## Dimensões da malha indicativa de orientação (viseira frontal) dos props.
-const PROP_VISOR_SIZE := Vector3(0.2, 0.2, 0.2)
-## Deslocamento espacial frontal da viseira indicativa na malha do jogador.
-const PLAYER_VISOR_OFFSET := Vector3(0.0, 0.2, -0.51)
-## Deslocamento espacial frontal da viseira indicativa na malha do prop.
-const PROP_VISOR_OFFSET := Vector3(0.0, 0.2, -0.41)
-## Deslocamento vertical da etiqueta flutuante 3D de coordenadas acima da entidade.
-const COORD_LABEL_OFFSET := Vector3(0.0, 1.5, 0.0)
-## Escala de amostragem de pixels para legibilidade do texto na Label3D.
-const COORD_LABEL_PIXEL_SIZE := 0.015
-## Espessura do contorno escuro da Label3D de coordenadas.
-const COORD_LABEL_OUTLINE_SIZE := 4
-
-# ==============================================================================
-# 8. CONSTANTES DE ANÉIS DE CULLING E GRADE ESPACIAL
-# ==============================================================================
-## Altura vertical de projeção da caixa AABB do Decal sobre o relevo (metros).
-const DECAL_PROJECTION_HEIGHT := 100.0
-## Fator de esmaecimento superior da projeção do Decal (upper fade).
-const DECAL_UPPER_FADE := 0.3
-## Fator de esmaecimento inferior da projeção do Decal (lower fade).
-const DECAL_LOWER_FADE := 0.3
-## Resolução em pixels da textura 2D procedural gerada em memória para os anéis de Decal.
-const DECAL_TEXTURE_SIZE := 512
-## Espessura do traço do anel em pixels na textura procedural de 512x512.
-const DECAL_RING_THICKNESS_PX := 2.0
-## Nível de transparência (Alpha) da cor do anel de presença da entidade.
-const PRESENCE_RING_ALPHA := 0.6
-## Cor azul translúcida indicativa do anel de alcance de visão (FOV) do cliente local.
-const FOV_RING_COLOR := Color(0.0, 0.7, 1.0, 0.9)
-## Raio de presença padrão de contingência para entidades sem metadados explícitos.
-const FALLBACK_PRESENCE_RADIUS := 20.0
-## Raio de presença padrão inicial assumido pelos avatares de rede.
-const DEFAULT_PRESENCE_RADIUS := 100.0
-## Dimensão lateral padrão da célula da grade espacial do core em C++.
-const SPATIAL_GRID_CELL_SIZE := 100.0
-## Altura da malha de visualização da célula espacial no chão.
-const SPATIAL_CELL_DEBUG_HEIGHT := 0.05
-## Cor roxa translúcida sutil para destaque da célula espacial ativa.
-const SPATIAL_GRID_DEBUG_COLOR := Color(0.6, 0.0, 1.0, 0.05)
-## Elevação vertical da malha de depuração da célula espacial ativa.
-const SPATIAL_GRID_Y_OFFSET := 0.025
-
-# ==============================================================================
-# 9. CONSTANTES DE GAMEPLAY, MOVIMENTO E INTERPOLAÇÃO
-# ==============================================================================
-## Distância inicial padrão de culling visual local do cliente.
-const DEFAULT_VIEW_DISTANCE := 100.0
-## Passo de ajuste para aumentar ou diminuir a distância de culling local via teclado (+/-).
-const VIEW_DISTANCE_STEP := 2.0
-## Limite mínimo inferior para o raio de visão e culling do cliente local.
-const VIEW_DISTANCE_MIN := 2.0
-## Velocidade linear máxima permitida para o deslocamento do avatar do cliente.
-const CLIENT_MOVE_SPEED := 30.0
-## Velocidade de interpolação exponencial (lerp) das entidades remotas na tela.
-const INTERP_LERP_SPEED := 5.0
-## Velocidade de rotação suave esférica (slerp) dos avatares para alinhamento direcional.
-const ROTATION_SLERP_SPEED := 15.0
-## Discrepância espacial máxima antes de cancelar a interpolação suave e forçar snap.
-const CULLING_SNAP_DISTANCE_THRESHOLD := 10.0
-## Raio da órbita da trajetória de movimentação automática de teste.
-const AUTO_MOVE_RADIUS := 8.0
-## Frequência angular da trajetória automática em forma de 8 (Lemniscata).
-const AUTO_MOVE_SPEED := 1.5
-## Raio da órbita circular descrita pelos props autoritativos no servidor.
-const PROP_ORBIT_RADIUS := 4.0
-## Espaçamento temporal de defasagem de fase entre props orbitando simultaneamente.
-const PROP_ORBIT_SPACING := 3.0
-## Altura fixa de sustentação dos props acima do chão durante a órbita.
-const PROP_HEIGHT := 0.5
-
-# ==============================================================================
-# 10. CONSTANTES DE TIRO, LASER E PROTOCOLO CUSTOMIZADO
+# 8. CONSTANTES DE TIRO, LASER E PROTOCOLO CUSTOMIZADO
 # ==============================================================================
 ## Identificador de operação (Opcode) para disparos instantâneos (Hitscan).
 const GAME_OP_SHOOT_HITSCAN := 32
@@ -300,7 +281,7 @@ const PACKET_OFFSET_POS_Y := 4
 const PACKET_OFFSET_POS_Z := 8
 
 # ==============================================================================
-# 11. CONSTANTES DE PERFIS DINÂMICOS DE TESTE (TECLADO 1 A 0)
+# 9. CONSTANTES DE PERFIS DINÂMICOS DE TESTE (TECLADO 1 A 0)
 # ==============================================================================
 ## Frequência de atualização inicial do perfil padrão de jogadores humanos.
 const PROFILE_PLAYER_HZ := 60.0
@@ -343,7 +324,34 @@ const CLIENT_DYNAMIC_PROFILE_HZ := 60.0
 const CLIENT_DYNAMIC_PROFILE_PRIO := 1.0
 
 # ==============================================================================
-# 12. CONSTANTES DE INTERFACE DO USUÁRIO (HUD)
+# 10. CONSTANTES DE MÉTRICAS, PROFILER E CONVERSÕES MATEMÁTICAS
+# ==============================================================================
+## Intervalo mínimo (em milissegundos) entre atualizações de métricas textuais na UI.
+const UI_UPDATE_RATE_MS := 250
+## Fator multiplicador para conversão de bytes para megabytes (1024 * 1024).
+const BYTES_TO_MB := 1048576.0
+## Fator multiplicador para conversão de segundos para milissegundos.
+const SEC_TO_MS := 1000.0
+## Taxa alvo de quadros por segundo para sincronização vertical e testes de carga.
+const TARGET_FPS := 60
+## Valor sentinela inicial máximo para comparações de mínimos em ponto flutuante.
+const SENTINEL_MAX_FLOAT := 9999.0
+## Valor sentinela inicial máximo para comparações de mínimos inteiros.
+const SENTINEL_MAX_INT := 9999
+## Percentil inferior utilizado para quantificar o 1% Low de FPS (quedas bruscas).
+const PERCENTILE_1_LOW := 0.01
+
+## Tamanho máximo da janela de histórico móvel de FPS (600 ticks = 10 segundos a 60Hz).
+const FPS_HISTORY_MAX := 600
+## Tamanho máximo da janela de histórico móvel do tempo de processamento de frame.
+const FRAME_TIME_HISTORY_MAX := 600
+## Tamanho máximo da janela de histórico móvel do RTT (Ping).
+const RTT_HISTORY_MAX := 50
+## Tamanho máximo da janela de histórico móvel de RAM do servidor (600 ticks = 10s a 60Hz).
+const SERVER_RAM_HISTORY_MAX := 600
+
+# ==============================================================================
+# 11. CONSTANTES DE INTERFACE DO USUÁRIO (HUD)
 # ==============================================================================
 ## Margem padrão em pixels para ancoragem de painéis na interface gráfica.
 const UI_MARGIN_STD := 20
@@ -399,6 +407,7 @@ var _terrain_noise: FastNoiseLite
 var _terrain_mesh_instance: MeshInstance3D
 var _terrain_static_body: StaticBody3D
 var _terrain_faces: PackedVector3Array = PackedVector3Array()
+var _terrain_height_grid: PackedFloat32Array = PackedFloat32Array()
 
 # ==============================================================================
 # PERFIS DE ENTIDADES (TICK RATES E CULLING)
@@ -438,6 +447,7 @@ var _auto_movement_elapsed_time: float = 0.0
 var _server_authoritative_props_time: float = 0.0
 var _client_local_culling_radius: float = DEFAULT_VIEW_DISTANCE
 var _show_culling_rings: bool = true
+var _show_collider_visual: bool = true
 var _cached_ring_texture: ImageTexture = null
 var _ui_label_connection_status: Label
 
@@ -608,12 +618,47 @@ func _init_terrain_noise() -> void:
 	_terrain_noise.frequency = terrain_noise_frequency
 	_terrain_noise.fractal_octaves = TERRAIN_NOISE_OCTAVES
 
+	# Pré-computa a matriz de altitudes da malha poligonal para amostragem baricêntrica em O(1)
+	var stride := TERRAIN_SUBDIVISIONS + 1
+	var total_verts := stride * stride
+	_terrain_height_grid.resize(total_verts)
+	var hs := TERRAIN_HALF_SIZE
+	var step := (hs * 2.0) / float(TERRAIN_SUBDIVISIONS)
 
-## Retorna a altitude exata da malha de terreno em coordenadas globais (X, Z) em tempo O(1).
+	for i in range(stride):
+		var z := -hs + i * step
+		for j in range(stride):
+			var x := -hs + j * step
+			_terrain_height_grid[j + i * stride] = _terrain_noise.get_noise_2d(x, z) * terrain_height_scale
+
+
+## Retorna a altitude exata da face poligonal da malha/NavMesh em coordenadas globais (X, Z) via interpolação baricêntrica.
 func get_terrain_height(x: float, z: float) -> float:
-	if not enable_heightmap_terrain or _terrain_noise == null:
+	if not enable_heightmap_terrain or _terrain_height_grid.is_empty():
 		return 0.0
-	return _terrain_noise.get_noise_2d(x, z) * terrain_height_scale
+
+	var hs := TERRAIN_HALF_SIZE
+	var step := (hs * 2.0) / float(TERRAIN_SUBDIVISIONS)
+	var gx := (x + hs) / step
+	var gz := (z + hs) / step
+
+	var j := clampi(int(floor(gx)), 0, TERRAIN_SUBDIVISIONS - 1)
+	var i := clampi(int(floor(gz)), 0, TERRAIN_SUBDIVISIONS - 1)
+	var fx := clampf(gx - float(j), 0.0, 1.0)
+	var fz := clampf(gz - float(i), 0.0, 1.0)
+
+	var stride := TERRAIN_SUBDIVISIONS + 1
+	var y00 := _terrain_height_grid[j + i * stride]
+	var y10 := _terrain_height_grid[(j + 1) + i * stride]
+	var y01 := _terrain_height_grid[j + (i + 1) * stride]
+	var y11 := _terrain_height_grid[(j + 1) + (i + 1) * stride]
+
+	# Triângulo 1 (Anti-horário p00 -> p10 -> p11): fx >= fz
+	if fx >= fz:
+		return y00 + fx * (y10 - y00) + fz * (y11 - y10)
+	# Triângulo 2 (p00 -> p11 -> p01): fx < fz
+	else:
+		return y00 + fz * (y01 - y00) + fx * (y11 - y01)
 
 
 func _generate_terrain_mesh() -> ArrayMesh:
@@ -623,6 +668,7 @@ func _generate_terrain_mesh() -> ArrayMesh:
 	var step := (hs * 2.0) / float(TERRAIN_SUBDIVISIONS)
 	_terrain_faces.resize(TERRAIN_SUBDIVISIONS * TERRAIN_SUBDIVISIONS * 6)
 	var face_idx := 0
+	var stride := TERRAIN_SUBDIVISIONS + 1
 
 	for i in range(TERRAIN_SUBDIVISIONS):
 		var z0 := -hs + i * step
@@ -631,10 +677,10 @@ func _generate_terrain_mesh() -> ArrayMesh:
 			var x0 := -hs + j * step
 			var x1 := x0 + step
 
-			var y00 := get_terrain_height(x0, z0)
-			var y10 := get_terrain_height(x1, z0)
-			var y01 := get_terrain_height(x0, z1)
-			var y11 := get_terrain_height(x1, z1)
+			var y00 := _terrain_height_grid[j + i * stride]
+			var y10 := _terrain_height_grid[(j + 1) + i * stride]
+			var y01 := _terrain_height_grid[j + (i + 1) * stride]
+			var y11 := _terrain_height_grid[(j + 1) + (i + 1) * stride]
 
 			var p00 := Vector3(x0, y00, z0)
 			var p10 := Vector3(x1, y10, z0)
@@ -865,6 +911,55 @@ func _create_decal_ring(color: Color, radius: float, ring_name: String) -> Decal
 	decal.distance_fade_enabled = false
 	return decal
 
+
+## Cria a representação visual do colisor físico de cápsula e do ponto de apoio/contato no chão.
+func _create_capsule_collider_visual(id: int, is_local: bool) -> Node3D:
+	var root = Node3D.new()
+	root.name = "ColliderVisual"
+
+	var is_player := id < PEER_ID_THRESHOLD
+	var c_radius := PLAYER_COLLIDER_RADIUS if is_player else PROP_COLLIDER_RADIUS
+	var c_height := PLAYER_COLLIDER_HEIGHT if is_player else PROP_COLLIDER_HEIGHT
+
+	# 1. Malha da Cápsula Translúcida (Volume do Collider)
+	var cap_inst = MeshInstance3D.new()
+	var cap_mesh = CapsuleMesh.new()
+	cap_mesh.radius = c_radius
+	cap_mesh.height = c_height
+	cap_mesh.radial_segments = 16
+	cap_mesh.rings = 8
+	cap_inst.mesh = cap_mesh
+
+	var cap_mat = StandardMaterial3D.new()
+	cap_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var base_col = LOCAL_PLAYER_COLOR if is_local else (REMOTE_PLAYER_COLOR if is_player else PROP_COLOR)
+	cap_mat.albedo_color = Color(base_col.r, base_col.g, base_col.b, COLLIDER_ALPHA)
+	cap_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cap_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	cap_mat.no_depth_test = true
+	cap_mat.render_priority = 5
+	cap_inst.material_override = cap_mat
+	root.add_child(cap_inst)
+
+	# 2. Marcador do Ponto de Contato Físico na Base Inferior (Toca o chão/NavMesh)
+	var contact_inst = MeshInstance3D.new()
+	var contact_mesh = SphereMesh.new()
+	contact_mesh.radius = CONTACT_POINT_RADIUS
+	contact_mesh.height = CONTACT_POINT_RADIUS * 2.0
+	contact_inst.mesh = contact_mesh
+
+	var contact_mat = StandardMaterial3D.new()
+	contact_mat.albedo_color = Color.WHITE
+	contact_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	contact_mat.no_depth_test = true
+	contact_mat.render_priority = 6
+	contact_inst.material_override = contact_mat
+	contact_inst.position = Vector3(0.0, -c_height / 2.0, 0.0) # Base inferior que toca o terreno
+	root.add_child(contact_inst)
+
+	root.visible = _show_collider_visual
+	return root
+
 # ==============================================================================
 # APRESENTAÇÃO E MÉTRICAS DE DIAGNÓSTICO (CANVAS LAYER)
 # ==============================================================================
@@ -909,6 +1004,7 @@ func _setup_ui() -> void:
 		"6 a 0      : Profile Culling (5 a 100m)",
 		"+ / -      : FOV Culling Local (Visão)",
 		",          : Toggle NavMesh Visual",
+		"C          : Toggle Colliders (Capsule)",
 	]
 
 	for s in shortcuts:
@@ -1569,6 +1665,10 @@ func _update_visual(id: int, pos: Vector3, is_local: bool) -> void:
 			)
 			mesh_inst.add_child(fov_ring)
 
+		# Representação Visual do Colisor Físico Cápsula e Ponto de Apoio/Contato com a NavMesh
+		var collider_vis = _create_capsule_collider_visual(id, is_local)
+		mesh_inst.add_child(collider_vis)
+
 		# --- [DIAGNOSTIC] Label3D para prova determinística de coordenadas ---
 		var lbl = Label3D.new()
 		lbl.name = "CoordLabel"
@@ -1864,6 +1964,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			if nav_vis:
 				nav_vis.visible = not nav_vis.visible
 				print("NavMesh Visual: ", "Exibido" if nav_vis.visible else "Oculto")
+
+		# [C] - Toggle Colisor Cápsula Visual
+		elif event.keycode == KEY_C:
+			_show_collider_visual = not _show_collider_visual
+			for id in _active_visual_entities_map.keys():
+				var vis = _active_visual_entities_map[id]
+				var col_vis = vis.get_node_or_null("ColliderVisual")
+				if col_vis:
+					col_vis.visible = _show_collider_visual
+			print("Collider Visual: ", "Exibido" if _show_collider_visual else "Oculto")
 
 		elif event.keycode >= KEY_0 and event.keycode <= KEY_9:
 			var target_tick = -1.0
