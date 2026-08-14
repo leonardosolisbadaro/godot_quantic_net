@@ -6,10 +6,10 @@
 ## posições passadas e a precisão do raycast temporal (Lag Compensation).
 ##
 ## @created 2026-08-05
-## @updated 2026-08-05
+## @updated 2026-08-14
 ##
 ## @since 0.6.0
-## @lastModifiedIn 0.6.0
+## @lastModifiedIn 0.9.1
 ##
 ## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 
@@ -79,3 +79,21 @@ func test_must_interpolate_between_ticks():
 	var hit = buffer.query_raycast(origin, direction, 100.0, 55)
 
 	assert_true(hit.has("entity_id"), "O tiro deve acertar a entidade 101 interpolada no ts=55")
+
+
+func test_query_raycast_future_timestamp_must_return_empty():
+	# Arrange: Gravar historico ate ts=90
+	for i in range(10):
+		var snapshot = {
+			101: { "pos": Vector3(i, 0, 0), "hitbox_extents": Vector3(1.0, 1.0, 1.0) }
+		}
+		buffer.push_state(i * 10, snapshot)
+
+	# Act: Query com timestamp no FUTURO (ts=200 > 90)
+	var origin = Vector3(9, 0, 10)
+	var direction = Vector3(0, 0, -1)
+	var hit = buffer.query_raycast(origin, direction, 100.0, 200)
+
+	# Assert: Deve recusar a consulta no futuro (retornar Dictionary vazio)
+	assert_true(hit.is_empty(), "Query com timestamp no futuro DEVE ser recusada e retornar dicionario vazio")
+

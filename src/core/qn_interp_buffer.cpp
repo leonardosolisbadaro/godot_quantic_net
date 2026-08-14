@@ -75,9 +75,10 @@ Dictionary QNInterpBuffer::sample(int now) {
 	double dt = (_last_sample_now == 0) ? 0.0 : (double)(now - _last_sample_now) / 1000.0;
 	_last_sample_now = now;
 	
-	if (_target_delay_ms > _current_delay_ms) {
+	double delay_diff = _target_delay_ms - _current_delay_ms;
+	if (delay_diff > 3.0) {
 		_current_delay_ms = UtilityFunctions::lerp(_current_delay_ms, _target_delay_ms, UtilityFunctions::min(1.0, dt * 10.0));
-	} else {
+	} else if (delay_diff < -3.0) {
 		_current_delay_ms = UtilityFunctions::lerp(_current_delay_ms, _target_delay_ms, UtilityFunctions::min(1.0, dt * 0.5));
 	}
 		

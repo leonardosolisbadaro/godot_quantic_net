@@ -1,4 +1,4 @@
-﻿## @file test_qn_interp_buffer.gd
+## @file test_qn_interp_buffer.gd
 ## @path res://tests/unit/domain/test_qn_interp_buffer.gd
 ##
 ## @description
@@ -7,10 +7,10 @@
 ## interpoladas corretamente no passado remoto, incluindo tratamento seguro de extrapolação.
 ##
 ## @created 2026-07-29
-## @updated 2026-08-08
+## @updated 2026-08-14
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.6.0
+## @lastModifiedIn 0.9.1
 ##
 ## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 

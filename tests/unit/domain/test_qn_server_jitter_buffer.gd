@@ -6,12 +6,12 @@
 ## Focado em garantir ordenaÃ§Ã£o de sequÃªncia, wrap-around, e tempo de playout determinÃ­stico.
 ##
 ## @created 2026-08-08
-## @updated 2026-08-08
+## @updated 2026-08-14
 ##
 ## @since 0.7.0
-## @lastModifiedIn 0.7.0
+## @lastModifiedIn 0.9.1
 ##
-## @author Leonardo S. BadarÃ³ (with Gemini 3.1 Pro - High)
+## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 
 extends GutTest
 
@@ -89,3 +89,56 @@ func test_wrap_around_uint16() -> void:
 
 	assert_eq(res1.get("seq", -1), 65535, "Wrap-around deve priorizar 65535 antes do 0")
 	assert_eq(res2.get("seq", -1), 0, "0 deve vir apos 65535")
+
+
+func test_old_packet_diff_negative_must_not_corrupt_base_time() -> void:
+	# Arrange
+	var buf = QNServerJitterBuffer.new()
+	buf.setup(50) # 50ms per tick
+	buf.set_target_delay(100) # 100ms target delay
+
+	# Inicializa com seq 1000 no tempo 1000
+	buf.push(1000, 1, Vector2.ZERO, 1000)
+
+	# Act: Recebe um pacote MUITO atrasado (seq 800, diff = -200 < -100) no tempo 2000
+	buf.push(800, 1, Vector2.ZERO, 2000)
+
+	# Recebe o proximo pacote valido (seq 1001) no tempo 1050
+	buf.push(1001, 1, Vector2.ZERO, 1050)
+
+	# Assert:
+	# O pacote 1000 deve sair em ts=1100 (1000 base_time + 100 delay + 0*50)
+	var p1 = buf.pop(1100)
+	assert_false(p1.is_empty(), "Pacote 1000 deve sair em ts=1100")
+	assert_eq(p1.get("seq", -1), 1000)
+
+	# O pacote 1001 deve sair em ts=1150 (1000 base_time + 100 delay + 1*50)
+	# Se base_time tivesse sido corrompido para 2000 com base_seq 800, 1001 demoraria 10000ms+!
+	var p2 = buf.pop(1150)
+	assert_false(p2.is_empty(), "Pacote 1001 DEVE sair em ts=1150 sem ser atrasado pelo pacote 800 atrasado")
+	assert_eq(p2.get("seq", -1), 1001)
+
+
+func test_pop_ready_inputs_must_drain_all_expired_packets() -> void:
+	# Arrange
+	var buf = QNServerJitterBuffer.new()
+	buf.setup(50)
+	buf.set_target_delay(100)
+
+	# Envia 3 pacotes juntos
+	buf.push(10, 1, Vector2.ZERO, 1000)
+	buf.push(11, 2, Vector2.ZERO, 1010)
+	buf.push(12, 3, Vector2.ZERO, 1020)
+
+	# Act: Drenar em lote no tempo 1300 onde todos estao prontos
+	var ready_list = buf.pop_ready_inputs(1300)
+
+	# Assert
+	assert_eq(ready_list.size(), 3, "Deve drenar todos os 3 pacotes prontos de uma so vez")
+	assert_eq(ready_list[0].get("seq", -1), 10)
+	assert_eq(ready_list[1].get("seq", -1), 11)
+	assert_eq(ready_list[2].get("seq", -1), 12)
+
+	# O buffer agora deve estar vazio
+	assert_true(buf.pop(1300).is_empty(), "Buffer deve estar vazio apos drenagem em lote")
+

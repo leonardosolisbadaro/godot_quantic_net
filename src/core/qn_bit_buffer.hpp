@@ -13,6 +13,7 @@ class QNBitBuffer : public RefCounted {
 private:
 	PackedByteArray _buffer;
 	int _bit_position;
+	bool _read_overflow;
 
 protected:
 	static void _bind_methods();
@@ -26,6 +27,7 @@ public:
 	
 	void seek(int pos);
 	int get_position() const;
+	bool has_read_error() const;
 
 	void write_bool(bool b);
 	bool read_bool();

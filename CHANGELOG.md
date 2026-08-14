@@ -7,6 +7,41 @@ e este projeto utiliza [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [0.9.1] - 2026-08-14
+
+### Adicionado
+
+- **Proteções de Memory Safety & UB em `QNBitBuffer`:**
+    - `seek()` com limitação estrita inferior a zero, prevenindo buffer underflow e deslocamentos de bits negativos.
+    - Máscara segura para operações de 64 bits (`(num_bits >= 64) ? ~0ULL : ((1ULL << num_bits) - 1)`), eliminando *Undefined Behavior* do padrão C++.
+    - Flag de overflow e método exposto `has_read_error() -> bool` para detecção de pacotes truncados/malformados.
+    - Normalização mandatória no início de `write_quaternion()`, garantindo a invariante unitária do algoritmo *Smallest Three* e prevenindo `NaN`.
+    - Tratamento de divisões por zero em limites degenerados de `write_float()` e `read_float()`.
+- **Drenagem de Inputs em Lote no `QNServerJitterBuffer`:**
+    - Novo método `pop_ready_inputs(current_server_time) -> Array` para expurgar todos os pacotes com playout vencido em caso de rajada de rede sem lag artificial acumulado.
+- **Validação de Tipos Base (`QNEntityState::is_valid()` e `QNClientInputState::is_valid()`):**
+    - Checagens com `std::isfinite()` prevenindo propagação de coordenadas corrompidas (`NaN`/`Inf`).
+- **Suporte a Limites Customizados em `QNDeltaSerializer`:**
+    - Parametrização dinâmica de `pos_lo` e `pos_hi` com defaults retrocompatíveis.
+
+### Modificado
+
+- **Otimização $O(1)$ no Expurgo de Dívidas de Prioridade (`QNPriorityAccumulator`):**
+    - Substituição da busca linear por tabela hash `std::unordered_set<int>`, acelerando o ciclo de broadcast para servidores MMO com milhares de entidades.
+    - Limitação teto da dívida acumulada (`MAX_DEBT_PER_TICK = 500.0`) para evitar crescimento geométrico descontrolado e *starvation*.
+- **Histerese e Deadband no `QNInterpBuffer`:**
+    - Banda morta de $\pm 3\text{ ms}$ no ajuste de delay de interpolação, eliminando micro-oscilações visuais causadas por flutuações discretas de jitter.
+
+### Corrigido
+
+- **Segurança Temporal Anti-Cheat no `QNWorldHistoryBuffer`:**
+    - Rejeição mandatória de consultas de *Lag Compensation* com timestamp futuro em relação ao estado mais recente gravado.
+- **Prevenção de Corrupção de `base_time` no `QNServerJitterBuffer`:**
+    - Descarte imediato de pacotes severamente obsoletos (`diff < -100`), impedindo que pacotes atrasados desloquem o relógio de playout para o futuro.
+- **Prevenção de Entidades Fantasma no `QNSpatialGrid`:**
+    - `insert_entity()` tornado idempotente redirecionando para `update_entity()` em caso de ID duplicado.
+    - Invalidação/limpeza mandatória do grid (`clear()`) ao redimensionar `cell_size`.
+
 ## [0.9.0] - 2026-08-14
 
 ### Adicionado

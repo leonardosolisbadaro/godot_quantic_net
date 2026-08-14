@@ -37,6 +37,28 @@ Plugin de rede autoritativo de alto desempenho construído em C++ (GDExtension) 
 
 ## 🎯 PRÓXIMAS METAS DO MOTOR (Rumo à v1.0.0)
 
+### Milestone 0 — Hardening, Robustez e Proteção de Memória do Core C++ (v0.9.1) ✅
+
+- [x] **BitBuffer Memory Safety & Precision:**
+    - Adição de clamp no `seek()` contra buffer underflow e shifts negativos.
+    - Proteção para shifts de 64 bits (`(num_bits >= 64) ? ~0ULL : ((1ULL << num_bits) - 1)`).
+    - Tratamento de divisão por zero em `write_float` / `read_float`.
+    - Normalização mandatória no início de `write_quaternion()`.
+    - Flag e método `has_read_error()` para detecção de overflow em streams truncados.
+- [x] **Anticheat & Robustez Temporal (Server-Side):**
+    - Validação e rejeição de queries com timestamp futuro em `QNWorldHistoryBuffer`.
+    - Descarte seguro de pacotes obsoletos (`diff < -100`) em `QNServerJitterBuffer` sem contaminação do `base_time`.
+    - Drenagem de inputs prontos em lote (`pop_ready_inputs` / batch).
+- [x] **Otimização de Escala & Algoritmos (MMO-Ready):**
+    - Limpeza $O(1)$ de dívidas órfãs em `QNPriorityAccumulator::select_entities_fast()` via hash set.
+    - Teto de acúmulo de prioridade (`MAX_DEBT_PER_TICK`) evitando explosão geométrica de dívida e *starvation*.
+    - Prevenção de duplicatas/entidades fantasma no `QNSpatialGrid::insert_entity()`.
+    - Invalidação/limpeza mandatória do grid no redimensionamento dinâmico de células (`set_cell_size`).
+- [x] **Parâmetros Dinâmicos e Tipagem Segura:**
+    - Parametrização de limites mundiais (`pos_lo`, `pos_hi`) no `QNDeltaSerializer`.
+    - Suavização EWMA e histerese (deadband) no cálculo de render delay do `QNInterpBuffer`.
+    - Sanitização de números finitos (`std::isfinite`) e método `is_valid()` em `QNEntityState`.
+
 ### Milestone 1 — Otimizações SIMD e Vetorização
 
 - [ ] Implementar comparações *Bitwise XOR* vetorizadas (instruções AVX2/SSE) no cálculo de Delta Encoding do `QNHostSession`.

@@ -4,6 +4,7 @@
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/quaternion.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <cmath>
 #include <unordered_map>
 #include <deque>
 #include <vector>
@@ -44,6 +45,12 @@ struct QNEntityState {
     bool is_empty() const {
         return !has_state;
     }
+
+    bool is_valid() const {
+        return has_state &&
+               std::isfinite(pos.x) && std::isfinite(pos.y) && std::isfinite(pos.z) &&
+               std::isfinite(rot.x) && std::isfinite(rot.y) && std::isfinite(rot.z);
+    }
 };
 
 struct QNWorldSnapshot {
@@ -58,6 +65,11 @@ struct QNClientInputState {
     Vector3 rot;
     int ts = 0;
     int custom_id = 0;
+
+    bool is_valid() const {
+        return std::isfinite(pos.x) && std::isfinite(pos.y) && std::isfinite(pos.z) &&
+               std::isfinite(rot.x) && std::isfinite(rot.y) && std::isfinite(rot.z);
+    }
 };
 
 #endif

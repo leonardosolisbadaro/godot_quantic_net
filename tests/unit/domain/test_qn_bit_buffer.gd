@@ -1,4 +1,4 @@
-﻿## @file test_qn_bit_buffer.gd
+## @file test_qn_bit_buffer.gd
 ## @path res://tests/unit/domain/test_qn_bit_buffer.gd
 ##
 ## @description
@@ -6,7 +6,12 @@
 ## Verifica endianness, carry over e leitura de dados compactados (Boolean, Int, Float).
 ##
 ## @created 2026-07-31
-## @updated 2026-08-08
+## @updated 2026-08-14
+##
+## @since 0.1.0
+## @lastModifiedIn 0.9.1
+##
+## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 
 extends "res://addons/gut/test.gd"
 
@@ -69,3 +74,53 @@ func test_write_read_quaternion() -> void:
 	assert_almost_eq(q2.y, q.y, 0.05)
 	assert_almost_eq(q2.z, q.z, 0.05)
 	assert_almost_eq(q2.w, q.w, 0.05)
+
+
+func test_seek_negative_must_clamp_to_zero() -> void:
+	var buf = QNBitBuffer.new()
+	buf.write_bits(42, 8)
+	buf.seek(-15)
+	assert_eq(buf.get_position(), 0, "Seek com valor negativo deve ser clampado para 0")
+	var val = buf.read_bits(8)
+	assert_eq(val, 42, "Deve ler a partir da posicao 0")
+
+
+func test_write_read_64_bits_must_handle_full_mask() -> void:
+	var buf = QNBitBuffer.new()
+	# Valor de 64 bits completo
+	var val_in = 0x123456789ABCDEF0
+	buf.write_bits(val_in, 64)
+	buf.seek(0)
+	var val_out = buf.read_bits(64)
+	assert_eq(val_out, val_in, "Leitura e escrita de 64 bits deve preservar o valor sem UB")
+
+
+func test_read_overflow_must_set_error_flag() -> void:
+	var buf = QNBitBuffer.new()
+	buf.set_buffer(PackedByteArray([1, 2])) # Apenas 2 bytes (16 bits)
+	assert_false(buf.has_read_error(), "Nao deve haver erro inicialmente")
+
+	# Tentar ler 64 bits de um buffer com apenas 16 bits
+	buf.read_bits(64)
+	assert_true(buf.has_read_error(), "has_read_error deve retornar true apos overflow de leitura")
+
+
+func test_write_quaternion_unnormalized_must_not_produce_nan() -> void:
+	var buf = QNBitBuffer.new()
+	# Quaternion desnormalizado com norma != 1.0
+	var unnorm_q = Quaternion(0.0, 5.0, 0.0, 5.0)
+	buf.write_quaternion(unnorm_q)
+
+	buf.seek(0)
+	var res_q = buf.read_quaternion()
+	assert_false(is_nan(res_q.x) or is_nan(res_q.y) or is_nan(res_q.z) or is_nan(res_q.w), "Nao deve produzir NaN")
+	assert_true(res_q.is_normalized(), "O quaternion lido deve ser unitario normalizado")
+
+
+func test_write_read_float_degenerate_bounds() -> void:
+	var buf = QNBitBuffer.new()
+	# Caso degenerado: min == max
+	buf.write_float(10.0, 10.0, 10.0, 10)
+	buf.seek(0)
+	var val = buf.read_float(10.0, 10.0, 10)
+	assert_almost_eq(val, 10.0, 0.001, "Degenerate bounds min==max deve retornar min sem NaN")

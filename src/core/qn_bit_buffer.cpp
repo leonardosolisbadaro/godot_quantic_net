@@ -6,6 +6,7 @@ using namespace godot;
 
 QNBitBuffer::QNBitBuffer() {
 	_bit_position = 0;
+	_read_overflow = false;
 	_buffer.resize(32); // Pre-allocate some capacity to avoid frequent reallocations
 }
 
@@ -17,6 +18,7 @@ void QNBitBuffer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_buffer"), &QNBitBuffer::get_buffer);
 	ClassDB::bind_method(D_METHOD("seek", "pos"), &QNBitBuffer::seek);
 	ClassDB::bind_method(D_METHOD("get_position"), &QNBitBuffer::get_position);
+	ClassDB::bind_method(D_METHOD("has_read_error"), &QNBitBuffer::has_read_error);
 	
 	ClassDB::bind_method(D_METHOD("write_bool", "b"), &QNBitBuffer::write_bool);
 	ClassDB::bind_method(D_METHOD("read_bool"), &QNBitBuffer::read_bool);
@@ -34,6 +36,7 @@ void QNBitBuffer::_bind_methods() {
 void QNBitBuffer::set_buffer(const PackedByteArray &buf) {
 	_buffer = buf;
 	_bit_position = 0;
+	_read_overflow = false;
 }
 
 PackedByteArray QNBitBuffer::get_buffer() const {
@@ -42,11 +45,16 @@ PackedByteArray QNBitBuffer::get_buffer() const {
 }
 
 void QNBitBuffer::seek(int pos) {
-	_bit_position = pos;
+	_bit_position = UtilityFunctions::max(0, pos);
+	_read_overflow = false;
 }
 
 int QNBitBuffer::get_position() const {
 	return _bit_position;
+}
+
+bool QNBitBuffer::has_read_error() const {
+	return _read_overflow;
 }
 
 void QNBitBuffer::write_bool(bool b) {
@@ -58,6 +66,8 @@ bool QNBitBuffer::read_bool() {
 }
 
 void QNBitBuffer::write_bits(uint64_t value, int num_bits) {
+	if (num_bits <= 0) return;
+	
 	int byte_idx = _bit_position / 8;
 	int bit_offset = _bit_position % 8;
 	
@@ -66,7 +76,7 @@ void QNBitBuffer::write_bits(uint64_t value, int num_bits) {
 		_buffer.resize(required_bytes * 2);
 	}
 	
-	uint64_t mask = (1ULL << num_bits) - 1;
+	uint64_t mask = (num_bits >= 64) ? ~0ULL : ((1ULL << num_bits) - 1);
 	uint64_t val = value & mask;
 	
 	int bits_written = 0;
@@ -76,7 +86,7 @@ void QNBitBuffer::write_bits(uint64_t value, int num_bits) {
 		int bits_this_byte = 8 - bit_offset;
 		int bits_to_write = UtilityFunctions::mini(bits_this_byte, num_bits - bits_written);
 		
-		uint64_t chunk_mask = (1ULL << bits_to_write) - 1;
+		uint64_t chunk_mask = (bits_to_write >= 64) ? ~0ULL : ((1ULL << bits_to_write) - 1);
 		uint64_t chunk = (val >> bits_written) & chunk_mask;
 		
 		ptr[byte_idx] = ptr[byte_idx] & ~(chunk_mask << bit_offset);
@@ -90,6 +100,8 @@ void QNBitBuffer::write_bits(uint64_t value, int num_bits) {
 }
 
 uint64_t QNBitBuffer::read_bits(int num_bits) {
+	if (num_bits <= 0) return 0;
+	
 	int byte_idx = _bit_position / 8;
 	int bit_offset = _bit_position % 8;
 	
@@ -101,13 +113,14 @@ uint64_t QNBitBuffer::read_bits(int num_bits) {
 	
 	while (bits_read < num_bits) {
 		if (byte_idx >= size) {
+			_read_overflow = true;
 			break;
 		}
 		
 		int bits_this_byte = 8 - bit_offset;
 		int bits_to_read = UtilityFunctions::mini(bits_this_byte, num_bits - bits_read);
 		
-		uint64_t chunk_mask = (1ULL << bits_to_read) - 1;
+		uint64_t chunk_mask = (bits_to_read >= 64) ? ~0ULL : ((1ULL << bits_to_read) - 1);
 		uint64_t chunk = (ptr[byte_idx] >> bit_offset) & chunk_mask;
 		
 		val = val | (chunk << bits_read);
@@ -122,36 +135,46 @@ uint64_t QNBitBuffer::read_bits(int num_bits) {
 }
 
 void QNBitBuffer::write_float(double val, double min_val, double max_val, int precision_bits) {
-	uint64_t max_int = (1ULL << precision_bits) - 1;
+	if (precision_bits <= 0) return;
+	if (Math::is_equal_approx(min_val, max_val)) {
+		write_bits(0, precision_bits);
+		return;
+	}
+	uint64_t max_int = (precision_bits >= 64) ? ~0ULL : ((1ULL << precision_bits) - 1);
 	double ratio = UtilityFunctions::clamp((val - min_val) / (max_val - min_val), 0.0, 1.0);
 	uint64_t int_val = (uint64_t)UtilityFunctions::round(ratio * (double)max_int);
 	write_bits(int_val, precision_bits);
 }
 
 double QNBitBuffer::read_float(double min_val, double max_val, int precision_bits) {
-	uint64_t max_int = (1ULL << precision_bits) - 1;
+	if (precision_bits <= 0 || Math::is_equal_approx(min_val, max_val)) {
+		return min_val;
+	}
+	uint64_t max_int = (precision_bits >= 64) ? ~0ULL : ((1ULL << precision_bits) - 1);
 	uint64_t int_val = read_bits(precision_bits);
 	double ratio = (double)int_val / (double)max_int;
 	return min_val + ratio * (max_val - min_val);
 }
 
 void QNBitBuffer::write_quaternion(const Quaternion &q) {
+	Quaternion q_norm = q.normalized();
+	
 	int max_idx = 0;
-	double max_val = Math::abs(q.x);
-	if (Math::abs(q.y) > max_val) { max_idx = 1; max_val = Math::abs(q.y); }
-	if (Math::abs(q.z) > max_val) { max_idx = 2; max_val = Math::abs(q.z); }
-	if (Math::abs(q.w) > max_val) { max_idx = 3; max_val = Math::abs(q.w); }
+	double max_val = Math::abs(q_norm.x);
+	if (Math::abs(q_norm.y) > max_val) { max_idx = 1; max_val = Math::abs(q_norm.y); }
+	if (Math::abs(q_norm.z) > max_val) { max_idx = 2; max_val = Math::abs(q_norm.z); }
+	if (Math::abs(q_norm.w) > max_val) { max_idx = 3; max_val = Math::abs(q_norm.w); }
 	
 	double sign_val = 1.0;
 	switch (max_idx) {
-		case 0: sign_val = Math::sign(q.x); break;
-		case 1: sign_val = Math::sign(q.y); break;
-		case 2: sign_val = Math::sign(q.z); break;
-		case 3: sign_val = Math::sign(q.w); break;
+		case 0: sign_val = Math::sign(q_norm.x); break;
+		case 1: sign_val = Math::sign(q_norm.y); break;
+		case 2: sign_val = Math::sign(q_norm.z); break;
+		case 3: sign_val = Math::sign(q_norm.w); break;
 	}
 	if (sign_val == 0.0) sign_val = 1.0;
 	
-	Quaternion q_norm(q.x * sign_val, q.y * sign_val, q.z * sign_val, q.w * sign_val);
+	Quaternion q_signed(q_norm.x * sign_val, q_norm.y * sign_val, q_norm.z * sign_val, q_norm.w * sign_val);
 	
 	write_bits(max_idx, 2);
 	
@@ -161,24 +184,24 @@ void QNBitBuffer::write_quaternion(const Quaternion &q) {
 	
 	switch (max_idx) {
 		case 0:
-			write_float(q_norm.y, min_comp, max_comp, precision);
-			write_float(q_norm.z, min_comp, max_comp, precision);
-			write_float(q_norm.w, min_comp, max_comp, precision);
+			write_float(q_signed.y, min_comp, max_comp, precision);
+			write_float(q_signed.z, min_comp, max_comp, precision);
+			write_float(q_signed.w, min_comp, max_comp, precision);
 			break;
 		case 1:
-			write_float(q_norm.x, min_comp, max_comp, precision);
-			write_float(q_norm.z, min_comp, max_comp, precision);
-			write_float(q_norm.w, min_comp, max_comp, precision);
+			write_float(q_signed.x, min_comp, max_comp, precision);
+			write_float(q_signed.z, min_comp, max_comp, precision);
+			write_float(q_signed.w, min_comp, max_comp, precision);
 			break;
 		case 2:
-			write_float(q_norm.x, min_comp, max_comp, precision);
-			write_float(q_norm.y, min_comp, max_comp, precision);
-			write_float(q_norm.w, min_comp, max_comp, precision);
+			write_float(q_signed.x, min_comp, max_comp, precision);
+			write_float(q_signed.y, min_comp, max_comp, precision);
+			write_float(q_signed.w, min_comp, max_comp, precision);
 			break;
 		case 3:
-			write_float(q_norm.x, min_comp, max_comp, precision);
-			write_float(q_norm.y, min_comp, max_comp, precision);
-			write_float(q_norm.z, min_comp, max_comp, precision);
+			write_float(q_signed.x, min_comp, max_comp, precision);
+			write_float(q_signed.y, min_comp, max_comp, precision);
+			write_float(q_signed.z, min_comp, max_comp, precision);
 			break;
 	}
 }

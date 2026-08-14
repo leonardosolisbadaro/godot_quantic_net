@@ -36,10 +36,9 @@ uint64_t QNSpatialGrid::_get_cell_key(const Vector3 &pos) const {
 }
 
 void QNSpatialGrid::set_cell_size(double size) {
-	if (size > 0.0) {
+	if (size > 0.0 && size != cell_size) {
 		cell_size = size;
-		// Resizing clears the grid ideally, but here we just leave it for simplicity.
-		// Usually cell_size is configured once.
+		clear();
 	}
 }
 
@@ -61,6 +60,10 @@ bool QNSpatialGrid::is_in_bounds(const Vector3 &pos) const {
 
 void QNSpatialGrid::insert_entity(int id, const Vector3 &pos) {
 	if (!is_in_bounds(pos)) return; // Ignore entities out of bounds
+	if (entity_cells.find(id) != entity_cells.end()) {
+		update_entity(id, pos);
+		return;
+	}
 	uint64_t key = _get_cell_key(pos);
 	cells[key].push_back(id);
 	entity_cells[id] = key;

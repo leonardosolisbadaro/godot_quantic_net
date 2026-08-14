@@ -32,6 +32,7 @@ public:
 	void set_target_delay(int ms);
 	void push(int seq, int input_mask, const Vector2 &look_dir, int server_receive_time);
 	Dictionary pop(int current_server_time);
+	Array pop_ready_inputs(int current_server_time);
 };
 
 } // namespace godot

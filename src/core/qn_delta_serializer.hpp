@@ -20,8 +20,11 @@ public:
 	static const double POS_HI;
 	static const int POS_BITS = 16;
 
-	static void encode_state(const Ref<QNBitBuffer> &buf, const QNEntityState *base, const QNEntityState &current);
-	static QNEntityState decode_state(const Ref<QNBitBuffer> &buf, const QNEntityState *base);
+	static void encode_state(const Ref<QNBitBuffer> &buf, const QNEntityState *base, const QNEntityState &current, double pos_lo = -512.0, double pos_hi = 512.0);
+	static QNEntityState decode_state(const Ref<QNBitBuffer> &buf, const QNEntityState *base, double pos_lo = -512.0, double pos_hi = 512.0);
+
+	static void encode_state_dict(const Ref<QNBitBuffer> &buf, const Dictionary &base_dict, const Dictionary &current_dict, double pos_lo = -512.0, double pos_hi = 512.0);
+	static Dictionary decode_state_dict(const Ref<QNBitBuffer> &buf, const Dictionary &base_dict, double pos_lo = -512.0, double pos_hi = 512.0);
 };
 
 } // namespace godot

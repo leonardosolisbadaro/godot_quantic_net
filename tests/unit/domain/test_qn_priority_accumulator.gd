@@ -1,4 +1,4 @@
-﻿## @file test_qn_priority_accumulator.gd
+## @file test_qn_priority_accumulator.gd
 ## @path res://addons/quantic_net/tests/domain/test_qn_priority_accumulator.gd
 ##
 ## @description
@@ -6,12 +6,12 @@
 ## baseado em MTU, distÃ¢ncia, profile e debito de pacotes (prevenÃ§Ã£o de starvation).
 ##
 ## @created 2026-08-01
-## @updated 2026-08-08
+## @updated 2026-08-14
 ##
 ## @since 0.1.0
-## @lastModifiedIn 0.6.0
+## @lastModifiedIn 0.9.1
 ##
-## @author Leonardo S. BadarÃ³ (Gemini 3.1 Pro - High)
+## @author Leonardo S. Badaró (Gemini 3.1 Pro - High)
 
 extends GutTest
 
@@ -100,3 +100,31 @@ func test_must_cull_entities_outside_radius():
 	assert_eq(selected.size(), 1, "Apenas a entidade dentro do cull radius deve ser enviada")
 	assert_true(selected.has(3))
 	assert_false(selected.has(2))
+
+
+func test_debt_accumulation_must_respect_maximum_cap():
+	var acc = QNPriorityAccumulator.new()
+	var observer_pos = Vector3.ZERO
+	# MTU budget insuficiente para qualquer entidade (forçar acúmulo contínuo de débito)
+	var mtu_budget = 5
+
+	var candidates = {
+		2: { "pos": Vector3(1, 0, 0) }, # Muito perto (score inicial altíssimo)
+	}
+
+	var profiles = {
+		2: QNEntityProfile.preset_standard(),
+	}
+
+	# Executa múltiplos ticks sem enviar
+	for i in range(50):
+		acc.select_entities(1, candidates, profiles, observer_pos, mtu_budget, 19)
+
+	# Agora dá budget suficiente para 1 entidade
+	var selected = acc.select_entities(1, candidates, profiles, observer_pos, 50, 19)
+	assert_true(selected.has(2), "Entidade 2 deve ser despachada e ter sua divida limpa")
+
+	# Próximo tick: se a dívida foi limpa e não explodiu, comportamento deve se manter estável
+	var selected_next = acc.select_entities(1, candidates, profiles, observer_pos, 50, 19)
+	assert_true(selected_next.has(2))
+

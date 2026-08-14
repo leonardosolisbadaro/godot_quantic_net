@@ -5,8 +5,11 @@
 #include "qn_entity_profile.hpp"
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 
 using namespace godot;
+
+static const double MAX_DEBT_PER_TICK = 500.0;
 
 struct ScoredItem {
 	int id;
@@ -118,7 +121,7 @@ PackedInt32Array QNPriorityAccumulator::select_entities(int peer_id, const Dicti
 			current_bytes += bytes_per_entity;
 			_clear_debt(peer_id, item.id);
 		} else {
-			_add_debt(peer_id, item.id, item.score * 0.5);
+			_add_debt(peer_id, item.id, Math::min(item.score * 0.5, MAX_DEBT_PER_TICK));
 		}
 	}
 	
@@ -129,12 +132,13 @@ void QNPriorityAccumulator::select_entities_fast(int peer_id, const std::vector<
 	std::vector<ScoredItem> scored_list;
 	scored_list.reserve(candidates.size());
 	
-	// Limpeza de Memory Leak: Expurgar dívidas velhas
+	// Limpeza O(1): Usar unordered_set para consulta rapida em vez de O(N*M)
+	std::unordered_set<int> cand_set(candidates.begin(), candidates.end());
 	auto peer_it = _debt.find(peer_id);
 	if (peer_it != _debt.end()) {
 		auto it = peer_it->second.begin();
 		while (it != peer_it->second.end()) {
-			if (std::find(candidates.begin(), candidates.end(), it->first) == candidates.end()) {
+			if (cand_set.find(it->first) == cand_set.end()) {
 				it = peer_it->second.erase(it);
 			} else {
 				++it;
@@ -187,7 +191,7 @@ void QNPriorityAccumulator::select_entities_fast(int peer_id, const std::vector<
 			current_bytes += bytes_per_entity;
 			_clear_debt(peer_id, item.id);
 		} else {
-			_add_debt(peer_id, item.id, item.score * 0.5);
+			_add_debt(peer_id, item.id, Math::min(item.score * 0.5, MAX_DEBT_PER_TICK));
 		}
 	}
 }

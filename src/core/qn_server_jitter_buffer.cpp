@@ -20,6 +20,7 @@ void QNServerJitterBuffer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_target_delay", "ms"), &QNServerJitterBuffer::set_target_delay);
 	ClassDB::bind_method(D_METHOD("push", "seq", "input_mask", "look_dir", "server_receive_time"), &QNServerJitterBuffer::push);
 	ClassDB::bind_method(D_METHOD("pop", "current_server_time"), &QNServerJitterBuffer::pop);
+	ClassDB::bind_method(D_METHOD("pop_ready_inputs", "current_server_time"), &QNServerJitterBuffer::pop_ready_inputs);
 }
 
 void QNServerJitterBuffer::setup(int p_tick_rate_ms) {
@@ -46,10 +47,13 @@ void QNServerJitterBuffer::push(int seq, int input_mask, const Vector2 &look_dir
 		int diff = (seq - base_seq) & 0xFFFF;
 		if (diff > 32768) diff -= 65536;
 		
-		if (diff < -100 || diff > 100) {
-			// Big gap or old packets, re-sync base to prevent permanent drift
+		if (diff > 100) {
+			// Big forward gap / reconnect / stall, re-sync base
 			base_seq = seq;
 			base_time = server_receive_time;
+		} else if (diff < -100) {
+			// Extremely stale packet from past, discard to prevent corrupting base_time
+			return;
 		}
 	}
 	
@@ -99,4 +103,24 @@ Dictionary QNServerJitterBuffer::pop(int current_server_time) {
 	}
 	
 	return Dictionary();
+}
+
+Array QNServerJitterBuffer::pop_ready_inputs(int current_server_time) {
+	Array ready_list;
+	while (!pending.empty()) {
+		Dictionary oldest = pending[0];
+		int seq = oldest["seq"];
+		
+		int diff = (seq - base_seq) & 0xFFFF;
+		if (diff > 32768) diff -= 65536;
+		
+		int playout_time = base_time + target_delay_ms + (diff * tick_rate_ms);
+		if (current_server_time >= playout_time) {
+			pending.pop_front();
+			ready_list.push_back(oldest);
+		} else {
+			break;
+		}
+	}
+	return ready_list;
 }

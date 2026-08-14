@@ -150,12 +150,17 @@ bool QNWorldHistoryBuffer::_ray_intersects_aabb(const Vector3 &origin, const Vec
 
 std::map<int, QNWorldHistoryBuffer::QNEntitySnapshot> QNWorldHistoryBuffer::_get_interpolated_state(int timestamp) const {
 	std::map<int, QNEntitySnapshot> result;
-	if (_history.size() == 0) {
+	if (_history.empty()) {
 		return result;
 	}
 	
 	if (timestamp < 0) {
 		return _history[0].entities;
+	}
+
+	// Anticheat: Recusar timestamps no futuro além do histórico registrado mais recente
+	if (_history.front().ts > 0 && timestamp > _history.front().ts) {
+		return result;
 	}
 
 	QNWorldSnapshot state_before;
